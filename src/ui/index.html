@@ -697,32 +697,39 @@
             return (toDeg(Math.atan2(y, x)) + 360) % 360;
         }
 
-        // Evidenzia e fa scorrere la lista waypoint portando il prossimo fix in alto
-        function updateActiveWaypointHighlight(acftLat, acftLon) {
+        // Identifica il prossimo waypoint attivo di fronte all'aereo e lo posiziona in cima nella lista
+        function updateActiveWaypointHighlight(acftLat, acftLon, acftHdg) {
             if (!flightPlan || flightPlan.length === 0) return;
             
-            let closestIndex = 0;
-            let minDist = Infinity;
+            let activeIdx = 0;
+            let minDistance = Infinity;
 
-            flightPlan.forEach((wp, idx) => {
+            for (let i = 0; i < flightPlan.length; i++) {
+                let wp = flightPlan[i];
                 if (wp.lat && wp.lon) {
                     let d = L.latLng(acftLat, acftLon).distanceTo(L.latLng(wp.lat, wp.lon));
-                    if (d < minDist) {
-                        minDist = d;
-                        closestIndex = idx;
-                    }
-                }
-            });
+                    let bearingToWp = calculateBearing(acftLat, acftLon, wp.lat, wp.lon);
+                    let angleDiff = Math.abs(bearingToWp - acftHdg);
+                    if (angleDiff > 180) angleDiff = 360 - angleDiff;
 
-            let activeIdx = closestIndex;
-            if (activeIdx < flightPlan.length - 1) {
-                let currentWp = flightPlan[activeIdx];
-                if (currentWp.lat && currentWp.lon) {
-                    let dToCurrent = L.latLng(acftLat, acftLon).distanceTo(L.latLng(currentWp.lat, currentWp.lon));
-                    if (dToCurrent < 3000 && activeIdx < flightPlan.length - 1) {
-                        activeIdx++;
+                    if ((angleDiff < 90 || d < 5000) && d < minDistance) {
+                        minDistance = d;
+                        activeIdx = i;
                     }
                 }
+            }
+
+            if (minDistance === Infinity) {
+                let closestDist = Infinity;
+                flightPlan.forEach((wp, idx) => {
+                    if (wp.lat && wp.lon) {
+                        let d = L.latLng(acftLat, acftLon).distanceTo(L.latLng(wp.lat, wp.lon));
+                        if (d < closestDist) {
+                            closestDist = d;
+                            activeIdx = idx;
+                        }
+                    }
+                });
             }
 
             const cards = document.querySelectorAll('.fpl-list .wpt-card');
@@ -730,7 +737,7 @@
                 if (idx === activeIdx) {
                     card.style.borderColor = 'var(--emerald)';
                     card.style.background = 'rgba(52, 211, 153, 0.12)';
-                    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 } else {
                     card.style.borderColor = '';
                     card.style.background = '';
@@ -833,8 +840,7 @@
                     acftLine.setAttribute('x2', xPos);
                     acftLine.style.display = 'block';
 
-                    // Aggiorna l'evidenziazione e fa scorrere la lista sul prossimo waypoint attivo
-                    updateActiveWaypointHighlight(data.lat, data.lon);
+                    updateActiveWaypointHighlight(data.lat, data.lon, mapHeading);
                 } else {
                     acftLine.style.display = 'none';
                 }
