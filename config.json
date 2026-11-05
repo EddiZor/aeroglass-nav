@@ -3,10 +3,12 @@
     "flight_plan": [
         {
             "ident": "LIRF",
+            "name": "FIUMICINO",
             "lat": 41.800278,
             "lon": 12.238889,
             "alt_ft": 0,
-            "type": "DEP"
+            "type": "DEP",
+            "metar": "LIRF 051620Z VRB01KT CAVOK 16/09 Q1022 NOSIG"
         },
         {
             "ident": "RF792",
@@ -160,12 +162,15 @@
             "lat": 44.530833,
             "lon": 11.296944,
             "alt_ft": 2600,
-            "type": "WPT"
+            "type": "DEST",
+            "metar": "LIPE 051620Z VRB01KT 9999 BKN045 11/08 Q1026",
+            "name": "BORGO PANIGALE"
         }
     ],
     "alternate": {
         "ident": "LIMC",
         "lat": 45.63,
-        "lon": 8.723056
+        "lon": 8.723056,
+        "metar": "LIMC 051620Z 24004KT CAVOK 12/06 Q1026 NOSIG"
     }
 }

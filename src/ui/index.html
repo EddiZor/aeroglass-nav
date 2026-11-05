@@ -86,10 +86,11 @@
         .search-box input:focus { border-color: var(--cyan); }
 
         .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-top: 2px; }
-        .fpl-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; flex: 1; padding-right: 2px; }
+        .fpl-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; flex: 1; padding-right: 2px; scroll-behavior: smooth; }
         .wpt-card {
             padding: 8px 10px; border-radius: 8px; background: rgba(30, 41, 59, 0.65);
             border-left: 3px solid var(--magenta); display: flex; justify-content: space-between; align-items: center;
+            transition: all 0.2s ease;
         }
         .wpt-card.apt-endpoint {
             border-left-color: var(--cyan);
@@ -238,7 +239,6 @@
             currentTileLayer = L.tileLayer(url, { maxZoom: style === 'topo' ? 17 : 19 }).addTo(map);
         }
 
-        // Gestione Modalità Segui Aereo vs Mappa Libera
         let followAircraft = true;
         let lastAcftLatLng = null;
         let lastAcftHdgTrue = 0;
@@ -262,14 +262,12 @@
             setFollowState(!followAircraft);
         }
 
-        // Se l'utente trascina manualmente la mappa col mouse, passa automaticamente in "Mappa Libera"
         map.on('dragstart', function() {
             if (followAircraft) {
                 setFollowState(false);
             }
         });
 
-        // Gestione ridimensionamento laterale della sidebar
         const sidebarPanel = document.getElementById('sidebarPanel');
         const sidebarResizer = document.getElementById('sidebarResizer');
         let isResizingSidebar = false;
@@ -295,7 +293,6 @@
             }
         });
 
-        // Gestione visibilità campo SimBrief
         function setSimbriefCompactMode(isCompact) {
             const setupBox = document.getElementById('simbriefSetupBox');
             const compactBtn = document.getElementById('simbriefCompactBtn');
@@ -330,7 +327,6 @@
             }
         }
 
-        // Parser METAR per estrarre Vento, Temperatura e Pressione QNH (mb)
         function parseMetarInfo(metarStr) {
             if (!metarStr) return null;
             
@@ -691,7 +687,6 @@
             return null;
         }
 
-        // Calcolo bearing geografico tra due coordinate (fallback ulteriore se aereo in movimento)
         function calculateBearing(lat1, lon1, lat2, lon2) {
             const toRad = d => d * Math.PI / 180;
             const toDeg = r => r * 180 / Math.PI;
@@ -700,6 +695,47 @@
             const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
                       Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
             return (toDeg(Math.atan2(y, x)) + 360) % 360;
+        }
+
+        // Evidenzia e fa scorrere la lista waypoint portando il prossimo fix in alto
+        function updateActiveWaypointHighlight(acftLat, acftLon) {
+            if (!flightPlan || flightPlan.length === 0) return;
+            
+            let closestIndex = 0;
+            let minDist = Infinity;
+
+            flightPlan.forEach((wp, idx) => {
+                if (wp.lat && wp.lon) {
+                    let d = L.latLng(acftLat, acftLon).distanceTo(L.latLng(wp.lat, wp.lon));
+                    if (d < minDist) {
+                        minDist = d;
+                        closestIndex = idx;
+                    }
+                }
+            });
+
+            let activeIdx = closestIndex;
+            if (activeIdx < flightPlan.length - 1) {
+                let currentWp = flightPlan[activeIdx];
+                if (currentWp.lat && currentWp.lon) {
+                    let dToCurrent = L.latLng(acftLat, acftLon).distanceTo(L.latLng(currentWp.lat, currentWp.lon));
+                    if (dToCurrent < 3000 && activeIdx < flightPlan.length - 1) {
+                        activeIdx++;
+                    }
+                }
+            }
+
+            const cards = document.querySelectorAll('.fpl-list .wpt-card');
+            cards.forEach((card, idx) => {
+                if (idx === activeIdx) {
+                    card.style.borderColor = 'var(--emerald)';
+                    card.style.background = 'rgba(52, 211, 153, 0.12)';
+                    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                } else {
+                    card.style.borderColor = '';
+                    card.style.background = '';
+                }
+            });
         }
 
         async function addWaypoint(icao) {
@@ -764,11 +800,9 @@
 
             const newLatLng = L.latLng(data.lat, data.lon);
 
-            // Determina l'angolo di rotazione dell'icona sulla mappa (True Heading o Track reale)
             let mapHeading = (data.hdg_true !== undefined && data.hdg_true !== null) ? Number(data.hdg_true) : Number(data.hdg_deg);
             if (isNaN(mapHeading)) mapHeading = lastAcftHdgTrue;
 
-            // Se per qualsiasi motivo SimConnect desse 0 ma l'aereo si sta spostando, calcola il track reale GPS
             if (lastAcftLatLng && newLatLng.distanceTo(lastAcftLatLng) > 8 && mapHeading === 0) {
                 mapHeading = calculateBearing(lastAcftLatLng.lat, lastAcftLatLng.lng, newLatLng.lat, newLatLng.lng);
             }
@@ -786,7 +820,6 @@
                 svgEl.style.transform = `rotate(${mapHeading}deg)`;
             }
 
-            // Se la modalità "Segui Aereo" è attiva, muove la mappa in sincrono con l'aeroplanino
             if (followAircraft) {
                 map.panTo(newLatLng, { animate: true, duration: 0.5 });
             }
@@ -799,6 +832,9 @@
                     acftLine.setAttribute('x1', xPos);
                     acftLine.setAttribute('x2', xPos);
                     acftLine.style.display = 'block';
+
+                    // Aggiorna l'evidenziazione e fa scorrere la lista sul prossimo waypoint attivo
+                    updateActiveWaypointHighlight(data.lat, data.lon);
                 } else {
                     acftLine.style.display = 'none';
                 }
