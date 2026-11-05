@@ -1,4 +1,4 @@
-﻿import time
+﻿import math
 try:
     from SimConnect import SimConnect, AircraftRequests
 except ImportError:
@@ -25,57 +25,75 @@ class TelemetryManager:
             self.connected = False
             return False
 
+    def _normalize_angle(self, val):
+        if val is None:
+            return 0
+        val = float(val)
+        # Python-SimConnect restituisce gli angoli in radianti (0 .. 2*pi = 6.283185)
+        # Se il valore è nel range dei radianti, lo convertiamo in gradi
+        if abs(val) <= (2 * math.pi + 0.05) and val != 0:
+            return int(round(math.degrees(val))) % 360
+        return int(round(val)) % 360
+
     def get_aircraft_data(self):
         if not self.connected or not self.aq:
-            # Dati di fallback in modalità DEMO se SimConnect non è attivo
             return {
                 "connected": False,
                 "mode": "DEMO",
-                "lat": 41.9,
-                "lon": 12.5,
+                "lat": 41.8003,
+                "lon": 12.2389,
                 "alt_ft": 17,
                 "gs_kt": 0,
-                "hdg_deg": 4,
+                "hdg_deg": 250,
+                "hdg_true": 250,
                 "aircraft": "MSFS 2024 (DEMO)"
             }
 
         try:
-            # Estrazione dei dati reali da SimConnect
-            lat = self.aq.get("PLANE_LATITUDE") or 41.9
-            lon = self.aq.get("PLANE_LONGITUDE") or 12.5
+            lat = self.aq.get("PLANE_LATITUDE") or 41.8003
+            lon = self.aq.get("PLANE_LONGITUDE") or 12.2389
+            
             alt = self.aq.get("PLANE_ALTITUDE")
-            alt_ft = int(alt * 3.28084) if alt is not None else 0
+            alt_ft = int(alt) if alt is not None else 0
             
             gs = self.aq.get("GROUND_VELOCITY")
-            gs_kt = int(gs * 1.94384) if gs is not None else 0
+            gs_kt = int(gs) if gs is not None else 0
             
-            hdg = self.aq.get("PLANE_HEADING_DEGREES_GYRO") or 0
-            hdg_deg = int(hdg) % 360
+            # Prua Vera per l'orientamento geometrico sulla mappa (True North)
+            hdg_true_raw = self.aq.get("PLANE_HEADING_DEGREES_TRUE")
+            # Prua Magnetica per il display testuale in cabina
+            hdg_mag_raw = self.aq.get("PLANE_HEADING_DEGREES_MAGNETIC")
+            if hdg_mag_raw is None:
+                hdg_mag_raw = self.aq.get("PLANE_HEADING_DEGREES_GYRO")
 
-            # Lettura e pulizia del titolo dell'aeromobile
+            hdg_true = self._normalize_angle(hdg_true_raw)
+            hdg_mag = self._normalize_angle(hdg_mag_raw) if hdg_mag_raw is not None else hdg_true
+
+            # Se l'aereo è in movimento (> 3 nodi), calcoliamo o usiamo la prua vera per allineare l'icona
             aircraft_title = self.aq.get("TITLE")
             if isinstance(aircraft_title, bytes):
                 try:
-                    aircraft_title = aircraft_title.decode('utf-8', errors='ignore').strip(" '")
-                except:
+                    aircraft_title = aircraft_title.decode('utf-8', errors='ignore').strip(" '\x00")
+                except Exception:
                     pass
 
             if not aircraft_title:
                 aircraft_title = self.aq.get("ATC_MODEL") or "MSFS 2024"
                 if isinstance(aircraft_title, bytes):
                     try:
-                        aircraft_title = aircraft_title.decode('utf-8', errors='ignore').strip(" '")
-                    except:
+                        aircraft_title = aircraft_title.decode('utf-8', errors='ignore').strip(" '\x00")
+                    except Exception:
                         pass
 
             return {
                 "connected": True,
                 "mode": "LIVE",
-                "lat": round(lat, 5),
-                "lon": round(lon, 5),
+                "lat": round(float(lat), 6),
+                "lon": round(float(lon), 6),
                 "alt_ft": alt_ft,
                 "gs_kt": gs_kt,
-                "hdg_deg": hdg_deg,
+                "hdg_deg": hdg_mag,
+                "hdg_true": hdg_true,
                 "aircraft": str(aircraft_title).strip()
             }
         except Exception:
@@ -83,10 +101,11 @@ class TelemetryManager:
             return {
                 "connected": False,
                 "mode": "DISCONNECTED",
-                "lat": 41.9,
-                "lon": 12.5,
+                "lat": 41.8003,
+                "lon": 12.2389,
                 "alt_ft": "---",
                 "gs_kt": "---",
                 "hdg_deg": "---",
+                "hdg_true": 0,
                 "aircraft": "MSFS 2024"
             }

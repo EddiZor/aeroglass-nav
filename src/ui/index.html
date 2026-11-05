@@ -114,6 +114,16 @@
             position: absolute; top: 16px; right: 16px; z-index: 10;
             display: flex; gap: 10px; align-items: center;
         }
+        .btn-follow {
+            padding: 8px 12px; color: var(--text-muted); font-size: 12px; font-weight: 600;
+            cursor: pointer; outline: none; transition: all 0.2s; display: flex; align-items: center; gap: 6px;
+        }
+        .btn-follow:hover { color: var(--text-main); border-color: var(--cyan); }
+        .btn-follow.active {
+            color: var(--emerald); border-color: var(--emerald);
+            background: rgba(52, 211, 153, 0.16);
+            box-shadow: 0 0 12px rgba(52, 211, 153, 0.25);
+        }
         .layer-select { padding: 8px 12px; color: var(--text-main); font-size: 12px; font-weight: 600; cursor: pointer; outline: none; }
         .layer-select option { background: #0f172a; color: #f8fafc; }
         .telemetry-pill { padding: 8px 14px; display: flex; gap: 16px; align-items: center; font-size: 12px; font-family: Consolas, monospace; }
@@ -166,6 +176,10 @@
     </aside>
 
     <div class="top-right">
+        <button id="btnFollowAcft" class="glass btn-follow active" onclick="toggleFollowAircraft()" title="Attiva/Disattiva centraggio automatico sull'aereo">
+            🎯 Segui Aereo: ON
+        </button>
+
         <select id="mapStyleSelect" class="glass layer-select" onchange="switchMapStyle(this.value)">
             <option value="dark">Mappa: IFR Dark Cockpit</option>
             <option value="topo">Mappa: VFR Topo (Rilievi)</option>
@@ -223,6 +237,37 @@
 
             currentTileLayer = L.tileLayer(url, { maxZoom: style === 'topo' ? 17 : 19 }).addTo(map);
         }
+
+        // Gestione Modalità Segui Aereo vs Mappa Libera
+        let followAircraft = true;
+        let lastAcftLatLng = null;
+        let lastAcftHdgTrue = 0;
+
+        function setFollowState(state) {
+            followAircraft = state;
+            const btn = document.getElementById('btnFollowAcft');
+            if (followAircraft) {
+                btn.classList.add('active');
+                btn.innerText = '🎯 Segui Aereo: ON';
+                if (lastAcftLatLng) {
+                    map.panTo(lastAcftLatLng, { animate: true, duration: 0.4 });
+                }
+            } else {
+                btn.classList.remove('active');
+                btn.innerText = '✋ Mappa Libera';
+            }
+        }
+
+        function toggleFollowAircraft() {
+            setFollowState(!followAircraft);
+        }
+
+        // Se l'utente trascina manualmente la mappa col mouse, passa automaticamente in "Mappa Libera"
+        map.on('dragstart', function() {
+            if (followAircraft) {
+                setFollowState(false);
+            }
+        });
 
         // Gestione ridimensionamento laterale della sidebar
         const sidebarPanel = document.getElementById('sidebarPanel');
@@ -289,7 +334,6 @@
         function parseMetarInfo(metarStr) {
             if (!metarStr) return null;
             
-            // 1. Vento (es. 25010KT, VRB03KT, 12008G18KT)
             let wind = '---';
             const windMatch = metarStr.match(/\b(\d{3}|VRB)(\d{2,3})(?:G(\d{2,3}))?(KT|MPS)\b/);
             if (windMatch) {
@@ -300,7 +344,6 @@
                 wind = `${dir}/${spd}${gust}${unit}`;
             }
 
-            // 2. Temperatura al suolo (es. 18/11 o M02/M05)
             let temp = '---';
             const tempMatch = metarStr.match(/\b(M?\d{2})\/(M?\d{2}|\/\/)\b/);
             if (tempMatch) {
@@ -308,7 +351,6 @@
                 temp = `${ parseInt(tVal, 10) }°C`;
             }
 
-            // 3. Pressione atmosferica in millibar (es. Q1018 oppure A2992 convertito)
             let qnh = '---';
             const qnhMatch = metarStr.match(/\bQ(\d{4})\b/);
             if (qnhMatch) {
@@ -338,7 +380,7 @@
 
         const acftIcon = L.divIcon({
             className: '',
-            html: '<div id="acftSvg" style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 0 6px #38bdf8);"><svg viewBox="0 0 24 24" width="24" height="24" fill="#38bdf8"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg></div>',
+            html: '<div id="acftSvg" style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;transform-origin:center center;transition:transform 0.25s linear;filter:drop-shadow(0 0 6px #38bdf8);"><svg viewBox="0 0 24 24" width="24" height="24" fill="#38bdf8"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg></div>',
             iconSize: [28, 28], iconAnchor: [14, 14]
         });
 
@@ -355,7 +397,7 @@
             if (mouseRouteMarker) { map.removeLayer(mouseRouteMarker); mouseRouteMarker = null; }
         }
 
-        function updateFlightPlanUI(alternateData = undefined) {
+        function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
             if (alternateData !== undefined) {
                 currentAlternate = alternateData;
             }
@@ -403,7 +445,10 @@
                 const div = document.createElement('div');
                 div.className = 'wpt-card' + (isEndpoint ? ' apt-endpoint' : '');
                 if (wp.lat && wp.lon) {
-                    div.onclick = () => map.flyTo([wp.lat, wp.lon], 11);
+                    div.onclick = () => {
+                        setFollowState(false);
+                        map.flyTo([wp.lat, wp.lon], 11);
+                    };
                 }
 
                 let wxBadgesHtml = '';
@@ -435,7 +480,11 @@
 
             if (coords.length > 1) {
                 routeLine = L.polyline(coords, { color: '#e879f9', weight: 2, dashArray: '6, 4' }).addTo(map);
-                map.fitBounds(routeLine.getBounds(), { padding: [80, 80] });
+                if (fitMap && !followAircraft) {
+                    map.fitBounds(routeLine.getBounds(), { padding: [80, 80] });
+                } else if (fitMap && !lastAcftLatLng) {
+                    map.fitBounds(routeLine.getBounds(), { padding: [80, 80] });
+                }
             }
 
             if (currentAlternate && coords.length > 0) {
@@ -471,7 +520,7 @@
                     const res = await window.pywebview.api.update_waypoint_altitude(index, newAlt);
                     if (res.success) {
                         flightPlan = res.flight_plan;
-                        updateFlightPlanUI();
+                        updateFlightPlanUI(undefined, false);
                     }
                 }
             }
@@ -642,6 +691,17 @@
             return null;
         }
 
+        // Calcolo bearing geografico tra due coordinate (fallback ulteriore se aereo in movimento)
+        function calculateBearing(lat1, lon1, lat2, lon2) {
+            const toRad = d => d * Math.PI / 180;
+            const toDeg = r => r * 180 / Math.PI;
+            const dLon = toRad(lon2 - lon1);
+            const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+            const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+                      Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+            return (toDeg(Math.atan2(y, x)) + 360) % 360;
+        }
+
         async function addWaypoint(icao) {
             if (window.pywebview && window.pywebview.api) {
                 flightPlan = await window.pywebview.api.add_to_flight_plan(icao);
@@ -687,6 +747,7 @@
             const q = query.toUpperCase().trim();
             const found = airportsData.find(a => a.icao.includes(q) || a.name.toUpperCase().includes(q));
             if (found && q.length >= 3) {
+                setFollowState(false);
                 map.flyTo([found.lat, found.lon], 10);
             }
         }
@@ -701,13 +762,34 @@
             document.getElementById('valHdg').innerText = data.hdg_deg;
             document.getElementById('valAcft').innerText = data.aircraft || "MSFS 2024";
 
-            if (!acftMarker) {
-                acftMarker = L.marker([data.lat, data.lon], { icon: acftIcon }).addTo(map);
-            } else {
-                acftMarker.setLatLng([data.lat, data.lon]);
+            const newLatLng = L.latLng(data.lat, data.lon);
+
+            // Determina l'angolo di rotazione dell'icona sulla mappa (True Heading o Track reale)
+            let mapHeading = (data.hdg_true !== undefined && data.hdg_true !== null) ? Number(data.hdg_true) : Number(data.hdg_deg);
+            if (isNaN(mapHeading)) mapHeading = lastAcftHdgTrue;
+
+            // Se per qualsiasi motivo SimConnect desse 0 ma l'aereo si sta spostando, calcola il track reale GPS
+            if (lastAcftLatLng && newLatLng.distanceTo(lastAcftLatLng) > 8 && mapHeading === 0) {
+                mapHeading = calculateBearing(lastAcftLatLng.lat, lastAcftLatLng.lng, newLatLng.lat, newLatLng.lng);
             }
+            lastAcftHdgTrue = mapHeading;
+            lastAcftLatLng = newLatLng;
+
+            if (!acftMarker) {
+                acftMarker = L.marker(newLatLng, { icon: acftIcon }).addTo(map);
+            } else {
+                acftMarker.setLatLng(newLatLng);
+            }
+
             const svgEl = document.getElementById('acftSvg');
-            if (svgEl) svgEl.style.transform = 'rotate(' + data.hdg_deg + 'deg)';
+            if (svgEl) {
+                svgEl.style.transform = `rotate(${mapHeading}deg)`;
+            }
+
+            // Se la modalità "Segui Aereo" è attiva, muove la mappa in sincrono con l'aeroplanino
+            if (followAircraft) {
+                map.panTo(newLatLng, { animate: true, duration: 0.5 });
+            }
 
             const acftLine = document.getElementById('acftVnavLine');
             if (flightPlan && flightPlan.length >= 2) {
