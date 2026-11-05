@@ -5,7 +5,6 @@ import xml.etree.ElementTree as ET
 import ctypes
 from src.simconnect.telemetry import TelemetryManager
 
-# Istanza esterna alla classe: pywebview NON può ispezionarla!
 _TELEMETRY_INSTANCE = None
 
 def _get_telemetry():
@@ -18,7 +17,6 @@ def _get_telemetry():
 class AeroGlassAPI:
     def __init__(self):
         self._config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config.json")
-        self.simbrief_userid = self._load_config()
         
         self.airports = [
             {"icao": "LIPX", "name": "Verona Villafranca", "lat": 45.3957, "lon": 10.8885, "elev": 239, "rwy": "04/22", "twr": "118.650", "metar": "LIPX 050820Z 04006KT CAVOK 16/09 Q1018"},
@@ -29,21 +27,37 @@ class AeroGlassAPI:
             {"icao": "LIRF", "name": "Roma Fiumicino", "lat": 41.8003, "lon": 12.2389, "elev": 15, "rwy": "16L/34R", "twr": "118.700", "metar": "LIRF 050820Z 25010KT CAVOK 18/11 Q1018"},
             {"icao": "LIPE", "name": "Bologna Borgo Panigale", "lat": 44.5354, "lon": 11.2887, "elev": 123, "rwy": "12/30", "twr": "118.100", "metar": "LIPE 050820Z 12005KT CAVOK 16/10 Q1018"}
         ]
-        self.flight_plan = ["LIPX", "LIDT", "LIPD"]
+        
+        config_data = self._load_config()
+        self.simbrief_userid = config_data.get("simbrief_userid", "")
+        saved_fpl = config_data.get("flight_plan", [])
+        self.alternate = config_data.get("alternate", None)
+        
+        if saved_fpl:
+            self.flight_plan = saved_fpl
+        else:
+            self.flight_plan = [
+                {"ident": "LIPX", "lat": 45.3957, "lon": 10.8885, "alt_ft": 239, "name": "Verona Villafranca", "type": "APT"},
+                {"ident": "LIDT", "lat": 46.0219, "lon": 11.1242, "alt_ft": 6500, "name": "Trento Mattarello", "type": "WPT"},
+                {"ident": "LIPD", "lat": 46.0319, "lon": 13.1869, "alt_ft": 308, "name": "Udine Campoformido", "type": "APT"}
+            ]
 
     def _load_config(self):
         try:
             if os.path.exists(self._config_path):
                 with open(self._config_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    return data.get("simbrief_userid", "")
+                    return json.load(f)
         except Exception:
             pass
-        return ""
+        return {}
 
     def _save_config(self):
         try:
-            data = {"simbrief_userid": self.simbrief_userid}
+            data = {
+                "simbrief_userid": self.simbrief_userid,
+                "flight_plan": self.flight_plan,
+                "alternate": self.alternate
+            }
             with open(self._config_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=4)
         except Exception:
@@ -59,13 +73,25 @@ class AeroGlassAPI:
         return {
             "airports": self.airports,
             "flight_plan": self.flight_plan,
-            "simbrief_userid": self.simbrief_userid
+            "simbrief_userid": self.simbrief_userid,
+            "alternate": self.alternate
         }
 
     def save_simbrief_id(self, userid):
         self.simbrief_userid = str(userid).strip()
         self._save_config()
         return {"success": True}
+
+    def update_waypoint_altitude(self, index, alt_ft):
+        try:
+            idx = int(index)
+            if 0 <= idx < len(self.flight_plan):
+                self.flight_plan[idx]["alt_ft"] = int(alt_ft)
+                self._save_config()
+                return {"success": True, "flight_plan": self.flight_plan}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+        return {"success": False}
 
     def fetch_simbrief_plan(self):
         try:
@@ -81,9 +107,46 @@ class AeroGlassAPI:
             root = ET.fromstring(xml_data)
             parsed_waypoints = []
             
-            orig = root.find(".//origin/icao_code")
-            if orig is not None and orig.text:
-                parsed_waypoints.append(orig.text.strip())
+            def get_coords(elem):
+                lat, lon = None, None
+                for t in ["lat", "latitude", "pos_lat"]:
+                    n = elem.find(t)
+                    if n is not None and n.text:
+                        try: lat = float(n.text.strip()); break
+                        except: pass
+                for t in ["lon", "longitude", "pos_long", "long"]:
+                    n = elem.find(t)
+                    if n is not None and n.text:
+                        try: lon = float(n.text.strip()); break
+                        except: pass
+                return lat, lon
+
+            def get_alt(elem):
+                for t in ["altitude_feet", "alt", "altitude"]:
+                    n = elem.find(t)
+                    if n is not None and n.text:
+                        try: return int(float(n.text.strip()))
+                        except: pass
+                return 5000
+
+            dep_lat, dep_lon = 41.8, 12.4
+            orig = root.find(".//origin")
+            if orig is not None:
+                icao_node = orig.find("icao_code")
+                lat, lon = get_coords(orig)
+                if lat is not None: dep_lat, dep_lon = lat, lon
+                elif icao_node is not None and icao_node.text:
+                    apt = next((a for a in self.airports if a["icao"] == icao_node.text.strip()), None)
+                    if apt: dep_lat, dep_lon = apt["lat"], apt["lon"]
+                
+                if icao_node is not None and icao_node.text:
+                    parsed_waypoints.append({
+                        "ident": icao_node.text.strip(),
+                        "lat": dep_lat,
+                        "lon": dep_lon,
+                        "alt_ft": 0,
+                        "type": "DEP"
+                    })
                 
             navlog = root.find("navlog")
             if navlog is not None:
@@ -91,18 +154,71 @@ class AeroGlassAPI:
                     ident = fix.find("ident")
                     if ident is not None and ident.text:
                         code = ident.text.strip()
-                        if code and code not in parsed_waypoints:
-                            parsed_waypoints.append(code)
+                        lat, lon = get_coords(fix)
+                        alt = get_alt(fix)
+                        if not parsed_waypoints or parsed_waypoints[-1]["ident"] != code:
+                            parsed_waypoints.append({
+                                "ident": code,
+                                "lat": lat if lat is not None else 0.0,
+                                "lon": lon if lon is not None else 0.0,
+                                "alt_ft": alt,
+                                "type": "WPT"
+                            })
                             
-            dest = root.find(".//destination/icao_code")
-            if dest is not None and dest.text:
-                d_code = dest.text.strip()
-                if d_code and d_code not in parsed_waypoints:
-                    parsed_waypoints.append(d_code)
+            dest_lat, dest_lon = 44.5, 11.2
+            dest = root.find(".//destination")
+            if dest is not None:
+                icao_node = dest.find("icao_code")
+                lat, lon = get_coords(dest)
+                if lat is not None: dest_lat, dest_lon = lat, lon
+                elif icao_node is not None and icao_node.text:
+                    apt = next((a for a in self.airports if a["icao"] == icao_node.text.strip()), None)
+                    if apt: dest_lat, dest_lon = apt["lat"], apt["lon"]
+
+                dest_code = icao_node.text.strip() if icao_node is not None and icao_node.text else "DEST"
+                if not parsed_waypoints or parsed_waypoints[-1]["ident"] != dest_code:
+                    parsed_waypoints.append({
+                        "ident": dest_code,
+                        "lat": dest_lat,
+                        "lon": dest_lon,
+                        "alt_ft": 0,
+                        "type": "DEST"
+                    })
+
+            alternate_data = None
+            alt_node = root.find(".//alternate")
+            if alt_node is not None:
+                alt_icao = alt_node.find("icao_code")
+                lat, lon = get_coords(alt_node)
+                if alt_icao is not None and alt_icao.text:
+                    alt_code = alt_icao.text.strip()
+                    if lat is None or lon is None:
+                        apt = next((a for a in self.airports if a["icao"] == alt_code), None)
+                        if apt: lat, lon = apt["lat"], apt["lon"]
+                    if lat is not None and lon is not None:
+                        alternate_data = {"ident": alt_code, "lat": lat, "lon": lon}
+
+            total = len(parsed_waypoints)
+            if total > 2:
+                start_lat = parsed_waypoints[0]["lat"]
+                start_lon = parsed_waypoints[0]["lon"]
+                end_lat = parsed_waypoints[-1]["lat"]
+                end_lon = parsed_waypoints[-1]["lon"]
+                for i, wp in enumerate(parsed_waypoints):
+                    if wp["lat"] == 0.0 or wp["lon"] == 0.0:
+                        fraction = i / (total - 1)
+                        wp["lat"] = round(start_lat + fraction * (end_lat - start_lat), 5)
+                        wp["lon"] = round(start_lon + fraction * (end_lon - start_lon), 5)
 
             if parsed_waypoints:
                 self.flight_plan = parsed_waypoints
-                return {"success": True, "flight_plan": self.flight_plan}
+                self.alternate = alternate_data
+                self._save_config()
+                return {
+                    "success": True, 
+                    "flight_plan": self.flight_plan, 
+                    "alternate": self.alternate
+                }
                 
             return {"success": False, "error": "Nessun piano di volo trovato"}
         except Exception as e:
@@ -110,8 +226,17 @@ class AeroGlassAPI:
 
     def add_to_flight_plan(self, icao):
         icao = icao.upper().strip()
-        if icao not in self.flight_plan:
-            self.flight_plan.append(icao)
+        apt = next((a for a in self.airports if a["icao"] == icao), None)
+        if apt:
+            self.flight_plan.append({
+                "ident": apt["icao"],
+                "lat": apt["lat"],
+                "lon": apt["lon"],
+                "alt_ft": 5000,
+                "name": apt["name"],
+                "type": "WPT"
+            })
+            self._save_config()
         return self.flight_plan
 
     def load_pln_file(self):
@@ -121,8 +246,8 @@ class AeroGlassAPI:
                 _fields_ = [
                     ("lStructSize", wintypes.DWORD), ("hwndOwner", wintypes.HWND), ("hInstance", wintypes.HINSTANCE),
                     ("lpstrFilter", wintypes.LPCWSTR), ("lpstrCustomFilter", wintypes.LPWSTR), ("nMaxCustFilter", wintypes.DWORD),
-                    ("nFilterIndex", wintypes.DWORD), ("lpstrFile", wintypes.LPWSTR), ("nMaxFile", wintypes.DWORD),
-                    ("lpstrFileTitle", wintypes.LPWSTR), ("nMaxFileTitle", wintypes.DWORD), ("lpstrInitialDir", wintypes.LPCWSTR),
+                    ("nFilterIndex", wintypes.DWORD), ("lpstrFile", wintypes.LPCWSTR), ("nMaxFile", wintypes.DWORD),
+                    ("lpstrFileTitle", wintypes.LPCWSTR), ("nMaxFileTitle", wintypes.DWORD), ("lpstrInitialDir", wintypes.LPCWSTR),
                     ("lpstrTitle", wintypes.LPCWSTR), ("Flags", wintypes.DWORD), ("nFileOffset", wintypes.WORD),
                     ("nFileExtension", wintypes.WORD), ("lpstrDefExt", wintypes.LPCWSTR), ("lCustData", wintypes.LPARAM),
                     ("lpfnHook", ctypes.c_void_p), ("lpstrTemplateName", wintypes.LPCWSTR), ("pvReserved", ctypes.c_void_p),
@@ -151,34 +276,60 @@ class AeroGlassAPI:
                     xml_root = tree.getroot()
                     parsed_waypoints = []
                     
+                    def get_coords_for_ident(ident):
+                        apt = next((a for a in self.airports if a["icao"] == ident), None)
+                        if apt: return apt["lat"], apt["lon"]
+                        return 45.0, 10.0
+
                     dep_elem = xml_root.find(".//DepartureID")
                     if dep_elem is not None and dep_elem.text:
                         dep_code = dep_elem.text.strip()
-                        if dep_code:
-                            parsed_waypoints.append(dep_code)
+                        lat, lon = get_coords_for_ident(dep_code)
+                        parsed_waypoints.append({"ident": dep_code, "lat": lat, "lon": lon, "alt_ft": 0, "type": "DEP"})
                     
                     for wp in xml_root.findall(".//FlightPlan.Waypoint") + xml_root.findall(".//ATCWaypoint"):
+                        code = ""
                         ident_elem = wp.find(".//ICAOIdent")
                         if ident_elem is not None and ident_elem.text:
                             code = ident_elem.text.strip()
-                            if code and code not in parsed_waypoints:
-                                parsed_waypoints.append(code)
                         else:
                             icao_elem = wp.find("ICAO")
                             if icao_elem is not None and icao_elem.text:
                                 code = icao_elem.text.strip()
-                                if code and code not in parsed_waypoints:
-                                    parsed_waypoints.append(code)
+                        
+                        wp_lat, wp_lon = 0.0, 0.0
+                        wp_pt = wp.find("WorldPoint")
+                        if wp_pt is not None and wp_pt.text:
+                            parts = wp_pt.text.split(",")
+                            if len(parts) >= 2:
+                                try: wp_lat, wp_lon = float(parts[0]), float(parts[1])
+                                except: pass
+
+                        alt_ft = 5000
+                        alt_elem = wp.find("Altitude")
+                        if alt_elem is not None and alt_elem.text:
+                            try: alt_ft = int(float(alt_elem.text.strip()))
+                            except: pass
+
+                        if code:
+                            if wp_lat == 0.0:
+                                wp_lat, wp_lon = get_coords_for_ident(code)
+                            
+                            if not parsed_waypoints or parsed_waypoints[-1]["ident"] != code:
+                                parsed_waypoints.append({"ident": code, "lat": wp_lat, "lon": wp_lon, "alt_ft": alt_ft, "type": "WPT"})
                     
                     dest_elem = xml_root.find(".//DestinationID")
                     if dest_elem is not None and dest_elem.text:
                         dest_code = dest_elem.text.strip()
-                        if dest_code and dest_code not in parsed_waypoints:
-                            parsed_waypoints.append(dest_code)
+                        lat, lon = get_coords_for_ident(dest_code)
+                        if not parsed_waypoints or parsed_waypoints[-1]["ident"] != dest_code:
+                            parsed_waypoints.append({"ident": dest_code, "lat": lat, "lon": lon, "alt_ft": alt_ft, "type": "DEST"})
                     
                     if parsed_waypoints:
                         self.flight_plan = parsed_waypoints
-                        return {"success": True, "flight_plan": self.flight_plan, "filename": os.path.basename(filepath)}
+                        self.alternate = None
+                        self._save_config()
+                        return {"success": True, "flight_plan": self.flight_plan, "alternate": None, "filename": os.path.basename(filepath)}
             
             return {"success": False}
         except Exception as e:

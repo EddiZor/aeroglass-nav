@@ -1,92 +1,92 @@
-﻿import math
-import time
-import multiprocessing as mp
-
-def _simconnect_worker(shared_dict):
-    """Gira in un processo separato: zero blocchi per la GUI di pywebview."""
-    sm = None
-    aq = None
-    connected = False
-    demo_angle = 0.0
-
-    while True:
-        if not connected:
-            try:
-                from SimConnect import SimConnect, AircraftRequests
-                sm = SimConnect()
-                aq = AircraftRequests(sm, _time=100)
-                connected = True
-                print("[SimConnect] Connesso con successo a MSFS 2024!")
-            except Exception:
-                sm = None
-                aq = None
-                connected = False
-                # Aggiorna dati DEMO
-                demo_angle = (demo_angle + 1.5) % 360
-                rad = math.radians(demo_angle)
-                shared_dict["connected"] = False
-                shared_dict["mode"] = "DEMO"
-                shared_dict["lat"] = round(45.4500 + 0.08 * math.sin(rad), 5)
-                shared_dict["lon"] = round(10.8500 + 0.12 * math.cos(rad), 5)
-                shared_dict["alt_ft"] = 6500
-                shared_dict["gs_kt"] = 245
-                shared_dict["hdg_deg"] = round((demo_angle + 90) % 360)
-                shared_dict["vs_fpm"] = 0
-                time.sleep(1.0)
-                continue
-
-        try:
-            lat = aq.get("PLANE_LATITUDE")
-            lon = aq.get("PLANE_LONGITUDE")
-            alt = aq.get("PLANE_ALTITUDE")
-            gs = aq.get("GROUND_VELOCITY")
-            hdg = aq.get("PLANE_HEADING_DEGREES_MAGNETIC")
-            vs = aq.get("VERTICAL_SPEED")
-
-            if lat is not None and lon is not None and (abs(float(lat)) > 0.001 or abs(float(lon)) > 0.001):
-                shared_dict["connected"] = True
-                shared_dict["mode"] = "LIVE"
-                shared_dict["lat"] = round(float(lat), 5)
-                shared_dict["lon"] = round(float(lon), 5)
-                shared_dict["alt_ft"] = round(float(alt or 0))
-                shared_dict["gs_kt"] = round(float(gs or 0))
-                shared_dict["hdg_deg"] = round(float(hdg or 0)) % 360
-                shared_dict["vs_fpm"] = round(float(vs or 0))
-            else:
-                # Nel menu principale di MSFS le coordinate sono (0,0)
-                shared_dict["connected"] = True
-                shared_dict["mode"] = "IN MENU"
-        except Exception as e:
-            print(f"[SimConnect] Connessione persa: {e}")
-            connected = False
-            aq = None
-            sm = None
-
-        time.sleep(0.25)
-
+﻿import time
+try:
+    from SimConnect import SimConnect, AircraftRequests
+except ImportError:
+    SimConnect = None
+    AircraftRequests = None
 
 class TelemetryManager:
     def __init__(self):
-        self._manager = mp.Manager()
-        self._shared = self._manager.dict({
-            "connected": False,
-            "mode": "DEMO",
-            "lat": 45.4500,
-            "lon": 10.8500,
-            "alt_ft": 6500,
-            "gs_kt": 245,
-            "hdg_deg": 90,
-            "vs_fpm": 0
-        })
-        self._proc = mp.Process(target=_simconnect_worker, args=(self._shared,), daemon=True)
-        self._proc.start()
+        self.sm = None
+        self.aq = None
+        self.connected = False
 
     def connect(self):
-        is_conn = bool(self._shared.get("connected", False))
-        return {
-            "status": "CONNECTED" if is_conn else "DEMO_MODE",
-            "mode": "SIMCONNECT" if is_conn else "SIMULATED"
-        }
+        if SimConnect is None:
+            self.connected = False
+            return False
+        
+        try:
+            self.sm = SimConnect()
+            self.aq = AircraftRequests(self.sm, _time=200)
+            self.connected = True
+            return True
+        except Exception:
+            self.connected = False
+            return False
 
     def get_aircraft_data(self):
-        return dict(self._shared)
+        if not self.connected or not self.aq:
+            # Dati di fallback in modalità DEMO se SimConnect non è attivo
+            return {
+                "connected": False,
+                "mode": "DEMO",
+                "lat": 41.9,
+                "lon": 12.5,
+                "alt_ft": 17,
+                "gs_kt": 0,
+                "hdg_deg": 4,
+                "aircraft": "MSFS 2024 (DEMO)"
+            }
+
+        try:
+            # Estrazione dei dati reali da SimConnect
+            lat = self.aq.get("PLANE_LATITUDE") or 41.9
+            lon = self.aq.get("PLANE_LONGITUDE") or 12.5
+            alt = self.aq.get("PLANE_ALTITUDE")
+            alt_ft = int(alt * 3.28084) if alt is not None else 0
+            
+            gs = self.aq.get("GROUND_VELOCITY")
+            gs_kt = int(gs * 1.94384) if gs is not None else 0
+            
+            hdg = self.aq.get("PLANE_HEADING_DEGREES_GYRO") or 0
+            hdg_deg = int(hdg) % 360
+
+            # Lettura e pulizia del titolo dell'aeromobile
+            aircraft_title = self.aq.get("TITLE")
+            if isinstance(aircraft_title, bytes):
+                try:
+                    aircraft_title = aircraft_title.decode('utf-8', errors='ignore').strip(" '")
+                except:
+                    pass
+
+            if not aircraft_title:
+                aircraft_title = self.aq.get("ATC_MODEL") or "MSFS 2024"
+                if isinstance(aircraft_title, bytes):
+                    try:
+                        aircraft_title = aircraft_title.decode('utf-8', errors='ignore').strip(" '")
+                    except:
+                        pass
+
+            return {
+                "connected": True,
+                "mode": "LIVE",
+                "lat": round(lat, 5),
+                "lon": round(lon, 5),
+                "alt_ft": alt_ft,
+                "gs_kt": gs_kt,
+                "hdg_deg": hdg_deg,
+                "aircraft": str(aircraft_title).strip()
+            }
+        except Exception:
+            self.connected = False
+            return {
+                "connected": False,
+                "mode": "DISCONNECTED",
+                "lat": 41.9,
+                "lon": 12.5,
+                "alt_ft": "---",
+                "gs_kt": "---",
+                "hdg_deg": "---",
+                "aircraft": "MSFS 2024"
+            }
