@@ -34,22 +34,39 @@
 
         .sidebar {
             position: absolute; top: 16px; left: 16px; bottom: 130px; width: 360px;
+            min-width: 260px; max-width: 680px;
             z-index: 10; display: flex; flex-direction: column; padding: 14px; gap: 10px;
             transition: bottom 0.3s ease;
         }
+        .sidebar-resizer {
+            position: absolute; top: 8px; right: -4px; bottom: 8px; width: 8px;
+            cursor: ew-resize; z-index: 20; border-radius: 4px; transition: background 0.2s;
+        }
+        .sidebar-resizer:hover, .sidebar-resizer.resizing {
+            background: rgba(56, 189, 248, 0.45);
+        }
+
         .brand { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-glass); padding-bottom: 8px; }
-        .brand h1 { font-size: 16px; font-weight: 700; letter-spacing: 0.5px; color: var(--cyan); }
+        .brand h1 { font-size: 16px; font-weight: 700; letter-spacing: 0.5px; color: var(--cyan); white-space: nowrap; }
         
+        .action-row { display: flex; gap: 6px; width: 100%; }
         .btn-action {
-            width: 100%; padding: 7px; background: rgba(56, 189, 248, 0.15); border: 1px solid var(--cyan);
+            flex: 1; padding: 7px 10px; background: rgba(56, 189, 248, 0.15); border: 1px solid var(--cyan);
             color: var(--cyan); border-radius: 8px; font-weight: 600; font-size: 12px; cursor: pointer; text-align: center;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
         .btn-action:hover { background: rgba(56, 189, 248, 0.3); }
 
         .btn-simbrief {
-            background: rgba(232, 121, 249, 0.15); border-color: var(--magenta); color: var(--magenta);
+            background: rgba(232, 121, 249, 0.15); border-color: var(--magenta); color: var(--magenta); flex: 0 0 auto;
         }
         .btn-simbrief:hover { background: rgba(232, 121, 249, 0.3); }
+
+        .btn-icon-muted {
+            background: rgba(148, 163, 184, 0.12); border: 1px solid var(--border-glass); color: var(--text-muted);
+            border-radius: 8px; padding: 6px 8px; font-size: 11px; cursor: pointer; flex: 0 0 auto;
+        }
+        .btn-icon-muted:hover { color: var(--text-main); border-color: var(--text-muted); }
 
         .simbrief-box {
             display: flex; gap: 6px; align-items: center; background: rgba(30, 41, 59, 0.5);
@@ -58,6 +75,7 @@
         .simbrief-box input {
             flex: 1; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-glass);
             background: rgba(15, 23, 42, 0.9); color: var(--text-main); font-size: 12px; outline: none; font-family: monospace;
+            min-width: 0;
         }
         .simbrief-box input:focus { border-color: var(--magenta); }
 
@@ -68,16 +86,29 @@
         .search-box input:focus { border-color: var(--cyan); }
 
         .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-top: 2px; }
-        .fpl-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; flex: 1; }
+        .fpl-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; flex: 1; padding-right: 2px; }
         .wpt-card {
             padding: 8px 10px; border-radius: 8px; background: rgba(30, 41, 59, 0.65);
             border-left: 3px solid var(--magenta); display: flex; justify-content: space-between; align-items: center;
+        }
+        .wpt-card.apt-endpoint {
+            border-left-color: var(--cyan);
+            background: rgba(30, 41, 59, 0.82);
         }
         .wpt-card:hover { background: rgba(51, 65, 85, 0.85); }
         .wpt-icao { font-weight: 700; font-size: 13px; color: var(--cyan); }
         .wpt-name { font-size: 11px; color: var(--text-muted); }
         .wpt-alt { font-size: 11px; font-family: monospace; color: var(--magenta); background: rgba(232, 121, 249, 0.1); padding: 2px 6px; border-radius: 4px; cursor: pointer; }
         .wpt-alt:hover { background: rgba(232, 121, 249, 0.3); }
+
+        .wpt-wx-row {
+            display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px;
+        }
+        .wx-pill {
+            font-size: 10px; font-family: Consolas, monospace; color: var(--emerald);
+            background: rgba(52, 211, 153, 0.12); border: 1px solid rgba(52, 211, 153, 0.28);
+            padding: 1px 6px; border-radius: 4px; white-space: nowrap;
+        }
 
         .top-right {
             position: absolute; top: 16px; right: 16px; z-index: 10;
@@ -106,17 +137,23 @@
     <div id="map" class="map-dark-filter"></div>
 
     <aside class="sidebar glass" id="sidebarPanel">
+        <div class="sidebar-resizer" id="sidebarResizer" title="Trascina per ridimensionare"></div>
+        
         <div class="brand">
-            <div style="display: flex; align-items: baseline; gap: 6px;">
+            <div style="display: flex; align-items: baseline; gap: 6px; overflow: hidden;">
                 <h1>AEROGLASS NAV</h1>
-                <span style="font-size: 11px; color: var(--text-muted);">by EddiZor</span>
+                <span style="font-size: 11px; color: var(--text-muted); white-space: nowrap;">by EddiZor</span>
             </div>
-            <span style="font-size: 11px; color: var(--text-muted);">v0.3.0</span>
+            <span style="font-size: 11px; color: var(--text-muted); margin-left: 6px;">v0.3.0</span>
         </div>
         
-        <button class="btn-action" onclick="importPlnFile()">📂 Importa File .pln (Downloads)</button>
+        <div class="action-row">
+            <button class="btn-action" onclick="importPlnFile()">📂 Importa .pln</button>
+            <button class="btn-action btn-simbrief" id="simbriefCompactBtn" style="display: none;" onclick="fetchSimbriefPlan()" title="Ricarica l'ultimo OFP da SimBrief">✈️ Ricarica SimBrief</button>
+            <button class="btn-icon-muted" id="simbriefEditIdBtn" style="display: none;" onclick="showSimbriefBox()" title="Modifica SimBrief User ID">⚙️</button>
+        </div>
         
-        <div class="simbrief-box">
+        <div class="simbrief-box" id="simbriefSetupBox">
             <input type="password" id="simbriefIdInput" placeholder="SimBrief User ID (es. 123456)" onchange="saveSimbriefId(this.value)">
             <button class="btn-action btn-simbrief" style="width: auto; padding: 6px 12px;" onclick="fetchSimbriefPlan()">✈️ SimBrief</button>
         </div>
@@ -187,6 +224,53 @@
             currentTileLayer = L.tileLayer(url, { maxZoom: style === 'topo' ? 17 : 19 }).addTo(map);
         }
 
+        // Gestione ridimensionamento laterale della sidebar
+        const sidebarPanel = document.getElementById('sidebarPanel');
+        const sidebarResizer = document.getElementById('sidebarResizer');
+        let isResizingSidebar = false;
+
+        sidebarResizer.addEventListener('mousedown', function(e) {
+            isResizingSidebar = true;
+            sidebarResizer.classList.add('resizing');
+            document.body.style.cursor = 'ew-resize';
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (!isResizingSidebar) return;
+            const newWidth = Math.max(260, Math.min(680, e.clientX - 16));
+            sidebarPanel.style.width = newWidth + 'px';
+        });
+
+        document.addEventListener('mouseup', function() {
+            if (isResizingSidebar) {
+                isResizingSidebar = false;
+                sidebarResizer.classList.remove('resizing');
+                document.body.style.cursor = '';
+            }
+        });
+
+        // Gestione visibilità campo SimBrief
+        function setSimbriefCompactMode(isCompact) {
+            const setupBox = document.getElementById('simbriefSetupBox');
+            const compactBtn = document.getElementById('simbriefCompactBtn');
+            const editIdBtn = document.getElementById('simbriefEditIdBtn');
+            if (isCompact) {
+                setupBox.style.display = 'none';
+                compactBtn.style.display = 'block';
+                editIdBtn.style.display = 'block';
+            } else {
+                setupBox.style.display = 'flex';
+                compactBtn.style.display = 'none';
+                editIdBtn.style.display = 'none';
+            }
+        }
+
+        function showSimbriefBox() {
+            setSimbriefCompactMode(false);
+            document.getElementById('simbriefIdInput').focus();
+        }
+
         let drawerOpen = true;
         function toggleDrawer() {
             drawerOpen = !drawerOpen;
@@ -201,8 +285,49 @@
             }
         }
 
+        // Parser METAR per estrarre Vento, Temperatura e Pressione QNH (mb)
+        function parseMetarInfo(metarStr) {
+            if (!metarStr) return null;
+            
+            // 1. Vento (es. 25010KT, VRB03KT, 12008G18KT)
+            let wind = '---';
+            const windMatch = metarStr.match(/\b(\d{3}|VRB)(\d{2,3})(?:G(\d{2,3}))?(KT|MPS)\b/);
+            if (windMatch) {
+                const dir = windMatch[1] === 'VRB' ? 'VRB' : windMatch[1] + '°';
+                const spd = parseInt(windMatch[2], 10);
+                const gust = windMatch[3] ? 'G' + parseInt(windMatch[3], 10) : '';
+                const unit = windMatch[4] === 'MPS' ? 'm/s' : 'kt';
+                wind = `${dir}/${spd}${gust}${unit}`;
+            }
+
+            // 2. Temperatura al suolo (es. 18/11 o M02/M05)
+            let temp = '---';
+            const tempMatch = metarStr.match(/\b(M?\d{2})\/(M?\d{2}|\/\/)\b/);
+            if (tempMatch) {
+                const tVal = tempMatch[1].replace('M', '-');
+                temp = `${ parseInt(tVal, 10) }°C`;
+            }
+
+            // 3. Pressione atmosferica in millibar (es. Q1018 oppure A2992 convertito)
+            let qnh = '---';
+            const qnhMatch = metarStr.match(/\bQ(\d{4})\b/);
+            if (qnhMatch) {
+                qnh = `${ parseInt(qnhMatch[1], 10) } mb`;
+            } else {
+                const altimMatch = metarStr.match(/\bA(\d{4})\b/);
+                if (altimMatch) {
+                    const inHg = parseInt(altimMatch[1], 10) / 100.0;
+                    qnh = `${ Math.round(inHg * 33.8639) } mb`;
+                }
+            }
+
+            if (wind === '---' && temp === '---' && qnh === '---') return null;
+            return { wind, temp, qnh, raw: metarStr };
+        }
+
         let airportsData = [];
         let flightPlan = [];
+        let currentAlternate = null;
         let routeLine = null;
         let alternateLine = null;
         let waypointMarkers = [];
@@ -230,7 +355,10 @@
             if (mouseRouteMarker) { map.removeLayer(mouseRouteMarker); mouseRouteMarker = null; }
         }
 
-        function updateFlightPlanUI(alternateData = null) {
+        function updateFlightPlanUI(alternateData = undefined) {
+            if (alternateData !== undefined) {
+                currentAlternate = alternateData;
+            }
             const container = document.getElementById('fplContainer');
             container.innerHTML = '';
             
@@ -240,38 +368,65 @@
             const altitutes = [];
 
             flightPlan.forEach((wp, index) => {
+                const apt = airportsData.find(a => a.icao === wp.ident);
+                const isEndpoint = (index === 0 || index === flightPlan.length - 1 || wp.type === 'DEP' || wp.type === 'DEST' || wp.type === 'APT');
+                const rawMetar = wp.metar || (apt ? apt.metar : '');
+                const wx = isEndpoint ? parseMetarInfo(rawMetar) : null;
+
                 if (wp.lat && wp.lon) {
                     coords.push([wp.lat, wp.lon]);
                     altitutes.push(wp.alt_ft || 0);
 
                     const marker = L.circleMarker([wp.lat, wp.lon], {
-                        radius: 4,
+                        radius: isEndpoint ? 5 : 4,
                         color: '#38bdf8',
-                        fillColor: '#0284c7',
-                        fillOpacity: 0.8,
+                        fillColor: isEndpoint ? '#34d399' : '#0284c7',
+                        fillOpacity: 0.85,
                         weight: 1.5
                     }).addTo(map);
 
-                    marker.bindPopup(
+                    let popupHtml =
                         '<div style="font-weight:700;font-size:13px;color:#38bdf8;">' + wp.ident + '</div>' +
-                        '<div style="font-size:11px;color:#94a3b8;margin-bottom:6px;">Altitudine: <span style="color:#e879f9;cursor:pointer;text-decoration:underline;font-weight:600;" onclick="editWaypointAlt(' + index + ', ' + wp.alt_ft + ')">' + wp.alt_ft + ' ft ✏️</span></div>'
-                    );
+                        '<div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Altitudine: <span style="color:#e879f9;cursor:pointer;text-decoration:underline;font-weight:600;" onclick="editWaypointAlt(' + index + ', ' + wp.alt_ft + ')">' + wp.alt_ft + ' ft ✏️</span></div>';
+                    
+                    if (wx) {
+                        popupHtml +=
+                            '<div style="font-size:10px;color:#34d399;font-family:monospace;border-top:1px solid rgba(148,163,184,0.2);padding-top:4px;margin-top:4px;">' +
+                            '💨 ' + wx.wind + ' &nbsp;|&nbsp; 🌡️ ' + wx.temp + ' &nbsp;|&nbsp; 📊 ' + wx.qnh +
+                            '</div>';
+                    }
+
+                    marker.bindPopup(popupHtml);
                     waypointMarkers.push(marker);
                 }
 
-                const apt = airportsData.find(a => a.icao === wp.ident);
                 const div = document.createElement('div');
-                div.className = 'wpt-card';
+                div.className = 'wpt-card' + (isEndpoint ? ' apt-endpoint' : '');
                 if (wp.lat && wp.lon) {
                     div.onclick = () => map.flyTo([wp.lat, wp.lon], 11);
                 }
+
+                let wxBadgesHtml = '';
+                if (wx) {
+                    wxBadgesHtml =
+                        '<div class="wpt-wx-row" title="METAR: ' + wx.raw + '">' +
+                            '<span class="wx-pill">💨 ' + wx.wind + '</span>' +
+                            '<span class="wx-pill">🌡️ ' + wx.temp + '</span>' +
+                            '<span class="wx-pill">📊 ' + wx.qnh + '</span>' +
+                        '</div>';
+                }
                 
                 div.innerHTML =
-                    '<div>' +
-                        '<div class="wpt-icao">' + wp.ident + '</div>' +
-                        '<div class="wpt-name">' + (apt ? apt.name : (wp.name || 'Waypoint Navlog')) + '</div>' +
+                    '<div style="min-width: 0; flex: 1; padding-right: 8px;">' +
+                        '<div style="display:flex; align-items:center; gap:6px;">' +
+                            '<span class="wpt-icao">' + wp.ident + '</span>' +
+                            (index === 0 ? '<span style="font-size:9px;background:rgba(56,189,248,0.18);color:var(--cyan);padding:1px 5px;border-radius:3px;font-weight:700;">DEP</span>' : '') +
+                            (index === flightPlan.length - 1 && flightPlan.length > 1 ? '<span style="font-size:9px;background:rgba(52,211,153,0.18);color:var(--emerald);padding:1px 5px;border-radius:3px;font-weight:700;">ARR</span>' : '') +
+                        '</div>' +
+                        '<div class="wpt-name" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + (apt ? apt.name : (wp.name || 'Waypoint Navlog')) + '</div>' +
+                        wxBadgesHtml +
                     '</div>' +
-                    '<div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">' +
+                    '<div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px; flex-shrink:0;">' +
                         '<span class="wpt-alt" onclick="event.stopPropagation(); editWaypointAlt(' + index + ', ' + wp.alt_ft + ')">' + wp.alt_ft + ' ft</span>' +
                         '<span style="font-size:10px;color:var(--text-muted);">' + (apt ? ('RWY ' + apt.rwy) : wp.type) + '</span>' +
                     '</div>';
@@ -283,13 +438,13 @@
                 map.fitBounds(routeLine.getBounds(), { padding: [80, 80] });
             }
 
-            if (alternateData && coords.length > 0) {
+            if (currentAlternate && coords.length > 0) {
                 const lastDestCoords = coords[coords.length - 1];
-                const altCoords = [lastDestCoords, [alternateData.lat, alternateData.lon]];
+                const altCoords = [lastDestCoords, [currentAlternate.lat, currentAlternate.lon]];
 
                 alternateLine = L.polyline(altCoords, { color: '#38bdf8', weight: 1, dashArray: '4, 4' }).addTo(map);
 
-                alternateMarker = L.circleMarker([alternateData.lat, alternateData.lon], {
+                alternateMarker = L.circleMarker([currentAlternate.lat, currentAlternate.lon], {
                     radius: 4,
                     color: '#38bdf8',
                     fillColor: '#38bdf8',
@@ -297,9 +452,13 @@
                     weight: 1
                 }).addTo(map);
 
-                alternateMarker.bindPopup(
-                    '<div style="font-weight:700;font-size:13px;color:#38bdf8;">Alternato: ' + alternateData.ident + '</div>'
-                );
+                const altApt = airportsData.find(a => a.icao === currentAlternate.ident);
+                const altWx = parseMetarInfo(currentAlternate.metar || (altApt ? altApt.metar : ''));
+                let altPopup = '<div style="font-weight:700;font-size:13px;color:#38bdf8;">Alternato: ' + currentAlternate.ident + '</div>';
+                if (altWx) {
+                    altPopup += '<div style="font-size:10px;color:#34d399;font-family:monospace;margin-top:4px;">💨 ' + altWx.wind + ' | 🌡️ ' + altWx.temp + ' | 📊 ' + altWx.qnh + '</div>';
+                }
+                alternateMarker.bindPopup(altPopup);
             }
 
             renderVnavChart(altitutes);
@@ -312,7 +471,7 @@
                     const res = await window.pywebview.api.update_waypoint_altitude(index, newAlt);
                     if (res.success) {
                         flightPlan = res.flight_plan;
-                        updateFlightPlanUI(null);
+                        updateFlightPlanUI();
                     }
                 }
             }
@@ -331,11 +490,7 @@
             alts.forEach((alt, i) => {
                 const x = (i / (alts.length - 1)) * width;
                 const y = height - (alt / maxAlt) * height + 5;
-                if (i === 0) {
-                    pathD += `L${x},${y} `;
-                } else {
-                    pathD += `L${x},${y} `;
-                }
+                pathD += `L${x},${y} `;
             });
 
             pathD += `L${width},50 Z`;
@@ -390,8 +545,7 @@
             let dy = B.lat - A.lat;
             let lenSq = dx * dx + dy * dy;
             if (lenSq === 0) return 0;
-            let t = ((P.lng - A.lng) * dx + (P.lat - A.lat) * dy) / lenSq;
-            return t;
+            return ((P.lng - A.lng) * dx + (P.lat - A.lat) * dy) / lenSq;
         }
 
         map.on('mousemove', function(e) {
@@ -491,7 +645,7 @@
         async function addWaypoint(icao) {
             if (window.pywebview && window.pywebview.api) {
                 flightPlan = await window.pywebview.api.add_to_flight_plan(icao);
-                updateFlightPlanUI(null);
+                updateFlightPlanUI();
             }
         }
 
@@ -513,11 +667,17 @@
 
         async function fetchSimbriefPlan() {
             if (window.pywebview && window.pywebview.api) {
+                const inputVal = document.getElementById('simbriefIdInput').value.trim();
+                if (inputVal) {
+                    await window.pywebview.api.save_simbrief_id(inputVal);
+                }
                 const res = await window.pywebview.api.fetch_simbrief_plan();
-                if (res.success) {
+                if (res.success && res.flight_plan && res.flight_plan.length > 0) {
                     flightPlan = res.flight_plan;
                     updateFlightPlanUI(res.alternate);
+                    setSimbriefCompactMode(true);
                 } else {
+                    setSimbriefCompactMode(false);
                     alert("Errore SimBrief: " + (res.error || "ID non valido o nessun volo attivo"));
                 }
             }
@@ -573,9 +733,25 @@
             const nav = await window.pywebview.api.get_navdata();
             airportsData = nav.airports;
             flightPlan = nav.flight_plan;
+            
             if (nav.simbrief_userid) {
                 document.getElementById('simbriefIdInput').value = nav.simbrief_userid;
+                if (flightPlan && flightPlan.length > 0) {
+                    setSimbriefCompactMode(true);
+                } else {
+                    const res = await window.pywebview.api.fetch_simbrief_plan();
+                    if (res.success && res.flight_plan && res.flight_plan.length > 0) {
+                        flightPlan = res.flight_plan;
+                        nav.alternate = res.alternate;
+                        setSimbriefCompactMode(true);
+                    } else {
+                        setSimbriefCompactMode(false);
+                    }
+                }
+            } else {
+                setSimbriefCompactMode(false);
             }
+
             updateFlightPlanUI(nav.alternate);
             pollTelemetry();
             setInterval(pollTelemetry, 1000);

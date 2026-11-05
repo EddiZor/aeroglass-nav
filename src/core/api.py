@@ -37,9 +37,9 @@ class AeroGlassAPI:
             self.flight_plan = saved_fpl
         else:
             self.flight_plan = [
-                {"ident": "LIPX", "lat": 45.3957, "lon": 10.8885, "alt_ft": 239, "name": "Verona Villafranca", "type": "APT"},
+                {"ident": "LIPX", "lat": 45.3957, "lon": 10.8885, "alt_ft": 239, "name": "Verona Villafranca", "type": "DEP", "metar": "LIPX 050820Z 04006KT CAVOK 16/09 Q1018"},
                 {"ident": "LIDT", "lat": 46.0219, "lon": 11.1242, "alt_ft": 6500, "name": "Trento Mattarello", "type": "WPT"},
-                {"ident": "LIPD", "lat": 46.0319, "lon": 13.1869, "alt_ft": 308, "name": "Udine Campoformido", "type": "APT"}
+                {"ident": "LIPD", "lat": 46.0319, "lon": 13.1869, "alt_ft": 308, "name": "Udine Campoformido", "type": "DEST", "metar": "LIPD 050820Z 05004KT CAVOK 17/08 Q1018"}
             ]
 
     def _load_config(self):
@@ -133,19 +133,27 @@ class AeroGlassAPI:
             orig = root.find(".//origin")
             if orig is not None:
                 icao_node = orig.find("icao_code")
+                metar_node = orig.find("metar")
+                name_node = orig.find("name")
                 lat, lon = get_coords(orig)
-                if lat is not None: dep_lat, dep_lon = lat, lon
-                elif icao_node is not None and icao_node.text:
+                apt = None
+                if icao_node is not None and icao_node.text:
                     apt = next((a for a in self.airports if a["icao"] == icao_node.text.strip()), None)
-                    if apt: dep_lat, dep_lon = apt["lat"], apt["lon"]
+                if lat is not None: dep_lat, dep_lon = lat, lon
+                elif apt: dep_lat, dep_lon = apt["lat"], apt["lon"]
                 
                 if icao_node is not None and icao_node.text:
+                    dep_code = icao_node.text.strip()
+                    dep_metar = metar_node.text.strip() if (metar_node is not None and metar_node.text) else (apt["metar"] if apt else "")
+                    dep_name = name_node.text.strip() if (name_node is not None and name_node.text) else (apt["name"] if apt else "Aeroporto di Partenza")
                     parsed_waypoints.append({
-                        "ident": icao_node.text.strip(),
+                        "ident": dep_code,
+                        "name": dep_name,
                         "lat": dep_lat,
                         "lon": dep_lon,
                         "alt_ft": 0,
-                        "type": "DEP"
+                        "type": "DEP",
+                        "metar": dep_metar
                     })
                 
             navlog = root.find("navlog")
@@ -169,34 +177,48 @@ class AeroGlassAPI:
             dest = root.find(".//destination")
             if dest is not None:
                 icao_node = dest.find("icao_code")
+                metar_node = dest.find("metar")
+                name_node = dest.find("name")
                 lat, lon = get_coords(dest)
-                if lat is not None: dest_lat, dest_lon = lat, lon
-                elif icao_node is not None and icao_node.text:
+                apt = None
+                if icao_node is not None and icao_node.text:
                     apt = next((a for a in self.airports if a["icao"] == icao_node.text.strip()), None)
-                    if apt: dest_lat, dest_lon = apt["lat"], apt["lon"]
+                if lat is not None: dest_lat, dest_lon = lat, lon
+                elif apt: dest_lat, dest_lon = apt["lat"], apt["lon"]
 
                 dest_code = icao_node.text.strip() if icao_node is not None and icao_node.text else "DEST"
+                dest_metar = metar_node.text.strip() if (metar_node is not None and metar_node.text) else (apt["metar"] if apt else "")
+                dest_name = name_node.text.strip() if (name_node is not None and name_node.text) else (apt["name"] if apt else "Aeroporto di Arrivo")
+                
                 if not parsed_waypoints or parsed_waypoints[-1]["ident"] != dest_code:
                     parsed_waypoints.append({
                         "ident": dest_code,
+                        "name": dest_name,
                         "lat": dest_lat,
                         "lon": dest_lon,
                         "alt_ft": 0,
-                        "type": "DEST"
+                        "type": "DEST",
+                        "metar": dest_metar
                     })
+                else:
+                    parsed_waypoints[-1]["type"] = "DEST"
+                    parsed_waypoints[-1]["metar"] = dest_metar
+                    parsed_waypoints[-1]["name"] = dest_name
 
             alternate_data = None
             alt_node = root.find(".//alternate")
             if alt_node is not None:
                 alt_icao = alt_node.find("icao_code")
+                alt_metar_node = alt_node.find("metar")
                 lat, lon = get_coords(alt_node)
                 if alt_icao is not None and alt_icao.text:
                     alt_code = alt_icao.text.strip()
-                    if lat is None or lon is None:
-                        apt = next((a for a in self.airports if a["icao"] == alt_code), None)
-                        if apt: lat, lon = apt["lat"], apt["lon"]
+                    apt = next((a for a in self.airports if a["icao"] == alt_code), None)
+                    if (lat is None or lon is None) and apt:
+                        lat, lon = apt["lat"], apt["lon"]
+                    alt_metar = alt_metar_node.text.strip() if (alt_metar_node is not None and alt_metar_node.text) else (apt["metar"] if apt else "")
                     if lat is not None and lon is not None:
-                        alternate_data = {"ident": alt_code, "lat": lat, "lon": lon}
+                        alternate_data = {"ident": alt_code, "lat": lat, "lon": lon, "metar": alt_metar}
 
             total = len(parsed_waypoints)
             if total > 2:
@@ -234,7 +256,8 @@ class AeroGlassAPI:
                 "lon": apt["lon"],
                 "alt_ft": 5000,
                 "name": apt["name"],
-                "type": "WPT"
+                "type": "WPT",
+                "metar": apt.get("metar", "")
             })
             self._save_config()
         return self.flight_plan
@@ -284,8 +307,16 @@ class AeroGlassAPI:
                     dep_elem = xml_root.find(".//DepartureID")
                     if dep_elem is not None and dep_elem.text:
                         dep_code = dep_elem.text.strip()
+                        apt = next((a for a in self.airports if a["icao"] == dep_code), None)
                         lat, lon = get_coords_for_ident(dep_code)
-                        parsed_waypoints.append({"ident": dep_code, "lat": lat, "lon": lon, "alt_ft": 0, "type": "DEP"})
+                        parsed_waypoints.append({
+                            "ident": dep_code,
+                            "lat": lat,
+                            "lon": lon,
+                            "alt_ft": 0,
+                            "type": "DEP",
+                            "metar": apt["metar"] if apt else ""
+                        })
                     
                     for wp in xml_root.findall(".//FlightPlan.Waypoint") + xml_root.findall(".//ATCWaypoint"):
                         code = ""
@@ -321,9 +352,20 @@ class AeroGlassAPI:
                     dest_elem = xml_root.find(".//DestinationID")
                     if dest_elem is not None and dest_elem.text:
                         dest_code = dest_elem.text.strip()
+                        apt = next((a for a in self.airports if a["icao"] == dest_code), None)
                         lat, lon = get_coords_for_ident(dest_code)
                         if not parsed_waypoints or parsed_waypoints[-1]["ident"] != dest_code:
-                            parsed_waypoints.append({"ident": dest_code, "lat": lat, "lon": lon, "alt_ft": alt_ft, "type": "DEST"})
+                            parsed_waypoints.append({
+                                "ident": dest_code,
+                                "lat": lat,
+                                "lon": lon,
+                                "alt_ft": 0,
+                                "type": "DEST",
+                                "metar": apt["metar"] if apt else ""
+                            })
+                        else:
+                            parsed_waypoints[-1]["type"] = "DEST"
+                            parsed_waypoints[-1]["metar"] = apt["metar"] if apt else ""
                     
                     if parsed_waypoints:
                         self.flight_plan = parsed_waypoints

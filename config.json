@@ -12,140 +12,147 @@
             "ident": "RF792",
             "lat": 41.789111,
             "lon": 12.195222,
-            "alt_ft": 2400,
+            "alt_ft": 2200,
             "type": "WPT"
         },
         {
             "ident": "RF706",
             "lat": 41.843028,
             "lon": 12.103778,
-            "alt_ft": 6200,
+            "alt_ft": 5400,
             "type": "WPT"
         },
         {
             "ident": "RF707",
             "lat": 41.957056,
             "lon": 12.061278,
-            "alt_ft": 10900,
+            "alt_ft": 9700,
             "type": "WPT"
         },
         {
             "ident": "RF708",
             "lat": 42.078389,
             "lon": 12.049389,
-            "alt_ft": 14600,
+            "alt_ft": 12200,
             "type": "WPT"
         },
         {
             "ident": "SOSIV",
             "lat": 42.183056,
             "lon": 12.039167,
-            "alt_ft": 17300,
+            "alt_ft": 14100,
             "type": "WPT"
         },
         {
             "ident": "ODUPA",
             "lat": 42.364444,
             "lon": 11.998333,
-            "alt_ft": 21800,
+            "alt_ft": 17200,
             "type": "WPT"
         },
         {
             "ident": "TOC",
-            "lat": 42.578021,
-            "lon": 11.950093,
-            "alt_ft": 26000,
+            "lat": 42.413733,
+            "lon": 11.98723,
+            "alt_ft": 18000,
             "type": "WPT"
         },
         {
             "ident": "SOVAN",
             "lat": 42.834722,
             "lon": 11.891667,
-            "alt_ft": 26000,
+            "alt_ft": 18000,
             "type": "WPT"
         },
         {
             "ident": "AMTEL",
             "lat": 43.220278,
             "lon": 11.608611,
-            "alt_ft": 26000,
+            "alt_ft": 18000,
             "type": "WPT"
         },
         {
             "ident": "IBRID",
             "lat": 43.477778,
             "lon": 11.4175,
-            "alt_ft": 26000,
+            "alt_ft": 18000,
             "type": "WPT"
         },
         {
             "ident": "KUGIX",
             "lat": 43.552222,
             "lon": 11.362222,
-            "alt_ft": 26000,
-            "type": "WPT"
-        },
-        {
-            "ident": "TOD",
-            "lat": 43.566861,
-            "lon": 11.351259,
-            "alt_ft": 26000,
+            "alt_ft": 18000,
             "type": "WPT"
         },
         {
             "ident": "LOMED",
             "lat": 44.027222,
             "lon": 11.003333,
-            "alt_ft": 17100,
+            "alt_ft": 18000,
             "type": "WPT"
         },
         {
             "ident": "PE556",
             "lat": 44.177083,
             "lon": 11.087333,
-            "alt_ft": 14300,
+            "alt_ft": 18000,
+            "type": "WPT"
+        },
+        {
+            "ident": "TOD",
+            "lat": 44.238875,
+            "lon": 11.122075,
+            "alt_ft": 18000,
             "type": "WPT"
         },
         {
             "ident": "PE544",
             "lat": 44.345472,
             "lon": 11.182194,
-            "alt_ft": 11100,
+            "alt_ft": 15500,
             "type": "WPT"
         },
         {
             "ident": "ELVEB",
             "lat": 44.441111,
             "lon": 11.236389,
-            "alt_ft": 9400,
+            "alt_ft": 13400,
             "type": "WPT"
         },
         {
-            "ident": "PE543",
-            "lat": 44.402722,
-            "lon": 11.344361,
-            "alt_ft": 8000,
+            "ident": "PE532",
+            "lat": 44.488222,
+            "lon": 11.108278,
+            "alt_ft": 11300,
             "type": "WPT"
         },
         {
-            "ident": "PE820",
-            "lat": 44.34,
-            "lon": 11.519278,
-            "alt_ft": 5700,
+            "ident": "PE525",
+            "lat": 44.535306,
+            "lon": 10.976778,
+            "alt_ft": 9200,
             "type": "WPT"
         },
         {
-            "ident": "IBNEL",
-            "lat": 44.429167,
-            "lon": 11.5825,
-            "alt_ft": 4000,
+            "ident": "PE521",
+            "lat": 44.565,
+            "lon": 10.893389,
+            "alt_ft": 7800,
             "type": "WPT"
         },
         {
-            "ident": "ABLEX",
-            "lat": 44.46,
-            "lon": 11.4975,
-            "alt_ft": 2900,
+            "ident": "PE515",
+            "lat": 44.6545,
+            "lon": 10.955861,
+            "alt_ft": 5600,
+            "type": "WPT"
+        },
+        {
+            "ident": "EMDUD",
+            "lat": 44.617222,
+            "lon": 11.060278,
+            "alt_ft": 3900,
             "type": "WPT"
         },
         {
