@@ -101,6 +101,7 @@
         .wpt-name { font-size: 11px; color: var(--text-muted); }
         .wpt-alt { font-size: 11px; font-family: monospace; color: var(--magenta); background: rgba(232, 121, 249, 0.1); padding: 2px 6px; border-radius: 4px; cursor: pointer; }
         .wpt-alt:hover { background: rgba(232, 121, 249, 0.3); }
+        .wpt-dist { font-size: 10px; font-family: Consolas, monospace; color: var(--text-muted); margin-top: 2px; }
 
         .wpt-wx-row {
             display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px;
@@ -440,6 +441,7 @@
 
                 const div = document.createElement('div');
                 div.className = 'wpt-card' + (isEndpoint ? ' apt-endpoint' : '');
+                div.setAttribute('data-wpt-index', index);
                 if (wp.lat && wp.lon) {
                     div.onclick = () => {
                         setFollowState(false);
@@ -467,8 +469,9 @@
                         '<div class="wpt-name" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + (apt ? apt.name : (wp.name || 'Waypoint Navlog')) + '</div>' +
                         wxBadgesHtml +
                     '</div>' +
-                    '<div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px; flex-shrink:0;">' +
+                    '<div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px; flex-shrink:0;">' +
                         '<span class="wpt-alt" onclick="event.stopPropagation(); editWaypointAlt(' + index + ', ' + wp.alt_ft + ')">' + wp.alt_ft + ' ft</span>' +
+                        '<span class="wpt-dist" id="wptDist_' + index + '">--- NM</span>' +
                         '<span style="font-size:10px;color:var(--text-muted);">' + (apt ? ('RWY ' + apt.rwy) : wp.type) + '</span>' +
                     '</div>';
                 container.appendChild(div);
@@ -697,27 +700,40 @@
             return (toDeg(Math.atan2(y, x)) + 360) % 360;
         }
 
-        // Identifica il prossimo waypoint attivo di fronte all'aereo e lo posiziona in cima nella lista
+        // Calcola distanze e aggiorna le etichette con segno (+ da raggiungere, - superato) + auto-scroll in cima
         function updateActiveWaypointHighlight(acftLat, acftLon, acftHdg) {
             if (!flightPlan || flightPlan.length === 0) return;
             
             let activeIdx = 0;
             let minDistance = Infinity;
 
-            for (let i = 0; i < flightPlan.length; i++) {
-                let wp = flightPlan[i];
+            flightPlan.forEach((wp, i) => {
                 if (wp.lat && wp.lon) {
-                    let d = L.latLng(acftLat, acftLon).distanceTo(L.latLng(wp.lat, wp.lon));
-                    let bearingToWp = calculateBearing(acftLat, acftLon, wp.lat, wp.lon);
+                    const wptLatLng = L.latLng(wp.lat, wp.lon);
+                    const distMeters = L.latLng(acftLat, acftLon).distanceTo(wptLatLng);
+                    const distNm = (distMeters / 1852).toFixed(1);
+
+                    // Calcola segno: (+) se il waypoint è davanti all'aereo (o angolo < 90°), (-) se superato
+                    const bearingToWp = calculateBearing(acftLat, acftLon, wp.lat, wp.lon);
                     let angleDiff = Math.abs(bearingToWp - acftHdg);
                     if (angleDiff > 180) angleDiff = 360 - angleDiff;
 
+                    const isAhead = (angleDiff < 90 || distMeters < 3000);
+                    const sign = isAhead ? '+' : '-';
+
+                    const distEl = document.getElementById('wptDist_' + i);
+                    if (distEl) {
+                        distEl.innerText = `${sign}${distNm} NM`;
+                        distEl.style.color = isAhead ? 'var(--cyan)' : 'var(--text-muted)';
+                    }
+
+                    let d = distMeters;
                     if ((angleDiff < 90 || d < 5000) && d < minDistance) {
                         minDistance = d;
                         activeIdx = i;
                     }
                 }
-            }
+            });
 
             if (minDistance === Infinity) {
                 let closestDist = Infinity;
