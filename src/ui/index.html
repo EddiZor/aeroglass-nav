@@ -23,7 +23,8 @@
         
         <div class="action-row">
             <button class="btn-action" onclick="importPlnFile()">📂 Importa .pln</button>
-            <button class="btn-action btn-simbrief" id="simbriefCompactBtn" style="display: none;" onclick="fetchSimbriefPlan()" title="Ricarica l'ultimo OFP da SimBrief">✈️ Ricarica SimBrief</button>
+            <button class="btn-action" style="background: rgba(239, 68, 68, 0.15); border-color: #ef4444; color: #ef4444;" onclick="clearFlightPlanUI()" title="Elimina il piano di volo corrente">🗑️ Pulisci</button>
+            <button class="btn-action btn-simbrief" id="simbriefCompactBtn" style="display: none;" onclick="fetchSimbriefPlan()" title="Ricarica l'ultimo OFP da SimBrief">✈️ Ricarica</button>
             <button class="btn-icon-muted" id="simbriefEditIdBtn" style="display: none;" onclick="showSimbriefBox()" title="Modifica SimBrief User ID">⚙️</button>
         </div>
         
@@ -40,6 +41,10 @@
     </aside>
 
     <div class="top-right">
+        <button id="btnProcedures" class="glass btn-follow" onclick="toggleProceduresPanel()" title="Configura Procedure e Filtri Mappa">
+            ⚙️ Filtri & SID/STAR
+        </button>
+
         <button id="btnToggleNavaids" class="glass btn-follow active" onclick="toggleNavaidsLayer()" title="Mostra/Nascondi stazioni VOR e ILS sulla mappa">
             📡 VOR / ILS: ON
         </button>
@@ -60,6 +65,34 @@
             <div>ALT: <strong id="valAlt">---</strong> ft</div>
             <div>GS: <strong id="valGs">---</strong> kt</div>
             <div>HDG: <strong id="valHdg">---</strong>°</div>
+        </div>
+    </div>
+
+    <!-- Pannello a scomparsa per Procedure e Filtri Layer -->
+    <div class="glass overlay-panel" id="proceduresPanel">
+        <div class="overlay-header">
+            <span>Procedure & Filtri Mappa</span>
+            <button class="overlay-close" onclick="toggleProceduresPanel()">×</button>
+        </div>
+        <div class="toggle-row">
+            <span>Spazi Aerei TMA / CTR</span>
+            <label class="toggle-switch"><input type="checkbox" id="chkAirspace" onchange="toggleAirspaceLayer(this.checked)"><span class="toggle-slider"></span></label>
+        </div>
+        <div class="toggle-row">
+            <span>Waypoint En-Route (Fix)</span>
+            <label class="toggle-switch"><input type="checkbox" id="chkFixes" checked onchange="toggleFixesLayer(this.checked)"><span class="toggle-slider"></span></label>
+        </div>
+        <div class="toggle-row">
+            <span>Visualizza Linea ToD (Discesa)</span>
+            <label class="toggle-switch"><input type="checkbox" id="chkTod" checked onchange="toggleTodLayer(this.checked)"><span class="toggle-slider"></span></label>
+        </div>
+    </div>
+
+    <!-- Overlay Drag & Drop per file .pln -->
+    <div id="dropZoneOverlay">
+        <div class="drop-message">
+            <span>📂 Rilascia qui il piano di volo (.pln)</span>
+            <span style="font-size: 12px; color: var(--text-muted); font-weight: normal;">AeroGlass Nav caricherà la rotta istantaneamente</span>
         </div>
     </div>
 

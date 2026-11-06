@@ -1,8 +1,8 @@
-const map = L.map('map', { zoomControl: false }).setView([41.9, 12.5], 6);
+const map = L.map('map', { zoomControl: false }).setView([43.5, 12.0], 6);
 
 const tileSources = {
-    dark: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    topo: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+    dark: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+    topo: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
     sat: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
 };
 
@@ -12,10 +12,7 @@ function switchMapStyle(style) {
     const mapEl = document.getElementById('map');
     map.removeLayer(currentTileLayer);
     
-    let url = tileSources.dark;
-    if (tileSources[style]) {
-        url = tileSources[style];
-    }
+    let url = tileSources[style] || tileSources.dark;
 
     if (style === 'dark') {
         mapEl.classList.add('map-dark-filter');
@@ -23,10 +20,67 @@ function switchMapStyle(style) {
         mapEl.classList.remove('map-dark-filter');
     }
 
-    currentTileLayer = L.tileLayer(url, { maxZoom: style === 'topo' ? 17 : 19 }).addTo(map);
+    currentTileLayer = L.tileLayer(url, { maxZoom: 19 }).addTo(map);
 }
 
-// Fallback integrato di stazioni VOR e ILS (nel caso api.py non sia stato ancora riavviato)
+// Database rapido Aeroporti e Fix (Italia, Europa, Nord Atlantico)
+const EXTRA_AIRPORTS = [
+    {"icao": "LIPX", "name": "Verona Villafranca", "lat": 45.3957, "lon": 10.8885, "elev": 239, "rwy": "04/22", "metar": "LIPX 061650Z 04006KT CAVOK 16/09 Q1018"},
+    {"icao": "LIPO", "name": "Brescia Montichiari", "lat": 45.4289, "lon": 10.3306, "elev": 356, "rwy": "14/32", "metar": "LIPO 061650Z 06005KT 9999 FEW040 16/10 Q1018"},
+    {"icao": "LIDT", "name": "Trento Mattarello", "lat": 46.0219, "lon": 11.1242, "elev": 607, "rwy": "18/36", "metar": "LIDT 061650Z VRB03KT CAVOK 14/06 Q1019"},
+    {"icao": "LIPD", "name": "Udine Campoformido", "lat": 46.0319, "lon": 13.1869, "elev": 308, "rwy": "09/27", "metar": "LIPD 061650Z 05004KT CAVOK 17/08 Q1018"},
+    {"icao": "LITY", "name": "Agrigento Valle dei Templi", "lat": 37.2450, "lon": 13.6620, "elev": 145, "rwy": "11/29", "metar": "LITY 061650Z 12008KT CAVOK 22/13 Q1016"},
+    {"icao": "LIRF", "name": "Roma Fiumicino", "lat": 41.8003, "lon": 12.2389, "elev": 15, "rwy": "16L/34R", "metar": "LIRF 061650Z 25010KT CAVOK 18/11 Q1018"},
+    {"icao": "LIPE", "name": "Bologna Borgo Panigale", "lat": 44.5354, "lon": 11.2887, "elev": 123, "rwy": "12/30", "metar": "LIPE 061650Z 12005KT CAVOK 16/10 Q1018"},
+    {"icao": "LIMC", "name": "Milano Malpensa", "lat": 45.6306, "lon": 8.7281, "elev": 768, "rwy": "17/35", "metar": "LIMC 061650Z 35005KT CAVOK 15/08 Q1019"},
+    {"icao": "LIME", "name": "Bergamo Orio al Serio", "lat": 45.6739, "lon": 9.7042, "elev": 782, "rwy": "10/28", "metar": "LIME 061650Z 09004KT CAVOK 15/09 Q1019"},
+    {"icao": "LIML", "name": "Milano Linate", "lat": 45.4451, "lon": 9.2767, "elev": 353, "rwy": "18/36", "metar": "LIML 061650Z 11004KT CAVOK 16/10 Q1019"},
+    {"icao": "LIPZ", "name": "Venezia Tessera", "lat": 45.5053, "lon": 12.3519, "elev": 7, "rwy": "04/22", "metar": "LIPZ 061650Z 04006KT CAVOK 16/11 Q1018"},
+    {"icao": "LIPQ", "name": "Trieste Ronchi dei Legionari", "lat": 45.8275, "lon": 13.4722, "elev": 39, "rwy": "09/27", "metar": "LIPQ 061650Z 06005KT CAVOK 16/09 Q1018"},
+    {"icao": "LDZA", "name": "Zagreb Franjo Tudman", "lat": 45.7429, "lon": 16.0688, "elev": 353, "rwy": "04/22", "metar": "LDZA 061650Z 05006KT CAVOK 15/08 Q1019"},
+    {"icao": "LJLJ", "name": "Ljubljana Brnik", "lat": 46.2237, "lon": 14.4576, "elev": 1273, "rwy": "12/30", "metar": "LJLJ 061650Z VRB02KT CAVOK 13/07 Q1020"},
+    {"icao": "LIRQ", "name": "Firenze Peretola", "lat": 43.8100, "lon": 11.2051, "elev": 142, "rwy": "05/23", "metar": "LIRQ 061650Z 23006KT CAVOK 17/10 Q1018"},
+    {"icao": "LIRP", "name": "Pisa San Giusto", "lat": 43.6839, "lon": 10.3927, "elev": 6, "rwy": "04/22", "metar": "LIRP 061650Z 25008KT CAVOK 18/12 Q1018"},
+    {"icao": "LIRN", "name": "Napoli Capodichino", "lat": 40.8860, "lon": 14.2908, "elev": 294, "rwy": "06/24", "metar": "LIRN 061650Z 24007KT CAVOK 19/12 Q1017"},
+    {"icao": "LICJ", "name": "Palermo Punta Raisi", "lat": 38.1759, "lon": 13.0910, "elev": 65, "rwy": "07/25", "metar": "LICJ 061650Z 07009KT CAVOK 21/14 Q1016"},
+    {"icao": "LICC", "name": "Catania Fontanarossa", "lat": 37.4668, "lon": 15.0664, "elev": 39, "rwy": "08/26", "metar": "LICC 061650Z 10008KT CAVOK 21/14 Q1016"},
+    {"icao": "BIKF", "name": "Keflavik Intl", "lat": 63.9850, "lon": -22.6056, "elev": 171, "rwy": "01/19", "metar": "BIKF 061650Z 04014KT 9999 FEW025 04/M01 Q1012"},
+    {"icao": "BIRK", "name": "Reykjavik Airport", "lat": 64.1300, "lon": -21.9406, "elev": 45, "rwy": "01/19", "metar": "BIRK 061650Z 05012KT 9999 FEW030 05/M01 Q1012"},
+    {"icao": "BGKK", "name": "Kulusuk Airport", "lat": 65.5736, "lon": -37.1236, "elev": 117, "rwy": "10/28", "metar": "BGKK 061650Z 07008KT 9999 SCT030 M03/M08 Q1009"},
+    {"icao": "BGSF", "name": "Kangerlussuaq", "lat": 67.0122, "lon": -50.7116, "elev": 165, "rwy": "09/27", "metar": "BGSF 061650Z 09010KT CAVOK M06/M12 Q1014"},
+    {"icao": "BGGH", "name": "Nuuk Airport", "lat": 64.1909, "lon": -51.6781, "elev": 283, "rwy": "04/22", "metar": "BGGH 061650Z 12008KT 9999 FEW025 M02/M07 Q1010"}
+];
+
+const KNOWN_FIXES = {
+    // Rotta LIRF -> LIPE
+    "SOVAN": { lat: 42.6369, lon: 11.6669 },
+    "AMTEL": { lat: 43.1972, lon: 11.4556 },
+    "IBRID": { lat: 43.5186, lon: 11.3328 },
+    "KUGIX": { lat: 43.9114, lon: 11.1831 },
+    "LOMED": { lat: 44.1758, lon: 11.1683 },
+    "PE544": { lat: 44.3650, lon: 11.3500 },
+    "ELVEB": { lat: 44.4200, lon: 11.4500 },
+    "PE543": { lat: 44.4600, lon: 11.5200 },
+    "PE820": { lat: 44.4900, lon: 11.4800 },
+    "IBNEL": { lat: 44.4750, lon: 11.4100 },
+    "ABLEX": { lat: 44.5050, lon: 11.3500 },
+    // Rotta LDZA -> LIMC
+    "PODET": { lat: 45.8936, lon: 15.5419 },
+    "LUPIX": { lat: 45.9250, lon: 14.9189 },
+    "RIFEN": { lat: 45.9522, lon: 13.6264 },
+    "ADOSA": { lat: 45.8211, lon: 12.8719 },
+    "IDREK": { lat: 45.6983, lon: 12.1644 },
+    "ELTAR": { lat: 45.5947, lon: 11.5311 },
+    "NOBMI": { lat: 45.5244, lon: 10.9750 },
+    "NEVNI": { lat: 45.5186, lon: 10.4283 },
+    "LEGLO": { lat: 45.5392, lon: 9.8736 },
+    "PEXUG": { lat: 45.5681, lon: 9.4214 },
+    // Rotta BIKF -> BGKK (Islanda -> Groenlandia)
+    "SORIR": { lat: 64.5500, lon: -26.5000 },
+    "SOSIT": { lat: 65.2500, lon: -32.0000 },
+    "DA":    { lat: 65.5736, lon: -37.1500, name: "Kulusuk NDB" }
+};
+
 const DEFAULT_VORS = [
     {"ident": "OST", "name": "Ostia VOR-DME", "freq": "114.90", "lat": 41.8019, "lon": 12.2378, "type": "VOR-DME"},
     {"ident": "CMP", "name": "Campagnano VOR-DME", "freq": "111.80", "lat": 42.1250, "lon": 12.3817, "type": "VOR-DME"},
@@ -83,6 +137,23 @@ function toggleNavaidsLayer() {
     }
     renderNavAids(vorsData, ilsData);
 }
+
+function toggleProceduresPanel() {
+    const panel = document.getElementById('proceduresPanel');
+    if (panel) {
+        panel.style.display = panel.style.display === 'flex' ? 'none' : 'flex';
+    }
+}
+
+function toggleAirspaceLayer(enabled) {}
+
+function toggleFixesLayer(enabled) {
+    waypointMarkers.forEach(m => {
+        if (enabled) { map.addLayer(m); } else { map.removeLayer(m); }
+    });
+}
+
+function toggleTodLayer(enabled) {}
 
 map.on('dragstart', function() {
     if (followAircraft) {
@@ -190,7 +261,7 @@ function parseMetarInfo(metarStr) {
     return { wind, temp, qnh, raw: metarStr };
 }
 
-let airportsData = [];
+let airportsData = [...EXTRA_AIRPORTS];
 let vorsData = DEFAULT_VORS;
 let ilsData = DEFAULT_ILS;
 let flightPlan = [];
@@ -205,10 +276,23 @@ let acftMarker = null;
 let mouseRouteMarker = null;
 let initialized = false;
 
+function findAirport(ident) {
+    return airportsData.find(a => a.icao === ident) || EXTRA_AIRPORTS.find(a => a.icao === ident);
+}
+
+function resolveKnownCoords(ident) {
+    const apt = findAirport(ident);
+    if (apt) return { lat: apt.lat, lon: apt.lon, name: apt.name, metar: apt.metar || "" };
+    if (KNOWN_FIXES[ident]) return { lat: KNOWN_FIXES[ident].lat, lon: KNOWN_FIXES[ident].lon, name: KNOWN_FIXES[ident].name || "Waypoint Navlog", metar: "" };
+    const vor = vorsData.find(v => v.ident === ident);
+    if (vor) return { lat: vor.lat, lon: vor.lon, name: vor.name, metar: "" };
+    return null;
+}
+
 const acftIcon = L.divIcon({
     className: '',
-    html: '<div id="acftSvg" style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;transform-origin:center center;transition:transform 0.25s linear;filter:drop-shadow(0 0 6px #38bdf8);"><svg viewBox="0 0 24 24" width="24" height="24" fill="#38bdf8"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg></div>',
-    iconSize: [28, 28], iconAnchor: [14, 14]
+    html: '<div id="acftSvg" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;transform-origin:center center;transition:transform 0.25s linear;filter:drop-shadow(0 0 10px #38bdf8) drop-shadow(0 0 20px #38bdf8);"><svg viewBox="0 0 24 24" width="30" height="30" fill="#38bdf8"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg></div>',
+    iconSize: [36, 36], iconAnchor: [18, 18]
 });
 
 function createVorIcon(ident) {
@@ -300,13 +384,13 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
     const altitutes = [];
 
     flightPlan.forEach((wp, index) => {
-        const apt = airportsData.find(a => a.icao === wp.ident);
+        const apt = findAirport(wp.ident);
         const isEndpoint = (index === 0 || index === flightPlan.length - 1 || wp.type === 'DEP' || wp.type === 'DEST' || wp.type === 'APT');
         const rawMetar = wp.metar || (apt ? apt.metar : '');
         const wx = isEndpoint ? parseMetarInfo(rawMetar) : null;
         const altVal = Number(wp.alt_ft) || 0;
 
-        if (wp.lat !== undefined && wp.lon !== undefined) {
+        if (wp.lat !== undefined && wp.lat !== null && wp.lon !== undefined && wp.lon !== null) {
             coords.push([wp.lat, wp.lon]);
             altitutes.push(altVal);
 
@@ -336,10 +420,10 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
         const div = document.createElement('div');
         div.className = 'wpt-card' + (isEndpoint ? ' apt-endpoint' : '');
         div.setAttribute('data-wpt-index', index);
-        if (wp.lat && wp.lon) {
+        if (wp.lat !== null && wp.lon !== null) {
             div.onclick = () => {
                 setFollowState(false);
-                map.flyTo([wp.lat, wp.lon], 11);
+                map.flyTo([wp.lat, wp.lon], 10);
             };
         }
 
@@ -360,22 +444,21 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
                     (index === 0 ? '<span style="font-size:9px;background:rgba(56,189,248,0.18);color:var(--cyan);padding:1px 5px;border-radius:3px;font-weight:700;">DEP</span>' : '') +
                     (index === flightPlan.length - 1 && flightPlan.length > 1 ? '<span style="font-size:9px;background:rgba(52,211,153,0.18);color:var(--emerald);padding:1px 5px;border-radius:3px;font-weight:700;">ARR</span>' : '') +
                 '</div>' +
-                '<div class="wpt-name" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + (apt ? apt.name : (wp.name || 'Waypoint Navlog')) + '</div>' +
+                '<div class="wpt-name" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + (wp.name || (apt ? apt.name : 'Waypoint Navlog')) + '</div>' +
                 wxBadgesHtml +
             '</div>' +
             '<div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px; flex-shrink:0;">' +
                 '<span class="wpt-alt" onclick="event.stopPropagation(); editWaypointAlt(' + index + ', ' + altVal + ')">' + altVal + ' ft</span>' +
                 '<span class="wpt-dist" id="wptDist_' + index + '">--- NM</span>' +
-                '<span style="font-size:10px;color:var(--text-muted);">' + (apt ? ('RWY ' + apt.rwy) : (wp.type || 'WPT')) + '</span>' +
+                '<span style="font-size:10px;color:var(--text-muted);">' + (apt && apt.rwy ? ('RWY ' + apt.rwy) : (wp.type || 'WPT')) + '</span>' +
             '</div>';
         container.appendChild(div);
     });
 
     if (coords.length > 1) {
-        routeLine = L.polyline(coords, { color: '#e879f9', weight: 2, dashArray: '6, 4' }).addTo(map);
-        if (fitMap && !followAircraft) {
-            map.fitBounds(routeLine.getBounds(), { padding: [80, 80] });
-        } else if (fitMap && !lastAcftLatLng) {
+        routeLine = L.polyline(coords, { color: '#e879f9', weight: 2.5, dashArray: '6, 4' }).addTo(map);
+        if (fitMap) {
+            setFollowState(false);
             map.fitBounds(routeLine.getBounds(), { padding: [80, 80] });
         }
     }
@@ -394,7 +477,7 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
             weight: 1
         }).addTo(map);
 
-        const altApt = airportsData.find(a => a.icao === currentAlternate.ident);
+        const altApt = findAirport(currentAlternate.ident);
         const altWx = parseMetarInfo(currentAlternate.metar || (altApt ? altApt.metar : ''));
         let altPopup = '<div style="font-weight:700;font-size:13px;color:#38bdf8;">Alternato: ' + currentAlternate.ident + '</div>';
         if (altWx) {
@@ -409,13 +492,35 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
 async function editWaypointAlt(index, currentAlt) {
     const newAlt = prompt("Inserisci la quota target in piedi (ft) per questo waypoint:", currentAlt);
     if (newAlt !== null && !isNaN(newAlt)) {
-        if (window.pywebview && window.pywebview.api) {
-            const res = await window.pywebview.api.update_waypoint_altitude(index, newAlt);
-            if (res.success) {
-                flightPlan = res.flight_plan;
-                updateFlightPlanUI(undefined, false);
+        flightPlan[index].alt_ft = parseInt(newAlt, 10);
+        updateFlightPlanUI(undefined, false);
+        try {
+            if (window.pywebview && window.pywebview.api) {
+                await window.pywebview.api.update_waypoint_altitude(index, newAlt);
             }
-        }
+        } catch (e) {}
+    }
+}
+
+async function clearFlightPlanUI() {
+    if (confirm("Sei sicuro di voler eliminare il piano di volo corrente e ripulire la mappa?")) {
+        flightPlan = [];
+        currentAlternate = null;
+        
+        clearMapRoutes();
+        const container = document.getElementById('fplContainer');
+        if (container) container.innerHTML = '';
+        
+        const svgPath = document.getElementById('vnavPath');
+        const svgText = document.getElementById('vnavText');
+        if (svgPath) svgPath.setAttribute('d', 'M0,50 L1000,50 Z');
+        if (svgText) svgText.textContent = 'Nessun piano di volo attivo';
+        
+        try {
+            if (window.pywebview && window.pywebview.api && window.pywebview.api.clear_flight_plan) {
+                await window.pywebview.api.clear_flight_plan();
+            }
+        } catch (e) {}
     }
 }
 
@@ -451,6 +556,7 @@ function calculateRouteProgress(lat, lon) {
     let segDistances = [];
     
     for (let i = 0; i < flightPlan.length - 1; i++) {
+        if (flightPlan[i].lat === null || flightPlan[i+1].lat === null) return null;
         let p1 = L.latLng(flightPlan[i].lat, flightPlan[i].lon);
         let p2 = L.latLng(flightPlan[i+1].lat, flightPlan[i+1].lon);
         let d = p1.distanceTo(p2);
@@ -514,84 +620,6 @@ map.on('mousemove', function(e) {
     }
 });
 
-const svgContainer = document.querySelector('.elevation-canvas-container svg');
-if (svgContainer) {
-    svgContainer.addEventListener('mousemove', function(e) {
-        if (!flightPlan || flightPlan.length < 2) return;
-        
-        const rect = svgContainer.getBoundingClientRect();
-        const xClick = e.clientX - rect.left;
-        const fraction = Math.max(0, Math.min(1, xClick / rect.width));
-        
-        const coordsAtFraction = getCoordsAlongRoute(fraction);
-        if (coordsAtFraction) {
-            if (!mouseRouteMarker) {
-                mouseRouteMarker = L.circleMarker([coordsAtFraction.lat, coordsAtFraction.lon], {
-                    radius: 6,
-                    color: '#fbbf24',
-                    fillColor: '#fbbf24',
-                    fillOpacity: 0.9,
-                    weight: 2
-                }).addTo(map);
-            } else {
-                mouseRouteMarker.setLatLng([coordsAtFraction.lat, coordsAtFraction.lon]);
-            }
-
-            const mouseLine = document.getElementById('mouseVnavLine');
-            if (mouseLine) {
-                mouseLine.setAttribute('x1', fraction * 1000);
-                mouseLine.setAttribute('x2', fraction * 1000);
-                mouseLine.style.display = 'block';
-            }
-        }
-    });
-
-    svgContainer.addEventListener('mouseleave', function() {
-        if (mouseRouteMarker) {
-            map.removeLayer(mouseRouteMarker);
-            mouseRouteMarker = null;
-        }
-        const mouseLine = document.getElementById('mouseVnavLine');
-        if (mouseLine) mouseLine.style.display = 'none';
-    });
-}
-
-function getCoordsAlongRoute(fraction) {
-    if (!flightPlan || flightPlan.length < 2) return null;
-    
-    let totalDist = 0;
-    let segDistances = [];
-    for (let i = 0; i < flightPlan.length - 1; i++) {
-        let p1 = L.latLng(flightPlan[i].lat, flightPlan[i].lon);
-        let p2 = L.latLng(flightPlan[i+1].lat, flightPlan[i+1].lon);
-        let d = p1.distanceTo(p2);
-        segDistances.push(d);
-        totalDist += d;
-    }
-    if (totalDist === 0) return null;
-
-    let targetDist = fraction * totalDist;
-    let accumulatedDist = 0;
-
-    for (let i = 0; i < flightPlan.length - 1; i++) {
-        let segLen = segDistances[i];
-        if (accumulatedDist + segLen >= targetDist || i === flightPlan.length - 2) {
-            let segFraction = segLen > 0 ? (targetDist - accumulatedDist) / segLen : 0;
-            segFraction = Math.max(0, Math.min(1, segFraction));
-            
-            let lat1 = flightPlan[i].lat, lon1 = flightPlan[i].lon;
-            let lat2 = flightPlan[i+1].lat, lon2 = flightPlan[i+1].lon;
-            
-            return {
-                lat: lat1 + segFraction * (lat2 - lat1),
-                lon: lon1 + segFraction * (lon2 - lon1)
-            };
-        }
-        accumulatedDist += segLen;
-    }
-    return null;
-}
-
 function calculateBearing(lat1, lon1, lat2, lon2) {
     const toRad = d => d * Math.PI / 180;
     const toDeg = r => r * 180 / Math.PI;
@@ -609,7 +637,7 @@ function updateActiveWaypointHighlight(acftLat, acftLon, acftHdg) {
     let minDistance = Infinity;
 
     flightPlan.forEach((wp, i) => {
-        if (wp.lat && wp.lon) {
+        if (wp.lat !== null && wp.lon !== null) {
             const wptLatLng = L.latLng(wp.lat, wp.lon);
             const distMeters = L.latLng(acftLat, acftLon).distanceTo(wptLatLng);
             const distNm = (distMeters / 1852).toFixed(1);
@@ -638,7 +666,7 @@ function updateActiveWaypointHighlight(acftLat, acftLon, acftHdg) {
     if (minDistance === Infinity) {
         let closestDist = Infinity;
         flightPlan.forEach((wp, idx) => {
-            if (wp.lat && wp.lon) {
+            if (wp.lat !== null && wp.lon !== null) {
                 let d = L.latLng(acftLat, acftLon).distanceTo(L.latLng(wp.lat, wp.lon));
                 if (d < closestDist) {
                     closestDist = d;
@@ -661,7 +689,6 @@ function updateActiveWaypointHighlight(acftLat, acftLon, acftHdg) {
     });
 }
 
-// Aggiorna data, orario UTC, orario di sistema e coordinate live dell'aereo in modo sicuro
 function updateFlightInfoBar(lat, lon) {
     const now = new Date();
     
@@ -693,6 +720,187 @@ function updateFlightInfoBar(lat, lon) {
     }
 }
 
+// --- PARSER UNIVERSALE XML .PLN (MSFS 2020 & MSFS 2024) ---
+function parseDmsCoord(dmsStr) {
+    const parts = dmsStr.split(',');
+    if (parts.length < 2) return null;
+    const parsePart = (s) => {
+        const m = s.trim().match(/([NSWE])\s*(\d+)[^\d]+(\d+)[^\d]+([\d.]+)/i);
+        if (!m) return null;
+        let dec = parseFloat(m[2]) + parseFloat(m[3]) / 60 + parseFloat(m[4]) / 3600;
+        if (m[1].toUpperCase() === 'S' || m[1].toUpperCase() === 'W') dec = -dec;
+        return dec;
+    };
+    const lat = parsePart(parts[0]);
+    const lon = parsePart(parts[1]);
+    if (lat !== null && lon !== null) return { lat, lon };
+    return null;
+}
+
+function parsePlnXmlString(xmlText) {
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+
+    let cruiseAlt = 24000;
+    const cruiseNodes = xmlDoc.getElementsByTagName("CruisingAlt");
+    if (cruiseNodes.length > 0 && cruiseNodes[0].textContent) {
+        cruiseAlt = parseInt(parseFloat(cruiseNodes[0].textContent.trim()), 10) || 24000;
+    }
+
+    let parsedWaypoints = [];
+
+    // 1. Partenza (DepartureID)
+    const depNodes = xmlDoc.getElementsByTagName("DepartureID");
+    if (depNodes.length > 0 && depNodes[0].textContent) {
+        const depCode = depNodes[0].textContent.trim();
+        const resolved = resolveKnownCoords(depCode);
+        const apt = findAirport(depCode);
+        parsedWaypoints.push({
+            ident: depCode,
+            name: resolved ? resolved.name : "Aeroporto di Partenza",
+            lat: resolved ? resolved.lat : null,
+            lon: resolved ? resolved.lon : null,
+            alt_ft: apt ? (apt.elev || 0) : 0,
+            type: "DEP",
+            metar: resolved ? resolved.metar : ""
+        });
+    }
+
+    // 2. Waypoints intermedi (ATCWaypoint / FlightPlan.Waypoint)
+    const wptNodes = [
+        ...Array.from(xmlDoc.getElementsByTagName("ATCWaypoint")),
+        ...Array.from(xmlDoc.getElementsByTagName("FlightPlan.Waypoint"))
+    ];
+
+    wptNodes.forEach(wp => {
+        let code = "";
+        const identNodes = wp.getElementsByTagName("ICAOIdent");
+        if (identNodes.length > 0 && identNodes[0].textContent) {
+            code = identNodes[0].textContent.trim();
+        } else if (wp.getAttribute("id")) {
+            code = wp.getAttribute("id").trim();
+        }
+        if (!code || code === "TIMECRUIS" || code === "TIMEDSCNT" || code === "TIMECLIMB") return;
+
+        let wpLat = null, wpLon = null;
+        let wpName = "Waypoint Navlog";
+
+        const worldPtNodes = wp.getElementsByTagName("WorldPoint");
+        if (worldPtNodes.length > 0 && worldPtNodes[0].textContent) {
+            const p = worldPtNodes[0].textContent.split(",");
+            if (p.length >= 2) {
+                wpLat = parseFloat(p[0]);
+                wpLon = parseFloat(p[1]);
+            }
+        }
+
+        const worldPosNodes = wp.getElementsByTagName("WorldPosition");
+        if ((wpLat === null || isNaN(wpLat)) && worldPosNodes.length > 0 && worldPosNodes[0].textContent) {
+            const dms = parseDmsCoord(worldPosNodes[0].textContent);
+            if (dms) { wpLat = dms.lat; wpLon = dms.lon; }
+        }
+
+        if (wpLat === null || isNaN(wpLat) || wpLat === 0) {
+            const resolved = resolveKnownCoords(code);
+            if (resolved) {
+                wpLat = resolved.lat;
+                wpLon = resolved.lon;
+                wpName = resolved.name || wpName;
+            }
+        }
+
+        let altFt = cruiseAlt;
+        const altNodes = wp.getElementsByTagName("Altitude");
+        if (altNodes.length > 0 && altNodes[0].textContent) {
+            altFt = parseInt(parseFloat(altNodes[0].textContent.trim()), 10) || cruiseAlt;
+        }
+
+        if (parsedWaypoints.length === 0 || parsedWaypoints[parsedWaypoints.length - 1].ident !== code) {
+            parsedWaypoints.push({
+                ident: code,
+                name: wpName,
+                lat: wpLat,
+                lon: wpLon,
+                alt_ft: altFt,
+                type: "WPT"
+            });
+        }
+    });
+
+    // 3. Destinazione (DestinationID)
+    const destNodes = xmlDoc.getElementsByTagName("DestinationID");
+    if (destNodes.length > 0 && destNodes[0].textContent) {
+        const destCode = destNodes[0].textContent.trim();
+        const resolved = resolveKnownCoords(destCode);
+        const apt = findAirport(destCode);
+        if (parsedWaypoints.length === 0 || parsedWaypoints[parsedWaypoints.length - 1].ident !== destCode) {
+            parsedWaypoints.push({
+                ident: destCode,
+                name: resolved ? resolved.name : "Aeroporto di Arrivo",
+                lat: resolved ? resolved.lat : null,
+                lon: resolved ? resolved.lon : null,
+                alt_ft: apt ? (apt.elev || 0) : 0,
+                type: "DEST",
+                metar: resolved ? resolved.metar : ""
+            });
+        } else {
+            parsedWaypoints[parsedWaypoints.length - 1].type = "DEST";
+            parsedWaypoints[parsedWaypoints.length - 1].alt_ft = apt ? (apt.elev || 0) : 0;
+            if (resolved) {
+                parsedWaypoints[parsedWaypoints.length - 1].lat = resolved.lat;
+                parsedWaypoints[parsedWaypoints.length - 1].lon = resolved.lon;
+                parsedWaypoints[parsedWaypoints.length - 1].name = resolved.name;
+                parsedWaypoints[parsedWaypoints.length - 1].metar = resolved.metar;
+            }
+        }
+    }
+
+    return parsedWaypoints;
+}
+
+async function processAndRenderPlnXml(xmlText) {
+    let parsed = parsePlnXmlString(xmlText);
+    if (!parsed || parsed.length === 0) {
+        alert("Nessun waypoint trovato nel file .pln selezionato.");
+        return;
+    }
+
+    // Se ci sono punti non presenti nel dizionario rapido locale, li risolve globalmente tramite Python
+    const hasMissingCoords = parsed.some(w => w.lat === null || w.lon === null);
+    if (hasMissingCoords && window.pywebview && window.pywebview.api && window.pywebview.api.enrich_flight_plan) {
+        try {
+            const res = await window.pywebview.api.enrich_flight_plan(parsed);
+            if (res && res.success && res.flight_plan) {
+                parsed = res.flight_plan;
+            }
+        } catch (e) {
+            console.warn("Impossibile contattare enrich_flight_plan:", e);
+        }
+    }
+
+    // Interpolazione finale solo se gli estremi sono stati risolti
+    const lastIdx = parsed.length - 1;
+    if (parsed.length >= 2 && parsed[0].lat !== null && parsed[lastIdx].lat !== null) {
+        for (let i = 1; i < lastIdx; i++) {
+            if (parsed[i].lat === null || isNaN(parsed[i].lat)) {
+                let prevIdx = i - 1;
+                while (prevIdx > 0 && parsed[prevIdx].lat === null) prevIdx--;
+                let nextIdx = i + 1;
+                while (nextIdx < lastIdx && parsed[nextIdx].lat === null) nextIdx++;
+
+                const span = nextIdx - prevIdx;
+                const frac = (i - prevIdx) / span;
+                parsed[i].lat = Number((parsed[prevIdx].lat + frac * (parsed[nextIdx].lat - parsed[prevIdx].lat)).toFixed(5));
+                parsed[i].lon = Number((parsed[prevIdx].lon + frac * (parsed[nextIdx].lon - parsed[prevIdx].lon)).toFixed(5));
+            }
+        }
+    }
+
+    flightPlan = parsed;
+    currentAlternate = null;
+    updateFlightPlanUI(null, true);
+}
+
 async function addWaypoint(icao) {
     if (window.pywebview && window.pywebview.api) {
         flightPlan = await window.pywebview.api.add_to_flight_plan(icao);
@@ -703,9 +911,13 @@ async function addWaypoint(icao) {
 async function importPlnFile() {
     if (window.pywebview && window.pywebview.api) {
         const res = await window.pywebview.api.load_pln_file();
-        if (res.success) {
-            flightPlan = res.flight_plan;
-            updateFlightPlanUI(res.alternate);
+        if (res && res.success) {
+            if (res.xml_text) {
+                await processAndRenderPlnXml(res.xml_text);
+            } else if (res.flight_plan) {
+                flightPlan = res.flight_plan;
+                updateFlightPlanUI(res.alternate, true);
+            }
         }
     }
 }
@@ -726,7 +938,7 @@ async function fetchSimbriefPlan() {
         const res = await window.pywebview.api.fetch_simbrief_plan();
         if (res.success && res.flight_plan && res.flight_plan.length > 0) {
             flightPlan = res.flight_plan;
-            updateFlightPlanUI(res.alternate);
+            updateFlightPlanUI(res.alternate, true);
             setSimbriefCompactMode(true);
         } else {
             setSimbriefCompactMode(false);
@@ -739,7 +951,8 @@ function filterAirports(query) {
     const q = query.toUpperCase().trim();
     if (q.length < 2) return;
 
-    const foundApt = airportsData.find(a => a.icao.includes(q) || a.name.toUpperCase().includes(q));
+    const foundApt = airportsData.find(a => a.icao.includes(q) || a.name.toUpperCase().includes(q)) ||
+                     EXTRA_AIRPORTS.find(a => a.icao.includes(q) || a.name.toUpperCase().includes(q));
     if (foundApt) {
         setFollowState(false);
         map.flyTo([foundApt.lat, foundApt.lon], 11);
@@ -813,18 +1026,68 @@ async function pollTelemetry() {
     }
 }
 
+// --- DRAG & DROP FILE .PLN SULLA MAPPA ---
+const dropOverlay = document.getElementById('dropZoneOverlay');
+
+window.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    if (dropOverlay) dropOverlay.style.display = 'flex';
+});
+
+window.addEventListener('dragover', (e) => {
+    e.preventDefault();
+});
+
+if (dropOverlay) {
+    dropOverlay.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        if (e.clientX <= 0 || e.clientY <= 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight) {
+            dropOverlay.style.display = 'none';
+        }
+    });
+
+    dropOverlay.addEventListener('dragover', (e) => {
+        e.preventDefault();
+    });
+}
+
+window.addEventListener('drop', (e) => {
+    e.preventDefault();
+    if (dropOverlay) dropOverlay.style.display = 'none';
+    
+    const files = e.dataTransfer ? e.dataTransfer.files : null;
+    if (files && files.length > 0) {
+        const file = files[0];
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            try {
+                const xmlText = event.target.result;
+                await processAndRenderPlnXml(xmlText);
+            } catch (err) {
+                console.error("Errore parsing XML:", err);
+                alert("Formato XML non valido: " + err.message);
+            }
+        };
+        reader.readAsText(file);
+    }
+});
+
 async function initApp() {
     if (initialized || !window.pywebview || !window.pywebview.api) return;
     initialized = true;
     map.invalidateSize();
 
-    // Disegna subito i Navaids di default e aggiorna l'orologio
     renderNavAids(vorsData, ilsData);
     updateFlightInfoBar(41.8003, 12.2389);
 
     await window.pywebview.api.connect_sim();
     const nav = await window.pywebview.api.get_navdata();
-    airportsData = nav.airports || [];
+    
+    if (nav.airports && nav.airports.length > 0) {
+        nav.airports.forEach(a => {
+            if (!airportsData.find(x => x.icao === a.icao)) airportsData.push(a);
+        });
+    }
     vorsData = (nav.vors && nav.vors.length > 0) ? nav.vors : DEFAULT_VORS;
     ilsData = (nav.ils && nav.ils.length > 0) ? nav.ils : DEFAULT_ILS;
     flightPlan = nav.flight_plan || [];
@@ -850,7 +1113,7 @@ async function initApp() {
         setSimbriefCompactMode(false);
     }
 
-    updateFlightPlanUI(nav.alternate);
+    updateFlightPlanUI(nav.alternate, false);
     pollTelemetry();
     setInterval(pollTelemetry, 1000);
 }
