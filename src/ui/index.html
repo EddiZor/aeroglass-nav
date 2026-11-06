@@ -18,7 +18,7 @@
                 <h1>AEROGLASS NAV</h1>
                 <span style="font-size: 11px; color: var(--text-muted); white-space: nowrap;">by EddiZor</span>
             </div>
-            <span style="font-size: 11px; color: var(--text-muted); margin-left: 6px;">v0.3.0</span>
+            <span style="font-size: 11px; color: var(--text-muted); margin-left: 6px;">v0.3.1</span>
         </div>
         
         <div class="action-row">
@@ -33,13 +33,17 @@
         </div>
 
         <div class="search-box">
-            <input type="text" id="omniSearch" placeholder="Cerca ICAO o Aeroporto..." oninput="filterAirports(this.value)">
+            <input type="text" id="omniSearch" placeholder="Cerca ICAO, VOR o Aeroporto..." oninput="filterAirports(this.value)">
         </div>
         <div class="section-title">Piano di Volo Attivo</div>
         <div class="fpl-list" id="fplContainer"></div>
     </aside>
 
     <div class="top-right">
+        <button id="btnToggleNavaids" class="glass btn-follow active" onclick="toggleNavaidsLayer()" title="Mostra/Nascondi stazioni VOR e ILS sulla mappa">
+            📡 VOR / ILS: ON
+        </button>
+
         <button id="btnFollowAcft" class="glass btn-follow active" onclick="toggleFollowAircraft()" title="Attiva/Disattiva centraggio automatico sull'aereo">
             🎯 Segui Aereo: ON
         </button>
@@ -73,18 +77,17 @@
         </div>
     </div>
 
-    <script src="app.js"></script>
-
     <!-- Barra Info in basso a destra (Data, UTC, Sistema e Coordinate) -->
-        <div class="glass flight-info-bar" id="flightInfoBar">
-            <span id="infoDate">---</span>
-            <span class="info-sep">|</span>
-            <span id="infoUtc">UTC: --:--:--</span>
-            <span class="info-sep">|</span>
-            <span id="infoSys">SYS: --:--:--</span>
-            <span class="info-sep">|</span>
-            <span id="infoCoords">LAT: --.----- LON: --.-----</span>
-        </div>
+    <div class="glass flight-info-bar" id="flightInfoBar">
+        <span id="infoDate">---</span>
+        <span class="info-sep">|</span>
+        <span id="infoUtc">UTC: --:--:--</span>
+        <span class="info-sep">|</span>
+        <span id="infoSys">SYS: --:--:--</span>
+        <span class="info-sep">|</span>
+        <span id="infoCoords">LAT: --.----- LON: --.-----</span>
+    </div>
 
+    <script src="app.js"></script>
 </body>
 </html>

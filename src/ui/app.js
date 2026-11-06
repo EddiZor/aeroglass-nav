@@ -26,6 +26,25 @@ function switchMapStyle(style) {
     currentTileLayer = L.tileLayer(url, { maxZoom: style === 'topo' ? 17 : 19 }).addTo(map);
 }
 
+// Fallback integrato di stazioni VOR e ILS (nel caso api.py non sia stato ancora riavviato)
+const DEFAULT_VORS = [
+    {"ident": "OST", "name": "Ostia VOR-DME", "freq": "114.90", "lat": 41.8019, "lon": 12.2378, "type": "VOR-DME"},
+    {"ident": "CMP", "name": "Campagnano VOR-DME", "freq": "111.80", "lat": 42.1250, "lon": 12.3817, "type": "VOR-DME"},
+    {"ident": "BOL", "name": "Bologna VOR-DME", "freq": "112.20", "lat": 44.5369, "lon": 11.2906, "type": "VOR-DME"},
+    {"ident": "FLR", "name": "Firenze VOR-DME", "freq": "115.20", "lat": 43.8090, "lon": 11.2005, "type": "VOR-DME"},
+    {"ident": "VIL", "name": "Villafranca VOR-DME", "freq": "115.80", "lat": 45.4022, "lon": 10.9064, "type": "VOR-DME"},
+    {"ident": "RON", "name": "Ronchi VOR-DME", "freq": "114.20", "lat": 45.8297, "lon": 13.4803, "type": "VOR-DME"},
+    {"ident": "PAL", "name": "Palermo VOR-DME", "freq": "112.30", "lat": 38.1756, "lon": 13.0911, "type": "VOR-DME"}
+];
+
+const DEFAULT_ILS = [
+    {"ident": "IFLL", "rwy": "16L", "name": "ILS-DME Fiumicino RWY 16L", "freq": "109.75", "course": 161, "gs_alt": "3,000 ft", "lat": 41.8250, "lon": 12.2480},
+    {"ident": "IFRR", "rwy": "34R", "name": "ILS-DME Fiumicino RWY 34R", "freq": "110.30", "course": 341, "gs_alt": "3,000 ft", "lat": 41.7780, "lon": 12.2320},
+    {"ident": "IBOL", "rwy": "12", "name": "ILS Bologna RWY 12", "freq": "109.30", "course": 118, "gs_alt": "2,500 ft", "lat": 44.5420, "lon": 11.2720},
+    {"ident": "IVIL", "rwy": "04", "name": "ILS Verona RWY 04", "freq": "109.50", "course": 43, "gs_alt": "3,000 ft", "lat": 45.3820, "lon": 10.8710}
+];
+
+let showNavaids = true;
 let followAircraft = true;
 let lastAcftLatLng = null;
 let lastAcftHdgTrue = 0;
@@ -33,6 +52,7 @@ let lastAcftHdgTrue = 0;
 function setFollowState(state) {
     followAircraft = state;
     const btn = document.getElementById('btnFollowAcft');
+    if (!btn) return;
     if (followAircraft) {
         btn.classList.add('active');
         btn.innerText = '🎯 Segui Aereo: ON';
@@ -49,6 +69,21 @@ function toggleFollowAircraft() {
     setFollowState(!followAircraft);
 }
 
+function toggleNavaidsLayer() {
+    showNavaids = !showNavaids;
+    const btn = document.getElementById('btnToggleNavaids');
+    if (btn) {
+        if (showNavaids) {
+            btn.classList.add('active');
+            btn.innerText = '📡 VOR / ILS: ON';
+        } else {
+            btn.classList.remove('active');
+            btn.innerText = '📡 VOR / ILS: OFF';
+        }
+    }
+    renderNavAids(vorsData, ilsData);
+}
+
 map.on('dragstart', function() {
     if (followAircraft) {
         setFollowState(false);
@@ -59,31 +94,34 @@ const sidebarPanel = document.getElementById('sidebarPanel');
 const sidebarResizer = document.getElementById('sidebarResizer');
 let isResizingSidebar = false;
 
-sidebarResizer.addEventListener('mousedown', function(e) {
-    isResizingSidebar = true;
-    sidebarResizer.classList.add('resizing');
-    document.body.style.cursor = 'ew-resize';
-    e.preventDefault();
-});
+if (sidebarResizer && sidebarPanel) {
+    sidebarResizer.addEventListener('mousedown', function(e) {
+        isResizingSidebar = true;
+        sidebarResizer.classList.add('resizing');
+        document.body.style.cursor = 'ew-resize';
+        e.preventDefault();
+    });
 
-document.addEventListener('mousemove', function(e) {
-    if (!isResizingSidebar) return;
-    const newWidth = Math.max(260, Math.min(680, e.clientX - 16));
-    sidebarPanel.style.width = newWidth + 'px';
-});
+    document.addEventListener('mousemove', function(e) {
+        if (!isResizingSidebar) return;
+        const newWidth = Math.max(260, Math.min(680, e.clientX - 16));
+        sidebarPanel.style.width = newWidth + 'px';
+    });
 
-document.addEventListener('mouseup', function() {
-    if (isResizingSidebar) {
-        isResizingSidebar = false;
-        sidebarResizer.classList.remove('resizing');
-        document.body.style.cursor = '';
-    }
-});
+    document.addEventListener('mouseup', function() {
+        if (isResizingSidebar) {
+            isResizingSidebar = false;
+            sidebarResizer.classList.remove('resizing');
+            document.body.style.cursor = '';
+        }
+    });
+}
 
 function setSimbriefCompactMode(isCompact) {
     const setupBox = document.getElementById('simbriefSetupBox');
     const compactBtn = document.getElementById('simbriefCompactBtn');
     const editIdBtn = document.getElementById('simbriefEditIdBtn');
+    if (!setupBox || !compactBtn || !editIdBtn) return;
     if (isCompact) {
         setupBox.style.display = 'none';
         compactBtn.style.display = 'block';
@@ -97,7 +135,8 @@ function setSimbriefCompactMode(isCompact) {
 
 function showSimbriefBox() {
     setSimbriefCompactMode(false);
-    document.getElementById('simbriefIdInput').focus();
+    const input = document.getElementById('simbriefIdInput');
+    if (input) input.focus();
 }
 
 let drawerOpen = true;
@@ -105,12 +144,13 @@ function toggleDrawer() {
     drawerOpen = !drawerOpen;
     const drawer = document.getElementById('elevationDrawer');
     const sidebar = document.getElementById('sidebarPanel');
+    if (!drawer || !sidebar) return;
     if (drawerOpen) {
         drawer.style.height = '104px';
-        sidebar.style.bottom = '130px';
+        sidebar.style.bottom = '160px';
     } else {
         drawer.style.height = '36px';
-        sidebar.style.bottom = '60px';
+        sidebar.style.bottom = '92px';
     }
 }
 
@@ -151,8 +191,8 @@ function parseMetarInfo(metarStr) {
 }
 
 let airportsData = [];
-let vorsData = [];
-let ilsData = [];
+let vorsData = DEFAULT_VORS;
+let ilsData = DEFAULT_ILS;
 let flightPlan = [];
 let currentAlternate = null;
 let routeLine = null;
@@ -171,17 +211,21 @@ const acftIcon = L.divIcon({
     iconSize: [28, 28], iconAnchor: [14, 14]
 });
 
-const vorIcon = L.divIcon({
-    className: '',
-    html: '<div style="width:12px;height:12px;border:2px solid #38bdf8;background:rgba(15,23,42,0.9);transform:rotate(45deg);box-shadow:0 0 6px rgba(56,189,248,0.6);"></div>',
-    iconSize: [12, 12], iconAnchor: [6, 6]
-});
+function createVorIcon(ident) {
+    return L.divIcon({
+        className: '',
+        html: `<div class="navaid-badge navaid-vor"><span>❖</span><span>${ident}</span></div>`,
+        iconSize: [0, 0]
+    });
+}
 
-const ilsIcon = L.divIcon({
-    className: '',
-    html: '<div style="width:11px;height:11px;background:#e879f9;border:2px solid #0f172a;box-shadow:0 0 6px rgba(232,121,249,0.7);"></div>',
-    iconSize: [11, 11], iconAnchor: [5, 5]
-});
+function createIlsIcon(rwy, ident) {
+    return L.divIcon({
+        className: '',
+        html: `<div class="navaid-badge navaid-ils"><span>📡</span><span>ILS ${rwy}</span></div>`,
+        iconSize: [0, 0]
+    });
+}
 
 function clearMapRoutes() {
     if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
@@ -199,39 +243,47 @@ function renderNavAids(vors, ilsList) {
         vorMarkers.forEach(m => { if (m) map.removeLayer(m); });
     }
     vorMarkers = [];
-    if (vors) {
-        vors.forEach(vor => {
-            if (vor.lat && vor.lon) {
-                const marker = L.marker([vor.lat, vor.lon], { icon: vorIcon }).addTo(map);
-                marker.bindPopup(
-                    '<div style="font-weight:700;font-size:12px;color:#38bdf8;">VOR: ' + vor.ident + '</div>' +
-                    '<div style="font-size:11px;color:#f8fafc;">' + vor.name + '</div>' +
-                    '<div style="font-size:11px;font-family:monospace;color:#34d399;margin-top:2px;">FREQ: ' + vor.freq + ' MHz</div>'
-                );
-                vorMarkers.push(marker);
-            }
-        });
-    }
 
     if (ilsMarkers && ilsMarkers.length > 0) {
         ilsMarkers.forEach(m => { if (m) map.removeLayer(m); });
     }
     ilsMarkers = [];
-    if (ilsList) {
-        ilsList.forEach(ils => {
-            if (ils.lat && ils.lon) {
-                const marker = L.marker([ils.lat, ils.lon], { icon: ilsIcon }).addTo(map);
-                marker.bindPopup(
-                    '<div style="font-weight:700;font-size:12px;color:#e879f9;">ILS ' + ils.rwy + ' (' + ils.ident + ')</div>' +
-                    '<div style="font-size:11px;color:#f8fafc;margin-bottom:4px;">' + ils.name + '</div>' +
-                    '<div style="font-size:11px;font-family:monospace;color:#38bdf8;">FREQ: ' + ils.freq + ' MHz</div>' +
-                    '<div style="font-size:11px;font-family:monospace;color:#34d399;">COURSE: ' + ils.course + '°</div>' +
-                    '<div style="font-size:11px;font-family:monospace;color:#fbbf24;">GLIDE ALT: ' + ils.gs_alt + '</div>'
-                );
-                ilsMarkers.push(marker);
-            }
-        });
-    }
+
+    if (!showNavaids) return;
+
+    const activeVors = (vors && vors.length > 0) ? vors : DEFAULT_VORS;
+    activeVors.forEach(vor => {
+        if (vor.lat && vor.lon) {
+            const marker = L.marker([vor.lat, vor.lon], {
+                icon: createVorIcon(vor.ident),
+                zIndexOffset: 400
+            }).addTo(map);
+            marker.bindPopup(
+                '<div style="font-weight:700;font-size:12px;color:#38bdf8;">VOR: ' + vor.ident + '</div>' +
+                '<div style="font-size:11px;color:#f8fafc;">' + vor.name + '</div>' +
+                '<div style="font-size:11px;font-family:monospace;color:#34d399;margin-top:2px;">FREQ: ' + vor.freq + ' MHz</div>'
+            );
+            vorMarkers.push(marker);
+        }
+    });
+
+    const activeIls = (ilsList && ilsList.length > 0) ? ilsList : DEFAULT_ILS;
+    activeIls.forEach(ils => {
+        if (ils.lat && ils.lon) {
+            const marker = L.marker([ils.lat, ils.lon], {
+                icon: createIlsIcon(ils.rwy, ils.ident),
+                zIndexOffset: 450
+            }).addTo(map);
+            marker.bindPopup(
+                '<div style="font-weight:700;font-size:12px;color:#e879f9;">ILS RWY ' + ils.rwy + ' (' + ils.ident + ')</div>' +
+                '<div style="font-size:11px;color:#f8fafc;margin-bottom:4px;">' + ils.name + '</div>' +
+                '<div style="font-size:11px;font-family:monospace;color:#38bdf8;">FREQ: ' + ils.freq + ' MHz</div>' +
+                '<div style="font-size:11px;font-family:monospace;color:#34d399;">COURSE: ' + ils.course + '°</div>' +
+                '<div style="font-size:11px;font-family:monospace;color:#fbbf24;">GLIDE ALT: ' + ils.gs_alt + '</div>'
+            );
+            ilsMarkers.push(marker);
+        }
+    });
 }
 
 function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
@@ -239,6 +291,7 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
         currentAlternate = alternateData;
     }
     const container = document.getElementById('fplContainer');
+    if (!container) return;
     container.innerHTML = '';
     
     clearMapRoutes();
@@ -251,10 +304,11 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
         const isEndpoint = (index === 0 || index === flightPlan.length - 1 || wp.type === 'DEP' || wp.type === 'DEST' || wp.type === 'APT');
         const rawMetar = wp.metar || (apt ? apt.metar : '');
         const wx = isEndpoint ? parseMetarInfo(rawMetar) : null;
+        const altVal = Number(wp.alt_ft) || 0;
 
-        if (wp.lat && wp.lon) {
+        if (wp.lat !== undefined && wp.lon !== undefined) {
             coords.push([wp.lat, wp.lon]);
-            altitutes.push(wp.alt_ft || 0);
+            altitutes.push(altVal);
 
             const marker = L.circleMarker([wp.lat, wp.lon], {
                 radius: isEndpoint ? 5 : 4,
@@ -266,7 +320,7 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
 
             let popupHtml =
                 '<div style="font-weight:700;font-size:13px;color:#38bdf8;">' + wp.ident + '</div>' +
-                '<div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Altitudine: <span style="color:#e879f9;cursor:pointer;text-decoration:underline;font-weight:600;" onclick="editWaypointAlt(' + index + ', ' + wp.alt_ft + ')">' + wp.alt_ft + ' ft ✏️</span></div>';
+                '<div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Altitudine: <span style="color:#e879f9;cursor:pointer;text-decoration:underline;font-weight:600;" onclick="editWaypointAlt(' + index + ', ' + altVal + ')">' + altVal + ' ft ✏️</span></div>';
             
             if (wx) {
                 popupHtml +=
@@ -310,9 +364,9 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
                 wxBadgesHtml +
             '</div>' +
             '<div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px; flex-shrink:0;">' +
-                '<span class="wpt-alt" onclick="event.stopPropagation(); editWaypointAlt(' + index + ', ' + wp.alt_ft + ')">' + wp.alt_ft + ' ft</span>' +
+                '<span class="wpt-alt" onclick="event.stopPropagation(); editWaypointAlt(' + index + ', ' + altVal + ')">' + altVal + ' ft</span>' +
                 '<span class="wpt-dist" id="wptDist_' + index + '">--- NM</span>' +
-                '<span style="font-size:10px;color:var(--text-muted);">' + (apt ? ('RWY ' + apt.rwy) : wp.type) + '</span>' +
+                '<span style="font-size:10px;color:var(--text-muted);">' + (apt ? ('RWY ' + apt.rwy) : (wp.type || 'WPT')) + '</span>' +
             '</div>';
         container.appendChild(div);
     });
@@ -368,21 +422,26 @@ async function editWaypointAlt(index, currentAlt) {
 function renderVnavChart(alts) {
     const svgPath = document.getElementById('vnavPath');
     const svgText = document.getElementById('vnavText');
-    if (!alts || alts.length === 0) return;
+    if (!svgPath || !alts || alts.length === 0) return;
 
-    const maxAlt = Math.max(...alts, 10000);
+    const maxAlt = Math.max(...alts, 5000);
     const width = 1000;
     const height = 40;
 
     let pathD = `M0,50 `;
-    alts.forEach((alt, i) => {
-        const x = (i / (alts.length - 1)) * width;
-        const y = height - (alt / maxAlt) * height + 5;
-        pathD += `L${x},${y} `;
-    });
+    if (alts.length === 1) {
+        const y = height - (alts[0] / maxAlt) * height + 5;
+        pathD += `L0,${y} L${width},${y} `;
+    } else {
+        alts.forEach((alt, i) => {
+            const x = (i / (alts.length - 1)) * width;
+            const y = height - (alt / maxAlt) * height + 5;
+            pathD += `L${x.toFixed(1)},${y.toFixed(1)} `;
+        });
+    }
 
     pathD += `L${width},50 Z`;
-    if (svgPath) svgPath.setAttribute('d', pathD);
+    svgPath.setAttribute('d', pathD);
     if (svgText) svgText.textContent = `VNAV Multi-Step (Max Alt: ${maxAlt.toLocaleString()} ft)`;
 }
 
@@ -398,7 +457,7 @@ function calculateRouteProgress(lat, lon) {
         segDistances.push(d);
         totalDist += d;
     }
-    if (totalDist === 0) return 0;
+    if (totalDist === 0) return null;
 
     let minGlobalDist = Infinity;
     let bestFraction = 0;
@@ -438,6 +497,7 @@ function getSegmentFraction(A, B, P) {
 
 map.on('mousemove', function(e) {
     const mouseLine = document.getElementById('mouseVnavLine');
+    if (!mouseLine) return;
     if (!flightPlan || flightPlan.length < 2) {
         mouseLine.style.display = 'none';
         return;
@@ -478,9 +538,11 @@ if (svgContainer) {
             }
 
             const mouseLine = document.getElementById('mouseVnavLine');
-            mouseLine.setAttribute('x1', fraction * 1000);
-            mouseLine.setAttribute('x2', fraction * 1000);
-            mouseLine.style.display = 'block';
+            if (mouseLine) {
+                mouseLine.setAttribute('x1', fraction * 1000);
+                mouseLine.setAttribute('x2', fraction * 1000);
+                mouseLine.style.display = 'block';
+            }
         }
     });
 
@@ -599,6 +661,38 @@ function updateActiveWaypointHighlight(acftLat, acftLon, acftHdg) {
     });
 }
 
+// Aggiorna data, orario UTC, orario di sistema e coordinate live dell'aereo in modo sicuro
+function updateFlightInfoBar(lat, lon) {
+    const now = new Date();
+    
+    const dateEl = document.getElementById('infoDate');
+    if (dateEl) {
+        const options = { day: '2-digit', month: 'short', year: 'numeric' };
+        dateEl.innerText = now.toLocaleDateString('en-GB', options).toUpperCase();
+    }
+    
+    const utcEl = document.getElementById('infoUtc');
+    if (utcEl) {
+        const utcHours = String(now.getUTCHours()).padStart(2, '0');
+        const utcMinutes = String(now.getUTCMinutes()).padStart(2, '0');
+        const utcSeconds = String(now.getUTCSeconds()).padStart(2, '0');
+        utcEl.innerText = `UTC: ${utcHours}:${utcMinutes}:${utcSeconds}`;
+    }
+    
+    const sysEl = document.getElementById('infoSys');
+    if (sysEl) {
+        const sysHours = String(now.getHours()).padStart(2, '0');
+        const sysMinutes = String(now.getMinutes()).padStart(2, '0');
+        const sysSeconds = String(now.getSeconds()).padStart(2, '0');
+        sysEl.innerText = `SYS: ${sysHours}:${sysMinutes}:${sysSeconds}`;
+    }
+    
+    const coordsEl = document.getElementById('infoCoords');
+    if (coordsEl && lat !== undefined && lon !== undefined) {
+        coordsEl.innerText = `LAT: ${Number(lat).toFixed(5)} LON: ${Number(lon).toFixed(5)}`;
+    }
+}
+
 async function addWaypoint(icao) {
     if (window.pywebview && window.pywebview.api) {
         flightPlan = await window.pywebview.api.add_to_flight_plan(icao);
@@ -624,7 +718,8 @@ async function saveSimbriefId(val) {
 
 async function fetchSimbriefPlan() {
     if (window.pywebview && window.pywebview.api) {
-        const inputVal = document.getElementById('simbriefIdInput').value.trim();
+        const inputEl = document.getElementById('simbriefIdInput');
+        const inputVal = inputEl ? inputEl.value.trim() : '';
         if (inputVal) {
             await window.pywebview.api.save_simbrief_id(inputVal);
         }
@@ -642,64 +737,79 @@ async function fetchSimbriefPlan() {
 
 function filterAirports(query) {
     const q = query.toUpperCase().trim();
-    const found = airportsData.find(a => a.icao.includes(q) || a.name.toUpperCase().includes(q));
-    if (found && q.length >= 3) {
+    if (q.length < 2) return;
+
+    const foundApt = airportsData.find(a => a.icao.includes(q) || a.name.toUpperCase().includes(q));
+    if (foundApt) {
         setFollowState(false);
-        map.flyTo([found.lat, found.lon], 10);
+        map.flyTo([foundApt.lat, foundApt.lon], 11);
+        return;
+    }
+
+    const foundVor = vorsData.find(v => v.ident.includes(q) || v.name.toUpperCase().includes(q));
+    if (foundVor) {
+        setFollowState(false);
+        map.flyTo([foundVor.lat, foundVor.lon], 11);
     }
 }
 
 async function pollTelemetry() {
     if (!window.pywebview || !window.pywebview.api) return;
-    const data = await window.pywebview.api.get_telemetry();
-    document.getElementById('simStatus').innerText = data.mode;
-    document.getElementById('simDot').className = 'status-dot' + (data.connected ? ' live' : '');
-    document.getElementById('valAlt').innerText = data.alt_ft;
-    document.getElementById('valGs').innerText = data.gs_kt;
-    document.getElementById('valHdg').innerText = data.hdg_deg;
-    document.getElementById('valAcft').innerText = data.aircraft || "MSFS 2024";
+    try {
+        const data = await window.pywebview.api.get_telemetry();
+        document.getElementById('simStatus').innerText = data.mode;
+        document.getElementById('simDot').className = 'status-dot' + (data.connected ? ' live' : '');
+        document.getElementById('valAlt').innerText = data.alt_ft;
+        document.getElementById('valGs').innerText = data.gs_kt;
+        document.getElementById('valHdg').innerText = data.hdg_deg;
+        document.getElementById('valAcft').innerText = data.aircraft || "MSFS 2024";
 
-    const newLatLng = L.latLng(data.lat, data.lon);
+        const newLatLng = L.latLng(data.lat, data.lon);
 
-    let mapHeading = (data.hdg_true !== undefined && data.hdg_true !== null) ? Number(data.hdg_true) : Number(data.hdg_deg);
-    if (isNaN(mapHeading)) mapHeading = lastAcftHdgTrue;
+        let mapHeading = (data.hdg_true !== undefined && data.hdg_true !== null) ? Number(data.hdg_true) : Number(data.hdg_deg);
+        if (isNaN(mapHeading)) mapHeading = lastAcftHdgTrue;
 
-    if (lastAcftLatLng && newLatLng.distanceTo(lastAcftLatLng) > 8 && mapHeading === 0) {
-        mapHeading = calculateBearing(lastAcftLatLng.lat, lastAcftLatLng.lng, newLatLng.lat, newLatLng.lng);
-    }
-    lastAcftHdgTrue = mapHeading;
-    lastAcftLatLng = newLatLng;
+        if (lastAcftLatLng && newLatLng.distanceTo(lastAcftLatLng) > 8 && mapHeading === 0) {
+            mapHeading = calculateBearing(lastAcftLatLng.lat, lastAcftLatLng.lng, newLatLng.lat, newLatLng.lng);
+        }
+        lastAcftHdgTrue = mapHeading;
+        lastAcftLatLng = newLatLng;
 
-    if (!acftMarker) {
-        acftMarker = L.marker(newLatLng, { icon: acftIcon }).addTo(map);
-    } else {
-        acftMarker.setLatLng(newLatLng);
-    }
-
-    const svgEl = document.getElementById('acftSvg');
-    if (svgEl) {
-        svgEl.style.transform = `rotate(${mapHeading}deg)`;
-    }
-
-    if (followAircraft) {
-        map.panTo(newLatLng, { animate: true, duration: 0.5 });
-    }
-
-    const acftLine = document.getElementById('acftVnavLine');
-    if (flightPlan && flightPlan.length >= 2) {
-        const res = calculateRouteProgress(data.lat, data.lon);
-        if (res) {
-            const xPos = res.fraction * 1000;
-            acftLine.setAttribute('x1', xPos);
-            acftLine.setAttribute('x2', xPos);
-            acftLine.style.display = 'block';
-
-            updateActiveWaypointHighlight(data.lat, data.lon, mapHeading);
+        if (!acftMarker) {
+            acftMarker = L.marker(newLatLng, { icon: acftIcon, zIndexOffset: 1000 }).addTo(map);
         } else {
+            acftMarker.setLatLng(newLatLng);
+        }
+
+        const svgEl = document.getElementById('acftSvg');
+        if (svgEl) {
+            svgEl.style.transform = `rotate(${mapHeading}deg)`;
+        }
+
+        if (followAircraft) {
+            map.panTo(newLatLng, { animate: true, duration: 0.5 });
+        }
+
+        updateFlightInfoBar(data.lat, data.lon);
+
+        const acftLine = document.getElementById('acftVnavLine');
+        if (acftLine && flightPlan && flightPlan.length >= 2) {
+            const res = calculateRouteProgress(data.lat, data.lon);
+            if (res) {
+                const xPos = res.fraction * 1000;
+                acftLine.setAttribute('x1', xPos);
+                acftLine.setAttribute('x2', xPos);
+                acftLine.style.display = 'block';
+
+                updateActiveWaypointHighlight(data.lat, data.lon, mapHeading);
+            } else {
+                acftLine.style.display = 'none';
+            }
+        } else if (acftLine) {
             acftLine.style.display = 'none';
         }
-    } else {
-        acftLine.style.display = 'none';
+    } catch (err) {
+        console.error("Errore telemetria:", err);
     }
 }
 
@@ -707,17 +817,23 @@ async function initApp() {
     if (initialized || !window.pywebview || !window.pywebview.api) return;
     initialized = true;
     map.invalidateSize();
+
+    // Disegna subito i Navaids di default e aggiorna l'orologio
+    renderNavAids(vorsData, ilsData);
+    updateFlightInfoBar(41.8003, 12.2389);
+
     await window.pywebview.api.connect_sim();
     const nav = await window.pywebview.api.get_navdata();
-    airportsData = nav.airports;
-    vorsData = nav.vors || [];
-    ilsData = nav.ils || [];
-    flightPlan = nav.flight_plan;
+    airportsData = nav.airports || [];
+    vorsData = (nav.vors && nav.vors.length > 0) ? nav.vors : DEFAULT_VORS;
+    ilsData = (nav.ils && nav.ils.length > 0) ? nav.ils : DEFAULT_ILS;
+    flightPlan = nav.flight_plan || [];
 
     renderNavAids(vorsData, ilsData);
     
     if (nav.simbrief_userid) {
-        document.getElementById('simbriefIdInput').value = nav.simbrief_userid;
+        const inputEl = document.getElementById('simbriefIdInput');
+        if (inputEl) inputEl.value = nav.simbrief_userid;
         if (flightPlan && flightPlan.length > 0) {
             setSimbriefCompactMode(true);
         } else {
