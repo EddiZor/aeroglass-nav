@@ -1110,5 +1110,9 @@ async function initApp() {
     setInterval(pollTelemetry, 1000);
 }
 
+window.addEventListener('resize', () => {
+    if (map) map.invalidateSize();
+});
+
 window.addEventListener('pywebviewready', initApp);
 setTimeout(initApp, 600);
