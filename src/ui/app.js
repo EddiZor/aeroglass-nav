@@ -1033,7 +1033,14 @@ function filterAirports(query) {
 async function pollTelemetry() {
     if (!window.pywebview || !window.pywebview.api) return;
     try {
-        const data = await window.pywebview.api.get_telemetry();
+        let data = await window.pywebview.api.get_telemetry();
+        
+        // Se siamo in modalità DEMO, prova a riconnettersi automaticamente in background ogni pochi secondi
+        if (!data.connected && Math.random() < 0.3) {
+            await window.pywebview.api.connect_sim();
+            data = await window.pywebview.api.get_telemetry();
+        }
+
         document.getElementById('simStatus').innerText = data.mode;
         document.getElementById('simDot').className = 'status-dot' + (data.connected ? ' live' : '');
         document.getElementById('valAlt').innerText = data.alt_ft;

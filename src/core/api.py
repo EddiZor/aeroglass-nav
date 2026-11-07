@@ -61,11 +61,7 @@ class AeroGlassAPI:
         if saved_fpl:
             self.flight_plan = saved_fpl
         else:
-            self.flight_plan = [
-                {"ident": "LIPX", "lat": 45.3957, "lon": 10.8885, "alt_ft": 239, "name": "Verona Villafranca", "type": "DEP", "metar": "LIPX 061650Z 04006KT CAVOK 16/09 Q1018"},
-                {"ident": "LIDT", "lat": 46.0219, "lon": 11.1242, "alt_ft": 6500, "name": "Trento Mattarello", "type": "WPT"},
-                {"ident": "LIPD", "lat": 46.0319, "lon": 13.1869, "alt_ft": 308, "name": "Udine Campoformido", "type": "DEST", "metar": "LIPD 061650Z 05004KT CAVOK 17/08 Q1018"}
-            ]
+            self.flight_plan = []
 
     def _load_json(self, path, default):
         try:
