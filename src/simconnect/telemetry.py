@@ -21,7 +21,8 @@ class TelemetryManager:
             self.aq = AircraftRequests(self.sm, _time=200)
             self.connected = True
             return True
-        except Exception:
+        except Exception as e:
+            print(f"DEBUG - Errore connessione SimConnect: {e}")
             self.connected = False
             return False
 

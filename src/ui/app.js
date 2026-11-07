@@ -1059,7 +1059,7 @@ async function pollTelemetry() {
         lastAcftHdgTrue = mapHeading;
         lastAcftLatLng = newLatLng;
 
-        if (data.connected) {
+        if (data.connected && data.lat !== undefined && data.lon !== undefined) {
             if (!acftMarker) {
                 acftMarker = L.marker(newLatLng, { icon: acftIcon, zIndexOffset: 1000 }).addTo(map);
             } else {
@@ -1071,14 +1071,11 @@ async function pollTelemetry() {
                 svgEl.style.transform = `rotate(${mapHeading}deg)`;
             }
 
-            if (followAircraft) {
-                map.panTo(newLatLng, { animate: true, duration: 0.5 });
+            if (followAircraft && !window._initialPanDone) {
+                map.setView(newLatLng, 11, { animate: true });
+                window._initialPanDone = true;
             }
-        } else if (acftMarker) {
-            map.removeLayer(acftMarker);
-            acftMarker = null;
         }
-
         updateFlightInfoBar(data.lat, data.lon);
 
         const acftLine = document.getElementById('acftVnavLine');
