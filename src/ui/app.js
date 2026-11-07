@@ -2,7 +2,10 @@ const map = L.map('map', { zoomControl: false }).setView([43.5, 12.0], 6);
 
 const tileSources = {
     dark: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
-    topo: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+    vfr: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+    lowifr: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    highifr: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    topo: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
     sat: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
 };
 
@@ -14,7 +17,7 @@ function switchMapStyle(style) {
     
     let url = tileSources[style] || tileSources.dark;
 
-    if (style === 'dark') {
+    if (style === 'dark' || style === 'lowifr') {
         mapEl.classList.add('map-dark-filter');
     } else {
         mapEl.classList.remove('map-dark-filter');
@@ -23,7 +26,6 @@ function switchMapStyle(style) {
     currentTileLayer = L.tileLayer(url, { maxZoom: 19 }).addTo(map);
 }
 
-// Database rapido Aeroporti e Fix (Italia, Europa, Nord Atlantico)
 const EXTRA_AIRPORTS = [
     {"icao": "LIPX", "name": "Verona Villafranca", "lat": 45.3957, "lon": 10.8885, "elev": 239, "rwy": "04/22", "metar": "LIPX 061650Z 04006KT CAVOK 16/09 Q1018"},
     {"icao": "LIPO", "name": "Brescia Montichiari", "lat": 45.4289, "lon": 10.3306, "elev": 356, "rwy": "14/32", "metar": "LIPO 061650Z 06005KT 9999 FEW040 16/10 Q1018"},
@@ -52,7 +54,6 @@ const EXTRA_AIRPORTS = [
 ];
 
 const KNOWN_FIXES = {
-    // Rotta LIRF -> LIPE
     "SOVAN": { lat: 42.6369, lon: 11.6669 },
     "AMTEL": { lat: 43.1972, lon: 11.4556 },
     "IBRID": { lat: 43.5186, lon: 11.3328 },
@@ -64,7 +65,6 @@ const KNOWN_FIXES = {
     "PE820": { lat: 44.4900, lon: 11.4800 },
     "IBNEL": { lat: 44.4750, lon: 11.4100 },
     "ABLEX": { lat: 44.5050, lon: 11.3500 },
-    // Rotta LDZA -> LIMC
     "PODET": { lat: 45.8936, lon: 15.5419 },
     "LUPIX": { lat: 45.9250, lon: 14.9189 },
     "RIFEN": { lat: 45.9522, lon: 13.6264 },
@@ -75,7 +75,6 @@ const KNOWN_FIXES = {
     "NEVNI": { lat: 45.5186, lon: 10.4283 },
     "LEGLO": { lat: 45.5392, lon: 9.8736 },
     "PEXUG": { lat: 45.5681, lon: 9.4214 },
-    // Rotta BIKF -> BGKK (Islanda -> Groenlandia)
     "SORIR": { lat: 64.5500, lon: -26.5000 },
     "SOSIT": { lat: 65.2500, lon: -32.0000 },
     "DA":    { lat: 65.5736, lon: -37.1500, name: "Kulusuk NDB" }
@@ -720,7 +719,6 @@ function updateFlightInfoBar(lat, lon) {
     }
 }
 
-// --- PARSER UNIVERSALE XML .PLN (MSFS 2020 & MSFS 2024) ---
 function parseDmsCoord(dmsStr) {
     const parts = dmsStr.split(',');
     if (parts.length < 2) return null;
@@ -749,7 +747,6 @@ function parsePlnXmlString(xmlText) {
 
     let parsedWaypoints = [];
 
-    // 1. Partenza (DepartureID)
     const depNodes = xmlDoc.getElementsByTagName("DepartureID");
     if (depNodes.length > 0 && depNodes[0].textContent) {
         const depCode = depNodes[0].textContent.trim();
@@ -766,7 +763,6 @@ function parsePlnXmlString(xmlText) {
         });
     }
 
-    // 2. Waypoints intermedi (ATCWaypoint / FlightPlan.Waypoint)
     const wptNodes = [
         ...Array.from(xmlDoc.getElementsByTagName("ATCWaypoint")),
         ...Array.from(xmlDoc.getElementsByTagName("FlightPlan.Waypoint"))
@@ -827,7 +823,6 @@ function parsePlnXmlString(xmlText) {
         }
     });
 
-    // 3. Destinazione (DestinationID)
     const destNodes = xmlDoc.getElementsByTagName("DestinationID");
     if (destNodes.length > 0 && destNodes[0].textContent) {
         const destCode = destNodes[0].textContent.trim();
@@ -865,7 +860,6 @@ async function processAndRenderPlnXml(xmlText) {
         return;
     }
 
-    // Se ci sono punti non presenti nel dizionario rapido locale, li risolve globalmente tramite Python
     const hasMissingCoords = parsed.some(w => w.lat === null || w.lon === null);
     if (hasMissingCoords && window.pywebview && window.pywebview.api && window.pywebview.api.enrich_flight_plan) {
         try {
@@ -878,7 +872,6 @@ async function processAndRenderPlnXml(xmlText) {
         }
     }
 
-    // Interpolazione finale solo se gli estremi sono stati risolti
     const lastIdx = parsed.length - 1;
     if (parsed.length >= 2 && parsed[0].lat !== null && parsed[lastIdx].lat !== null) {
         for (let i = 1; i < lastIdx; i++) {
@@ -1026,7 +1019,6 @@ async function pollTelemetry() {
     }
 }
 
-// --- DRAG & DROP FILE .PLN SULLA MAPPA ---
 const dropOverlay = document.getElementById('dropZoneOverlay');
 
 window.addEventListener('dragenter', (e) => {
