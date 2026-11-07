@@ -81,24 +81,24 @@ body, html { width: 100%; height: 100%; overflow: hidden; background: #090d16; c
 .elevation-drawer {
     position: absolute; left: 16px; right: 16px; bottom: 48px; height: 104px;
     z-index: 10; display: flex; flex-direction: column; padding: 10px 14px;
-    transition: height 0.3s ease, bottom 0.3s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s ease, border 0.3s ease;
+    transition: height 0.3s ease, bottom 0.3s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s ease;
 }
 .elevation-drawer.collapsed {
     height: 0px !important;
-    min-height: 0px !important;
     padding-top: 0px !important;
     padding-bottom: 0px !important;
-    border-width: 0px !important;
+    border-top-color: transparent;
+    border-bottom-color: transparent;
 }
 .elevation-drawer.collapsed .drawer-header,
 .elevation-drawer.collapsed .elevation-canvas-container {
     opacity: 0;
     pointer-events: none;
 }
-.elevation-canvas-container {
-    overflow: hidden;
-    flex: 1;
-}
+
+.drawer-header { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+.drawer-toggle { background: none; border: none; color: var(--cyan); cursor: pointer; font-weight: 700; font-size: 12px; }
+.elevation-canvas-container { flex: 1; position: relative; width: 100%; display: flex; align-items: flex-end; overflow: hidden; }
 
 .brand { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-glass); padding-bottom: 8px; }
 .brand h1 { font-size: 16px; font-weight: 700; letter-spacing: 0.5px; color: var(--cyan); white-space: nowrap; }
@@ -185,28 +185,6 @@ body, html { width: 100%; height: 100%; overflow: hidden; background: #090d16; c
 .telemetry-pill { padding: 8px 14px; display: flex; gap: 16px; align-items: center; font-size: 12px; font-family: Consolas, monospace; }
 .status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--amber); display: inline-block; margin-right: 6px; }
 .status-dot.live { background: var(--emerald); box-shadow: 0 0 8px var(--emerald); }
-
-.elevation-drawer {
-    position: absolute; left: 16px; right: 16px; bottom: 48px; height: 104px;
-    z-index: 10; display: flex; flex-direction: column; padding: 10px 14px;
-    transition: height 0.3s ease, bottom 0.3s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s ease;
-}
-.elevation-drawer.collapsed {
-    height: 0px !important;
-    padding-top: 0px !important;
-    padding-bottom: 0px !important;
-    border-top-color: transparent;
-    border-bottom-color: transparent;
-}
-.elevation-drawer.collapsed .drawer-header,
-.elevation-drawer.collapsed .elevation-canvas-container {
-    opacity: 0;
-    pointer-events: none;
-}
-
-.drawer-header { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
-.drawer-toggle { background: none; border: none; color: var(--cyan); cursor: pointer; font-weight: 700; font-size: 12px; }
-.elevation-canvas-container { flex: 1; position: relative; width: 100%; display: flex; align-items: flex-end; }
 
 /* Pannello a scomparsa Procedure & Filtri */
 .overlay-panel {

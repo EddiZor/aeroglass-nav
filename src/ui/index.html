@@ -57,7 +57,7 @@
             🎯 Segui Aereo: ON
         </button>
 
-<button id="btnLangSelect" class="glass btn-follow" style="display: none;" onclick="toggleLanguage()" title="Switch Language (EN / IT)">
+        <button id="btnLangSelect" class="glass btn-follow" style="display: none;" onclick="toggleLanguage()" title="Switch Language (EN / IT)">
             🌐 <span id="langLabel">EN</span>
         </button>
 
@@ -77,6 +77,7 @@
             <div>GS: <strong id="valGs">---</strong> kt</div>
             <div>HDG: <strong id="valHdg">---</strong>°</div>
         </div>
+    </div>
 
     <!-- Pannello a scomparsa per Procedure e Filtri Layer -->
     <div class="glass overlay-panel" id="proceduresPanel">
@@ -117,8 +118,7 @@
         <span id="infoCoords">LAT: --.----- LON: --.-----</span>
     </div>
 
-    <script src="app.js"></script>
-
+    <!-- Cassetto Altimetrico VNAV -->
     <div class="elevation-drawer glass" id="elevationDrawer">
         <button class="panel-arrow-btn drawer-arrow-btn glass" id="btnToggleDrawer" onclick="toggleDrawer()" title="Nascondi / Mostra profilo VNAV">
             <span id="drawerLabel" class="collapsed-label" style="display:none; margin-right:4px;">ALT</span>
@@ -137,5 +137,6 @@
         </div>
     </div>
 
+    <script src="app.js"></script>
 </body>
 </html>

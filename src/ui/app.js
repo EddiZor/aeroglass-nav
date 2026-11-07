@@ -15,7 +15,7 @@ const translations = {
     }
 };
 
-let currentLang = 'en'; // Inglese come lingua principale predefinita
+let currentLang = 'en';
 
 function checkSystemLanguage() {
     const sysLang = navigator.language || navigator.userLanguage || '';
@@ -23,10 +23,10 @@ function checkSystemLanguage() {
     const langBtn = document.getElementById('btnLangSelect');
     if (langBtn) {
         if (isItalianSystem) {
-            langBtn.style.display = 'inline-flex'; // Mostra il pulsante solo se il sistema è in italiano
+            langBtn.style.display = 'inline-flex';
         } else {
             langBtn.style.display = 'none';
-            currentLang = 'en'; // Forza inglese se non è italiano
+            currentLang = 'en';
         }
     }
 }
@@ -1035,7 +1035,6 @@ async function pollTelemetry() {
     try {
         let data = await window.pywebview.api.get_telemetry();
         
-        // Se siamo in modalità DEMO, prova a riconnettersi automaticamente in background ogni pochi secondi
         if (!data.connected && Math.random() < 0.3) {
             await window.pywebview.api.connect_sim();
             data = await window.pywebview.api.get_telemetry();
@@ -1048,51 +1047,57 @@ async function pollTelemetry() {
         document.getElementById('valHdg').innerText = data.hdg_deg;
         document.getElementById('valAcft').innerText = data.aircraft || "MSFS 2024";
 
-        const newLatLng = L.latLng(data.lat, data.lon);
+        if (data.lat !== undefined && data.lon !== undefined && data.lat !== null && data.lon !== null) {
+            const newLatLng = L.latLng(data.lat, data.lon);
 
-        let mapHeading = (data.hdg_true !== undefined && data.hdg_true !== null) ? Number(data.hdg_true) : Number(data.hdg_deg);
-        if (isNaN(mapHeading)) mapHeading = lastAcftHdgTrue;
+            let mapHeading = (data.hdg_true !== undefined && data.hdg_true !== null) ? Number(data.hdg_true) : Number(data.hdg_deg);
+            if (isNaN(mapHeading)) mapHeading = lastAcftHdgTrue;
 
-        if (lastAcftLatLng && newLatLng.distanceTo(lastAcftLatLng) > 8 && mapHeading === 0) {
-            mapHeading = calculateBearing(lastAcftLatLng.lat, lastAcftLatLng.lng, newLatLng.lat, newLatLng.lng);
-        }
-        lastAcftHdgTrue = mapHeading;
-        lastAcftLatLng = newLatLng;
+            if (lastAcftLatLng && newLatLng.distanceTo(lastAcftLatLng) > 8 && mapHeading === 0) {
+                mapHeading = calculateBearing(lastAcftLatLng.lat, lastAcftLatLng.lng, newLatLng.lat, newLatLng.lng);
+            }
+            lastAcftHdgTrue = mapHeading;
+            lastAcftLatLng = newLatLng;
 
-        if (data.connected && data.lat !== undefined && data.lon !== undefined) {
-            if (!acftMarker) {
-                acftMarker = L.marker(newLatLng, { icon: acftIcon, zIndexOffset: 1000 }).addTo(map);
-            } else {
-                acftMarker.setLatLng(newLatLng);
+            if (data.connected) {
+                if (!acftMarker) {
+                    acftMarker = L.marker(newLatLng, { icon: acftIcon, zIndexOffset: 1000 }).addTo(map);
+                } else {
+                    acftMarker.setLatLng(newLatLng);
+                }
+
+                const svgEl = document.getElementById('acftSvg');
+                if (svgEl) {
+                    svgEl.style.transform = `rotate(${mapHeading}deg)`;
+                }
+
+                if (followAircraft && !window._initialPanDone) {
+                    map.setView(newLatLng, 11, { animate: true });
+                    window._initialPanDone = true;
+                }
+            } else if (acftMarker) {
+                map.removeLayer(acftMarker);
+                acftMarker = null;
             }
 
-            const svgEl = document.getElementById('acftSvg');
-            if (svgEl) {
-                svgEl.style.transform = `rotate(${mapHeading}deg)`;
-            }
+            updateFlightInfoBar(data.lat, data.lon);
 
-            if (followAircraft && !window._initialPanDone) {
-                map.setView(newLatLng, 11, { animate: true });
-                window._initialPanDone = true;
-            }
-        }
-        updateFlightInfoBar(data.lat, data.lon);
+            const acftLine = document.getElementById('acftVnavLine');
+            if (acftLine && flightPlan && flightPlan.length >= 2) {
+                const res = calculateRouteProgress(data.lat, data.lon);
+                if (res) {
+                    const xPos = res.fraction * 1000;
+                    acftLine.setAttribute('x1', xPos);
+                    acftLine.setAttribute('x2', xPos);
+                    acftLine.style.display = 'block';
 
-        const acftLine = document.getElementById('acftVnavLine');
-        if (acftLine && flightPlan && flightPlan.length >= 2) {
-            const res = calculateRouteProgress(data.lat, data.lon);
-            if (res) {
-                const xPos = res.fraction * 1000;
-                acftLine.setAttribute('x1', xPos);
-                acftLine.setAttribute('x2', xPos);
-                acftLine.style.display = 'block';
-
-                updateActiveWaypointHighlight(data.lat, data.lon, mapHeading);
-            } else {
+                    updateActiveWaypointHighlight(data.lat, data.lon, mapHeading);
+                } else {
+                    acftLine.style.display = 'none';
+                }
+            } else if (acftLine) {
                 acftLine.style.display = 'none';
             }
-        } else if (acftLine) {
-            acftLine.style.display = 'none';
         }
     } catch (err) {
         console.error("Errore telemetria:", err);
@@ -1161,15 +1166,10 @@ async function initApp() {
             if (!airportsData.find(x => x.icao === a.icao)) airportsData.push(a);
         });
     }
+    
     vorsData = (nav.vors && nav.vors.length > 0) ? nav.vors : DEFAULT_VORS;
     ilsData = (nav.ils && nav.ils.length > 0) ? nav.ils : DEFAULT_ILS;
-    flightPlan = nav.flight_plan || [];
-
-    renderNavAids(vorsData, ilsData);
-    
-vorsData = (nav.vors && nav.vors.length > 0) ? nav.vors : DEFAULT_VORS;
-    ilsData = (nav.ils && nav.ils.length > 0) ? nav.ils : DEFAULT_ILS;
-    flightPlan = []; // Mappa pulita: nessun piano di volo attivo all'avvio
+    flightPlan = []; // Avvio con mappa pulita senza piano di volo precaricato
 
     renderNavAids(vorsData, ilsData);
     
@@ -1181,10 +1181,10 @@ vorsData = (nav.vors && nav.vors.length > 0) ? nav.vors : DEFAULT_VORS;
         setSimbriefCompactMode(false);
     }
 
-    // Pialla la UI senza disegnare rotte o waypoint all'avvio
     clearMapRoutes();
     const container = document.getElementById('fplContainer');
     if (container) container.innerHTML = '';
+
     pollTelemetry();
     setInterval(pollTelemetry, 1000);
 }
