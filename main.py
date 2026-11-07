@@ -116,10 +116,10 @@ def main():
     win_title = "AeroGlass Nav - Flight Planner & Moving Map"
 
     init_hmon, mx, my, mw, mh = get_monitor_from_cursor()
-        init_w = int(mw * 0.8)
-        init_h = int(mh * 0.8)
-        init_x = mx + (mw - init_w) // 2
-        init_y = my + (mh - init_h) // 2
+    init_w = int(mw * 0.8)
+    init_h = int(mh * 0.8)
+    init_x = mx + (mw - init_w) // 2
+    init_y = my + (mh - init_h) // 2
 
     window = webview.create_window(
         title=win_title,

@@ -209,18 +209,44 @@ function showSimbriefBox() {
     if (input) input.focus();
 }
 
+let sidebarOpen = true;
+function toggleSidebar() {
+    sidebarOpen = !sidebarOpen;
+    const sidebar = document.getElementById('sidebarPanel');
+    const arrow = document.getElementById('sidebarArrow');
+    const label = document.getElementById('sidebarLabel');
+    if (!sidebar) return;
+
+    if (sidebarOpen) {
+        sidebar.classList.remove('collapsed');
+        if (arrow) arrow.innerText = '◀';
+        if (label) label.style.display = 'none';
+    } else {
+        sidebar.classList.add('collapsed');
+        if (arrow) arrow.innerText = '▶';
+        if (label) label.style.display = 'block';
+    }
+}
+
 let drawerOpen = true;
 function toggleDrawer() {
     drawerOpen = !drawerOpen;
     const drawer = document.getElementById('elevationDrawer');
     const sidebar = document.getElementById('sidebarPanel');
+    const arrow = document.getElementById('drawerArrow');
+    const label = document.getElementById('drawerLabel');
     if (!drawer || !sidebar) return;
+
     if (drawerOpen) {
-        drawer.style.height = '104px';
+        drawer.classList.remove('collapsed');
         sidebar.style.bottom = '160px';
+        if (arrow) arrow.innerText = '▼';
+        if (label) label.style.display = 'none';
     } else {
-        drawer.style.height = '36px';
-        sidebar.style.bottom = '92px';
+        drawer.classList.add('collapsed');
+        sidebar.style.bottom = '48px';
+        if (arrow) arrow.innerText = '▲';
+        if (label) label.style.display = 'inline';
     }
 }
 

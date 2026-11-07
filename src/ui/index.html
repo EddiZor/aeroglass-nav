@@ -12,6 +12,10 @@
 
     <aside class="sidebar glass" id="sidebarPanel">
         <div class="sidebar-resizer" id="sidebarResizer" title="Trascina per ridimensionare"></div>
+        <button class="panel-arrow-btn sidebar-toggle-btn glass" id="btnToggleSidebar" onclick="toggleSidebar()" title="Nascondi / Mostra barra laterale">
+            <span id="sidebarArrow">◀</span>
+            <span id="sidebarLabel" class="collapsed-label" style="display:none;">P<br>L<br>N</span>
+        </button>
         
         <div class="brand">
             <div style="display: flex; align-items: baseline; gap: 6px; overflow: hidden;">
@@ -100,10 +104,15 @@
     </div>
 
     <div class="elevation-drawer glass" id="elevationDrawer">
+        <button class="panel-arrow-btn drawer-arrow-btn glass" id="btnToggleDrawer" onclick="toggleDrawer()" title="Nascondi / Mostra profilo VNAV">
+            <span id="drawerLabel" class="collapsed-label" style="display:none; margin-right:4px;">ALT</span>
+            <span id="drawerArrow">▼</span>
+        </button>
         <div class="drawer-header">
             <span id="vnavText">Profilo Altitudinale & Terreno (VNAV Multi-Step)</span>
             <button class="drawer-toggle" onclick="toggleDrawer()">[ Riduci / Espandi ]</button>
         </div>
+
         <div class="elevation-canvas-container">
             <svg width="100%" height="52px" preserveAspectRatio="none" viewBox="0 0 1000 50" style="width:100%; height:100%;">
                 <path id="vnavPath" d="M0,50 L0,35 Q250,15 500,28 T1000,40 L1000,50 Z" fill="rgba(56, 189, 248, 0.18)" stroke="#38bdf8" stroke-width="1.5"/>
