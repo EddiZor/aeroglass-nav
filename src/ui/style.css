@@ -79,12 +79,13 @@ body, html { width: 100%; height: 100%; overflow: hidden; background: #090d16; c
 }
 
 .elevation-drawer {
-    position: absolute; left: 16px; right: 16px; bottom: 48px; height: 104px;
+    position: absolute; left: 16px; right: 16px; bottom: 16px; height: 104px;
     z-index: 10; display: flex; flex-direction: column; padding: 10px 14px;
     transition: height 0.3s ease, bottom 0.3s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s ease;
 }
 .elevation-drawer.collapsed {
     height: 0px !important;
+    bottom: 16px !important;
     padding-top: 0px !important;
     padding-bottom: 0px !important;
     border-top-color: transparent;
@@ -247,9 +248,9 @@ body, html { width: 100%; height: 100%; overflow: hidden; background: #090d16; c
 }
 
 .flight-info-bar {
-    position: fixed;
-    right: 85px;
-    bottom: 10px;
+    position: absolute;
+    right: 16px;
+    bottom: 134px; /* Posizione sopra il cassetto aperto (16px dal fondo + 104px altezza + 14px spazio) */
     z-index: 25;
     display: flex;
     align-items: center;
@@ -259,7 +260,15 @@ body, html { width: 100%; height: 100%; overflow: hidden; background: #090d16; c
     font-family: Consolas, monospace;
     color: var(--cyan);
     pointer-events: none;
+    transition: bottom 0.3s ease;
 }
+
+/* Quando il cassetto è chiuso, la barra info si sposta più in basso */
+.elevation-drawer.collapsed ~ .flight-info-bar,
+body:has(#elevationDrawer.collapsed) .flight-info-bar {
+    bottom: 30px;
+}
+
 .info-sep {
     color: var(--border-glass);
 }
@@ -268,6 +277,42 @@ body, html { width: 100%; height: 100%; overflow: hidden; background: #090d16; c
     font-weight: 700;
     letter-spacing: 0.5px;
     padding: 6px 12px;
+}
+
+/* Tooltip sincronizzato per Rotta e Profilo VNAV */
+.vnav-route-tooltip {
+    background: rgba(15, 23, 42, 0.92) !important;
+    border: 1px solid var(--amber) !important;
+    color: var(--amber) !important;
+    font-family: Consolas, monospace !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    padding: 3px 8px !important;
+    border-radius: 6px !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.65) !important;
+    white-space: nowrap !important;
+}
+.vnav-route-tooltip::before {
+    border-top-color: var(--amber) !important;
+}
+
+.vnav-hover-badge {
+    position: absolute;
+    top: 4px;
+    transform: translateX(-50%);
+    background: rgba(15, 23, 42, 0.94);
+    border: 1px solid var(--amber);
+    color: var(--amber);
+    font-family: Consolas, monospace;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 5px;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 20;
+    display: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
 }
 
 .leaflet-popup-content-wrapper { background: rgba(15, 23, 42, 0.95); color: #f8fafc; border: 1px solid var(--border-glass); border-radius: 10px; }

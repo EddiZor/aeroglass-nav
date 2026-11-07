@@ -284,12 +284,12 @@ function toggleDrawer() {
 
     if (drawerOpen) {
         drawer.classList.remove('collapsed');
-        sidebar.style.bottom = '160px';
+        sidebar.style.bottom = '134px';
         if (arrow) arrow.innerText = '▼';
         if (label) label.style.display = 'none';
     } else {
         drawer.classList.add('collapsed');
-        sidebar.style.bottom = '48px';
+        sidebar.style.bottom = '16px';
         if (arrow) arrow.innerText = '▲';
         if (label) label.style.display = 'inline';
     }
@@ -584,7 +584,8 @@ async function clearFlightPlanUI() {
         const svgPath = document.getElementById('vnavPath');
         const svgText = document.getElementById('vnavText');
         if (svgPath) svgPath.setAttribute('d', 'M0,50 L1000,50 Z');
-        if (svgText) svgText.textContent = 'Nessun piano di volo attivo';
+        if (svgText) svgText.textContent = translations[currentLang].noFpl;
+        updateHoverSync(null);
         
         try {
             if (window.pywebview && window.pywebview.api && window.pywebview.api.clear_flight_plan) {
@@ -671,24 +672,151 @@ function getSegmentFraction(A, B, P) {
     return ((P.lng - A.lng) * dx + (P.lat - A.lat) * dy) / lenSq;
 }
 
-map.on('mousemove', function(e) {
+function getRouteDetailsAtFraction(fraction) {
+    if (!flightPlan || flightPlan.length < 2) return null;
+    
+    let totalDist = 0;
+    let segments = [];
+    
+    for (let i = 0; i < flightPlan.length - 1; i++) {
+        if (flightPlan[i].lat === null || flightPlan[i+1].lat === null) continue;
+        let p1 = L.latLng(flightPlan[i].lat, flightPlan[i].lon);
+        let p2 = L.latLng(flightPlan[i+1].lat, flightPlan[i+1].lon);
+        let d = p1.distanceTo(p2);
+        let alt1 = Number(flightPlan[i].alt_ft) || 0;
+        let alt2 = Number(flightPlan[i+1].alt_ft) || 0;
+        segments.push({ 
+            p1, p2, d, alt1, alt2, 
+            fromIdent: flightPlan[i].ident, 
+            toIdent: flightPlan[i+1].ident 
+        });
+        totalDist += d;
+    }
+    
+    if (totalDist === 0 || segments.length === 0) return null;
+    
+    let clampedFrac = Math.max(0, Math.min(1, fraction));
+    let targetDist = clampedFrac * totalDist;
+    let accumulated = 0;
+    
+    for (let seg of segments) {
+        if (accumulated + seg.d >= targetDist) {
+            let segFrac = seg.d === 0 ? 0 : (targetDist - accumulated) / seg.d;
+            let lat = seg.p1.lat + segFrac * (seg.p2.lat - seg.p1.lat);
+            let lng = seg.p1.lng + segFrac * (seg.p2.lng - seg.p1.lng);
+            let alt = Math.round(seg.alt1 + segFrac * (seg.alt2 - seg.alt1));
+            let distNm = (targetDist / 1852).toFixed(1);
+            let totalNm = (totalDist / 1852).toFixed(1);
+            return { 
+                latlng: L.latLng(lat, lng), 
+                alt, 
+                distNm, 
+                totalNm, 
+                leg: `${seg.fromIdent} ➔ ${seg.toIdent}` 
+            };
+        }
+        accumulated += seg.d;
+    }
+    
+    let last = segments[segments.length - 1];
+    return { 
+        latlng: last.p2, 
+        alt: last.alt2, 
+        distNm: (totalDist / 1852).toFixed(1), 
+        totalNm: (totalDist / 1852).toFixed(1),
+        leg: `${last.fromIdent} ➔ ${last.toIdent}`
+    };
+}
+
+function updateHoverSync(fraction) {
     const mouseLine = document.getElementById('mouseVnavLine');
-    if (!mouseLine) return;
-    if (!flightPlan || flightPlan.length < 2) {
-        mouseLine.style.display = 'none';
+    const container = document.querySelector('.elevation-canvas-container');
+    let vnavBadge = document.getElementById('vnavHoverBadge');
+    
+    if (!vnavBadge && container) {
+        vnavBadge = document.createElement('div');
+        vnavBadge.id = 'vnavHoverBadge';
+        vnavBadge.className = 'vnav-hover-badge';
+        container.appendChild(vnavBadge);
+    }
+
+    if (fraction === null || !flightPlan || flightPlan.length < 2) {
+        if (mouseLine) mouseLine.style.display = 'none';
+        if (vnavBadge) vnavBadge.style.display = 'none';
+        if (mouseRouteMarker) {
+            map.removeLayer(mouseRouteMarker);
+            mouseRouteMarker = null;
+        }
         return;
     }
 
-    const res = calculateRouteProgress(e.latlng.lat, e.latlng.lng);
-    if (res && res.distanceToRoute < 15000) {
-        const xPos = res.fraction * 1000;
+    const details = getRouteDetailsAtFraction(fraction);
+    if (!details) return;
+
+    if (mouseLine) {
+        const xPos = fraction * 1000;
         mouseLine.setAttribute('x1', xPos);
         mouseLine.setAttribute('x2', xPos);
         mouseLine.style.display = 'block';
+    }
+
+    const labelText = `${details.leg} | ${details.alt.toLocaleString()} ft | ${details.distNm} NM`;
+
+    if (vnavBadge) {
+        vnavBadge.innerText = labelText;
+        const safePct = Math.max(10, Math.min(90, fraction * 100));
+        vnavBadge.style.left = `${safePct}%`;
+        vnavBadge.style.display = 'block';
+    }
+
+    if (!mouseRouteMarker) {
+        mouseRouteMarker = L.circleMarker(details.latlng, {
+            radius: 6,
+            color: '#fbbf24',
+            fillColor: '#fbbf24',
+            fillOpacity: 0.95,
+            weight: 2,
+            interactive: false
+        }).addTo(map);
+        mouseRouteMarker.bindTooltip(labelText, {
+            permanent: true,
+            direction: 'top',
+            offset: [0, -10],
+            className: 'vnav-route-tooltip'
+        }).openTooltip();
     } else {
-        mouseLine.style.display = 'none';
+        mouseRouteMarker.setLatLng(details.latlng);
+        mouseRouteMarker.setTooltipContent(labelText);
+    }
+}
+
+map.on('mousemove', function(e) {
+    if (!flightPlan || flightPlan.length < 2) {
+        updateHoverSync(null);
+        return;
+    }
+    const res = calculateRouteProgress(e.latlng.lat, e.latlng.lng);
+    if (res && res.distanceToRoute < 15000) {
+        updateHoverSync(res.fraction);
+    } else {
+        updateHoverSync(null);
     }
 });
+
+const vnavSvgEl = document.getElementById('vnavSvg');
+if (vnavSvgEl) {
+    vnavSvgEl.addEventListener('mousemove', function(e) {
+        if (!flightPlan || flightPlan.length < 2) return;
+        const rect = vnavSvgEl.getBoundingClientRect();
+        if (rect.width === 0) return;
+        const fraction = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        updateHoverSync(fraction);
+    });
+
+    vnavSvgEl.addEventListener('mouseleave', function() {
+        updateHoverSync(null);
+    });
+}
 
 function calculateBearing(lat1, lon1, lat2, lon2) {
     const toRad = d => d * Math.PI / 180;
@@ -802,7 +930,15 @@ function parseDmsCoord(dmsStr) {
     };
     const lat = parsePart(parts[0]);
     const lon = parsePart(parts[1]);
-    if (lat !== null && lon !== null) return { lat, lon };
+    
+    let alt = null;
+    if (parts.length >= 3) {
+        const rawAlt = parseFloat(parts[2].trim());
+        if (!isNaN(rawAlt) && rawAlt > 0) {
+            alt = Math.round(rawAlt);
+        }
+    }
+    if (lat !== null && lon !== null) return { lat, lon, alt };
     return null;
 }
 
@@ -1060,10 +1196,10 @@ async function pollTelemetry() {
             lastAcftLatLng = newLatLng;
 
             if (data.connected) {
-                if (!acftMarker) {
-                    acftMarker = L.marker(newLatLng, { icon: acftIcon, zIndexOffset: 1000 }).addTo(map);
+                if (!aircraftMarker) {
+                    aircraftMarker = L.marker(newLatLng, { icon: acftIcon, zIndexOffset: 1000 }).addTo(map);
                 } else {
-                    acftMarker.setLatLng(newLatLng);
+                    aircraftMarker.setLatLng(newLatLng);
                 }
 
                 const svgEl = document.getElementById('acftSvg');
@@ -1071,13 +1207,18 @@ async function pollTelemetry() {
                     svgEl.style.transform = `rotate(${mapHeading}deg)`;
                 }
 
-                if (followAircraft && !window._initialPanDone) {
-                    map.setView(newLatLng, 11, { animate: true });
-                    window._initialPanDone = true;
+                if (followAircraft) {
+                    if (!window._initialPanDone) {
+                        map.setView(newLatLng, 11, { animate: true });
+                        window._initialPanDone = true;
+                    } else {
+                        map.panTo(newLatLng, { animate: true, duration: 0.5 });
+                    }
                 }
-            } else if (acftMarker) {
-                map.removeLayer(acftMarker);
-                acftMarker = null;
+            } else if (aircraftMarker) {
+                map.removeLayer(aircraftMarker);
+                aircraftMarker = null;
+                window._initialPanDone = false;
             }
 
             updateFlightInfoBar(data.lat, data.lon);
@@ -1169,7 +1310,7 @@ async function initApp() {
     
     vorsData = (nav.vors && nav.vors.length > 0) ? nav.vors : DEFAULT_VORS;
     ilsData = (nav.ils && nav.ils.length > 0) ? nav.ils : DEFAULT_ILS;
-    flightPlan = []; // Avvio con mappa pulita senza piano di volo precaricato
+    flightPlan = [];
 
     renderNavAids(vorsData, ilsData);
     
