@@ -1,5 +1,50 @@
 const map = L.map('map', { zoomControl: false }).setView([43.5, 12.0], 6);
 
+const translations = {
+    en: {
+        searchPlaceholder: "Search ICAO, VOR or Airport...",
+        activeFpl: "Active Flight Plan",
+        noFpl: "No active flight plan",
+        vnavTitle: "Altitude Profile & Terrain (VNAV Multi-Step)"
+    },
+    it: {
+        searchPlaceholder: "Cerca ICAO, VOR o Aeroporto...",
+        activeFpl: "Piano di Volo Attivo",
+        noFpl: "Nessun piano di volo attivo",
+        vnavTitle: "Profilo Altitudinale & Terreno (VNAV Multi-Step)"
+    }
+};
+
+let currentLang = 'en'; // Inglese come lingua principale predefinita
+
+function checkSystemLanguage() {
+    const sysLang = navigator.language || navigator.userLanguage || '';
+    const isItalianSystem = sysLang.toLowerCase().startsWith('it');
+    const langBtn = document.getElementById('btnLangSelect');
+    if (langBtn) {
+        if (isItalianSystem) {
+            langBtn.style.display = 'inline-flex'; // Mostra il pulsante solo se il sistema è in italiano
+        } else {
+            langBtn.style.display = 'none';
+            currentLang = 'en'; // Forza inglese se non è italiano
+        }
+    }
+}
+
+function toggleLanguage() {
+    currentLang = currentLang === 'en' ? 'it' : 'en';
+    const langLabel = document.getElementById('langLabel');
+    if (langLabel) langLabel.innerText = currentLang.toUpperCase();
+    
+    const searchInput = document.getElementById('omniSearch');
+    if (searchInput) searchInput.placeholder = translations[currentLang].searchPlaceholder;
+    
+    const vnavText = document.getElementById('vnavText');
+    if (vnavText && (!flightPlan || flightPlan.length === 0)) {
+        vnavText.textContent = translations[currentLang].noFpl;
+    }
+}
+
 const tileSources = {
     dark: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
     vfr: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
@@ -297,7 +342,7 @@ let waypointMarkers = [];
 let vorMarkers = [];
 let ilsMarkers = [];
 let alternateMarker = null;
-let acftMarker = null;
+let aircraftMarker = null;
 let mouseRouteMarker = null;
 let initialized = false;
 
@@ -1007,19 +1052,24 @@ async function pollTelemetry() {
         lastAcftHdgTrue = mapHeading;
         lastAcftLatLng = newLatLng;
 
-        if (!acftMarker) {
-            acftMarker = L.marker(newLatLng, { icon: acftIcon, zIndexOffset: 1000 }).addTo(map);
-        } else {
-            acftMarker.setLatLng(newLatLng);
-        }
+        if (data.connected) {
+            if (!acftMarker) {
+                acftMarker = L.marker(newLatLng, { icon: acftIcon, zIndexOffset: 1000 }).addTo(map);
+            } else {
+                acftMarker.setLatLng(newLatLng);
+            }
 
-        const svgEl = document.getElementById('acftSvg');
-        if (svgEl) {
-            svgEl.style.transform = `rotate(${mapHeading}deg)`;
-        }
+            const svgEl = document.getElementById('acftSvg');
+            if (svgEl) {
+                svgEl.style.transform = `rotate(${mapHeading}deg)`;
+            }
 
-        if (followAircraft) {
-            map.panTo(newLatLng, { animate: true, duration: 0.5 });
+            if (followAircraft) {
+                map.panTo(newLatLng, { animate: true, duration: 0.5 });
+            }
+        } else if (acftMarker) {
+            map.removeLayer(acftMarker);
+            acftMarker = null;
         }
 
         updateFlightInfoBar(data.lat, data.lon);
@@ -1093,6 +1143,7 @@ window.addEventListener('drop', (e) => {
 async function initApp() {
     if (initialized || !window.pywebview || !window.pywebview.api) return;
     initialized = true;
+    checkSystemLanguage();
     map.invalidateSize();
 
     renderNavAids(vorsData, ilsData);
@@ -1112,26 +1163,24 @@ async function initApp() {
 
     renderNavAids(vorsData, ilsData);
     
+vorsData = (nav.vors && nav.vors.length > 0) ? nav.vors : DEFAULT_VORS;
+    ilsData = (nav.ils && nav.ils.length > 0) ? nav.ils : DEFAULT_ILS;
+    flightPlan = []; // Mappa pulita: nessun piano di volo attivo all'avvio
+
+    renderNavAids(vorsData, ilsData);
+    
     if (nav.simbrief_userid) {
         const inputEl = document.getElementById('simbriefIdInput');
         if (inputEl) inputEl.value = nav.simbrief_userid;
-        if (flightPlan && flightPlan.length > 0) {
-            setSimbriefCompactMode(true);
-        } else {
-            const res = await window.pywebview.api.fetch_simbrief_plan();
-            if (res.success && res.flight_plan && res.flight_plan.length > 0) {
-                flightPlan = res.flight_plan;
-                nav.alternate = res.alternate;
-                setSimbriefCompactMode(true);
-            } else {
-                setSimbriefCompactMode(false);
-            }
-        }
+        setSimbriefCompactMode(false);
     } else {
         setSimbriefCompactMode(false);
     }
 
-    updateFlightPlanUI(nav.alternate, false);
+    // Pialla la UI senza disegnare rotte o waypoint all'avvio
+    clearMapRoutes();
+    const container = document.getElementById('fplContainer');
+    if (container) container.innerHTML = '';
     pollTelemetry();
     setInterval(pollTelemetry, 1000);
 }

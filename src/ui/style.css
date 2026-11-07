@@ -286,5 +286,11 @@ body, html { width: 100%; height: 100%; overflow: hidden; background: #090d16; c
     color: var(--border-glass);
 }
 
+#btnLangSelect {
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 6px 12px;
+}
+
 .leaflet-popup-content-wrapper { background: rgba(15, 23, 42, 0.95); color: #f8fafc; border: 1px solid var(--border-glass); border-radius: 10px; }
 .leaflet-popup-tip { background: rgba(15, 23, 42, 0.95); }
