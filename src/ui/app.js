@@ -5,17 +5,39 @@ const translations = {
         searchPlaceholder: "Search ICAO, VOR or Airport...",
         activeFpl: "Active Flight Plan",
         noFpl: "No active flight plan",
-        vnavTitle: "Altitude Profile & Terrain (VNAV Multi-Step)"
+        vnavTitle: "Altitude Profile & Terrain (VNAV Multi-Step)",
+        btnImport: "Import .pln",
+        btnClear: "Clear",
+        btnReload: "Reload",
+        btnSimbrief: "SimBrief",
+        btnFilters: "Filters & SID/STAR",
+        btnNavaids: "VOR / ILS: ON",
+        btnNavaidsOff: "VOR / ILS: OFF",
+        btnFollowOn: "🎯 Follow Acft: ON",
+        btnFollowFree: "✋ Free Map",
+        btnReduce: "[ Reduce / Expand ]",
+        mapStyleLabel: "Map: IFR Dark Cockpit"
     },
     it: {
         searchPlaceholder: "Cerca ICAO, VOR o Aeroporto...",
         activeFpl: "Piano di Volo Attivo",
         noFpl: "Nessun piano di volo attivo",
-        vnavTitle: "Profilo Altitudinale & Terreno (VNAV Multi-Step)"
+        vnavTitle: "Profilo Altitudinale & Terreno (VNAV Multi-Step)",
+        btnImport: "Importa .pln",
+        btnClear: "Pulisci",
+        btnReload: "Ricarica",
+        btnSimbrief: "SimBrief",
+        btnFilters: "Filtri & SID/STAR",
+        btnNavaids: "VOR / ILS: ON",
+        btnNavaidsOff: "VOR / ILS: OFF",
+        btnFollowOn: "🎯 Segui Aereo: ON",
+        btnFollowFree: "✋ Mappa Libera",
+        btnReduce: "[ Riduci / Espandi ]",
+        mapStyleLabel: "Mappa: IFR Dark Cockpit"
     }
 };
 
-let currentLang = 'en';
+let currentLang = 'it';
 
 function checkSystemLanguage() {
     const sysLang = navigator.language || navigator.userLanguage || '';
@@ -32,16 +54,59 @@ function checkSystemLanguage() {
 }
 
 function toggleLanguage() {
+    // Inverte la lingua corrente
     currentLang = currentLang === 'en' ? 'it' : 'en';
+    
+    // Se adesso siamo in italiano ('it'), sul pulsante mostriamo 'EN' (per poter tornare a inglese).
+    // Se adesso siamo in inglese ('en'), sul pulsante mostriamo 'IT' (per poter passare a italiano).
+    const nextLangDisplay = currentLang === 'en' ? 'IT' : 'EN';
+    
     const langLabel = document.getElementById('langLabel');
-    if (langLabel) langLabel.innerText = currentLang.toUpperCase();
+    if (langLabel) langLabel.innerText = nextLangDisplay;
     
+    const t = translations[currentLang];
+    
+    // Ricerca
     const searchInput = document.getElementById('omniSearch');
-    if (searchInput) searchInput.placeholder = translations[currentLang].searchPlaceholder;
+    if (searchInput) searchInput.placeholder = t.searchPlaceholder;
     
+    // Titolo Sezione Piano di Volo
+    const fplTitleEl = document.querySelector('.sidebar-section-title');
+    if (fplTitleEl) fplTitleEl.innerText = t.activeFpl.toUpperCase();
+
+    // Pulsanti Sidebar
+    const btnImport = document.querySelector('button[onclick="importPlnFile()"]');
+    if (btnImport) btnImport.innerHTML = `📁 ${t.btnImport}`;
+    
+    const btnClear = document.querySelector('button[onclick="clearFlightPlanUI()"]');
+    if (btnClear) btnClear.innerHTML = `🗑️ ${t.btnClear}`;
+
+    // VNAV Testo
     const vnavText = document.getElementById('vnavText');
-    if (vnavText && (!flightPlan || flightPlan.length === 0)) {
-        vnavText.textContent = translations[currentLang].noFpl;
+    if (vnavText) {
+        if (!flightPlan || flightPlan.length === 0) {
+            vnavText.textContent = t.noFpl;
+        } else {
+            const maxAlt = Math.max(...flightPlan.map(w => Number(w.alt_ft) || 5000), 5000);
+            vnavText.textContent = `${t.vnavTitle.split('(')[0].trim()} (Max Alt: ${maxAlt.toLocaleString()} ft)`;
+        }
+    }
+
+    // Pulsanti Superiori (Barra strumenti)
+    const btnFollow = document.getElementById('btnFollowAcft');
+    if (btnFollow) {
+        btnFollow.innerText = followAircraft ? t.btnFollowOn : t.btnFollowFree;
+    }
+
+    const btnNavaids = document.getElementById('btnToggleNavaids');
+    if (btnNavaids) {
+        btnNavaids.innerText = showNavaids ? t.btnNavaids : t.btnNavaidsOff;
+    }
+
+    // Toggle cassetto VNAV in basso a destra
+    const drawerToggleText = document.querySelector('.elevation-toggle span:last-child');
+    if (drawerToggleText) {
+        drawerToggleText.innerText = t.btnReduce;
     }
 }
 

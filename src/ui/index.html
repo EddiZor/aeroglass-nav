@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>AeroGlass Nav</title>
+    <link rel="icon" type="image/x-icon" href="../../assets/icons/AeroGlass-icon.ico">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="style.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -57,8 +58,8 @@
             🎯 Segui Aereo: ON
         </button>
 
-        <button id="btnLangSelect" class="glass btn-follow" style="display: none;" onclick="toggleLanguage()" title="Switch Language (EN / IT)">
-            🌐 <span id="langLabel">EN</span>
+        <button id="btnLangSelect" class="top-btn" onclick="toggleLanguage()">
+            🌐 <span id="langLabel">IT</span>
         </button>
 
         <select id="mapStyleSelect" class="glass layer-select" onchange="switchMapStyle(this.value)">
