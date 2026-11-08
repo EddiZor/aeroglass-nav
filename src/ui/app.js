@@ -6,9 +6,10 @@ const translations = {
         activeFpl: "Active Flight Plan",
         noFpl: "No active flight plan",
         vnavTitle: "Altitude Profile & Terrain (VNAV Multi-Step)",
-        btnImport: "Import .pln",
-        btnClear: "Clear",
-        btnReload: "Reload",
+        btnCreate: "Create",
+        btnImport: ".pln",
+        btnExport: ".pln",
+        btnReload: "SimBrief",
         btnSimbrief: "SimBrief",
         btnFilters: "Filters & SID/STAR",
         btnNavaids: "📡 VOR / ILS: ON",
@@ -22,9 +23,10 @@ const translations = {
         activeFpl: "Piano di Volo Attivo",
         noFpl: "Nessun piano di volo attivo",
         vnavTitle: "Profilo Altitudinale & Terreno (VNAV Multi-Step)",
-        btnImport: "Importa .pln",
-        btnClear: "Pulisci",
-        btnReload: "Ricarica",
+        btnCreate: "Crea",
+        btnImport: ".pln",
+        btnExport: ".pln",
+        btnReload: "SimBrief",
         btnSimbrief: "SimBrief",
         btnFilters: "Filtri & SID/STAR",
         btnNavaids: "📡 VOR / ILS: ON",
@@ -65,11 +67,14 @@ function applyCurrentLanguageUI() {
     const fplTitleEl = document.getElementById('fplSectionTitle');
     if (fplTitleEl) fplTitleEl.innerText = t.activeFpl.toUpperCase();
 
+    const btnCreate = document.getElementById('btnCreateFpl');
+    if (btnCreate) btnCreate.innerHTML = `➕ ${t.btnCreate}`;
+
     const btnImport = document.getElementById('btnImportPln');
     if (btnImport) btnImport.innerHTML = `📁 ${t.btnImport}`;
 
-    const btnClear = document.getElementById('btnClearPln');
-    if (btnClear) btnClear.innerHTML = `🗑️ ${t.btnClear}`;
+    const btnExport = document.getElementById('btnExportPln');
+    if (btnExport) btnExport.innerHTML = `💾 ${t.btnExport}`;
 
     const btnReload = document.getElementById('simbriefCompactBtn');
     if (btnReload) btnReload.innerHTML = `✈️ ${t.btnReload}`;
@@ -139,6 +144,8 @@ const EXTRA_AIRPORTS = [
     {"icao": "LIPO", "name": "Brescia Montichiari", "lat": 45.4289, "lon": 10.3306, "elev": 356, "rwy": "14/32", "metar": "LIPO 061650Z 06005KT 9999 FEW040 16/10 Q1018"},
     {"icao": "LIDT", "name": "Trento Mattarello", "lat": 46.0219, "lon": 11.1242, "elev": 607, "rwy": "18/36", "metar": "LIDT 061650Z VRB03KT CAVOK 14/06 Q1019"},
     {"icao": "LIPD", "name": "Udine Campoformido", "lat": 46.0319, "lon": 13.1869, "elev": 308, "rwy": "09/27", "metar": "LIPD 061650Z 05004KT CAVOK 17/08 Q1018"},
+    {"icao": "LIPA", "name": "Aviano Air Base", "lat": 46.0319, "lon": 12.5965, "elev": 413, "rwy": "05/23", "metar": "LIPA 061650Z 05005KT CAVOK 17/08 Q1018"},
+    {"icao": "LIKL", "name": "La Comina Pordenone", "lat": 46.0025, "lon": 12.6908, "elev": 275, "rwy": "18/36", "metar": "LIKL 061650Z VRB03KT CAVOK 17/09 Q1018"},
     {"icao": "LITY", "name": "Agrigento Valle dei Templi", "lat": 37.2450, "lon": 13.6620, "elev": 145, "rwy": "11/29", "metar": "LITY 061650Z 12008KT CAVOK 22/13 Q1016"},
     {"icao": "LIRF", "name": "Roma Fiumicino", "lat": 41.8003, "lon": 12.2389, "elev": 15, "rwy": "16L/34R", "metar": "LIRF 061650Z 25010KT CAVOK 18/11 Q1018"},
     {"icao": "LIPE", "name": "Bologna Borgo Panigale", "lat": 44.5354, "lon": 11.2887, "elev": 123, "rwy": "12/30", "metar": "LIPE 061650Z 12005KT CAVOK 16/10 Q1018"},
@@ -147,6 +154,7 @@ const EXTRA_AIRPORTS = [
     {"icao": "LIML", "name": "Milano Linate", "lat": 45.4451, "lon": 9.2767, "elev": 353, "rwy": "18/36", "metar": "LIML 061650Z 11004KT CAVOK 16/10 Q1019"},
     {"icao": "LIPZ", "name": "Venezia Tessera", "lat": 45.5053, "lon": 12.3519, "elev": 7, "rwy": "04/22", "metar": "LIPZ 061650Z 04006KT CAVOK 16/11 Q1018"},
     {"icao": "LIPQ", "name": "Trieste Ronchi dei Legionari", "lat": 45.8275, "lon": 13.4722, "elev": 39, "rwy": "09/27", "metar": "LIPQ 061650Z 06005KT CAVOK 16/09 Q1018"},
+    {"icao": "LIPV", "name": "Venezia San Nicolo Lido", "lat": 45.4281, "lon": 12.3878, "elev": 13, "rwy": "05/23", "metar": "LIPV 061650Z 05005KT CAVOK 16/11 Q1018"},
     {"icao": "LDZA", "name": "Zagreb Franjo Tudman", "lat": 45.7429, "lon": 16.0688, "elev": 353, "rwy": "04/22", "metar": "LDZA 061650Z 05006KT CAVOK 15/08 Q1019"},
     {"icao": "LJLJ", "name": "Ljubljana Brnik", "lat": 46.2237, "lon": 14.4576, "elev": 1273, "rwy": "12/30", "metar": "LJLJ 061650Z VRB02KT CAVOK 13/07 Q1020"},
     {"icao": "LIRQ", "name": "Firenze Peretola", "lat": 43.8100, "lon": 11.2051, "elev": 142, "rwy": "05/23", "metar": "LIRQ 061650Z 23006KT CAVOK 17/10 Q1018"},
@@ -488,6 +496,62 @@ function renderNavAids(vors, ilsList) {
     });
 }
 
+function applyClimbDescentProfile(waypoints, cruiseAlt) {
+    const lastIdx = waypoints.length - 1;
+    if (waypoints.length < 2) return waypoints;
+
+    if (waypoints[0].lat !== null && waypoints[lastIdx].lat !== null) {
+        for (let i = 1; i < lastIdx; i++) {
+            if (waypoints[i].lat === null || isNaN(waypoints[i].lat)) {
+                let prevIdx = i - 1;
+                while (prevIdx > 0 && waypoints[prevIdx].lat === null) prevIdx--;
+                let nextIdx = i + 1;
+                while (nextIdx < lastIdx && waypoints[nextIdx].lat === null) nextIdx++;
+
+                const span = nextIdx - prevIdx;
+                const frac = (i - prevIdx) / span;
+                waypoints[i].lat = Number((waypoints[prevIdx].lat + frac * (waypoints[nextIdx].lat - waypoints[prevIdx].lat)).toFixed(5));
+                waypoints[i].lon = Number((waypoints[prevIdx].lon + frac * (waypoints[nextIdx].lon - waypoints[prevIdx].lon)).toFixed(5));
+            }
+        }
+    }
+
+    if (waypoints.length >= 4) {
+        const midAlts = waypoints.slice(1, lastIdx).map(w => Number(w.alt_ft) || 0);
+        const maxCruise = cruiseAlt || Math.max(...midAlts);
+        const allSame = midAlts.every(a => a === maxCruise && a > 0);
+
+        if (allSame) {
+            let totalDist = 0;
+            let cumDist = [0];
+            for (let i = 0; i < lastIdx; i++) {
+                if (waypoints[i].lat !== null && waypoints[i + 1].lat !== null) {
+                    totalDist += L.latLng(waypoints[i].lat, waypoints[i].lon).distanceTo(L.latLng(waypoints[i + 1].lat, waypoints[i + 1].lon));
+                }
+                cumDist.push(totalDist);
+            }
+            if (totalDist > 0) {
+                const depAlt = Number(waypoints[0].alt_ft) || 0;
+                const destAlt = Number(waypoints[lastIdx].alt_ft) || 0;
+                const climbEndFrac = 0.22;
+                const descStartFrac = 0.75;
+
+                for (let i = 1; i < lastIdx; i++) {
+                    const frac = cumDist[i] / totalDist;
+                    if (frac < climbEndFrac) {
+                        const cFrac = frac / climbEndFrac;
+                        waypoints[i].alt_ft = Math.round((depAlt + cFrac * (maxCruise - depAlt)) / 100) * 100;
+                    } else if (frac > descStartFrac) {
+                        const dFrac = (frac - descStartFrac) / (1 - descStartFrac);
+                        waypoints[i].alt_ft = Math.round((maxCruise - dFrac * (maxCruise - destAlt)) / 100) * 100;
+                    }
+                }
+            }
+        }
+    }
+    return waypoints;
+}
+
 function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
     if (alternateData !== undefined) {
         currentAlternate = alternateData;
@@ -617,6 +681,105 @@ async function editWaypointAlt(index, currentAlt) {
                 await window.pywebview.api.update_waypoint_altitude(index, newAlt);
             }
         } catch (e) {}
+    }
+}
+
+function openCreateFplModal() {
+    const modal = document.getElementById('createFplModal');
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeCreateFplModal() {
+    const modal = document.getElementById('createFplModal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function exportCurrentFlightPlan() {
+    if (!flightPlan || flightPlan.length < 2) {
+        alert("Nessun piano di volo attivo da esportare. Creane o importane uno prima.");
+        return;
+    }
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.export_pln_file) {
+        try {
+            const exportRes = await window.pywebview.api.export_pln_file(flightPlan);
+            if (exportRes && exportRes.success) {
+                alert(`Piano di volo salvato nella cartella Download:\n${exportRes.path}`);
+            } else {
+                alert("Errore durante il salvataggio del file .pln: " + (exportRes.error || "Errore sconosciuto"));
+            }
+        } catch (err) {
+            console.error("Errore export PLN:", err);
+        }
+    }
+}
+
+async function buildAndExportManualFlightPlan(doExport = true) {
+    const depInput = document.getElementById('manualDep').value.trim().toUpperCase();
+    const wptsInput = document.getElementById('manualWpts').value.trim().toUpperCase();
+    const destInput = document.getElementById('manualDest').value.trim().toUpperCase();
+    const cruiseAlt = parseInt(document.getElementById('manualCruiseAlt').value, 10) || 12000;
+
+    if (!depInput || !destInput) {
+        alert("Inserisci almeno l'aeroporto di partenza e di arrivo.");
+        return;
+    }
+
+    let generatedPlan = [];
+
+    const depRes = resolveKnownCoords(depInput);
+    const depApt = findAirport(depInput);
+    generatedPlan.push({
+        ident: depInput,
+        name: depRes ? depRes.name : "Aeroporto di Partenza",
+        lat: depRes ? depRes.lat : null,
+        lon: depRes ? depRes.lon : null,
+        alt_ft: depApt ? (depApt.elev || 0) : 0,
+        type: "DEP",
+        metar: depRes ? depRes.metar : ""
+    });
+
+    if (wptsInput) {
+        const tokens = wptsInput.split(/[\s,]+/);
+        for (let token of tokens) {
+            if (!token) continue;
+            const wptRes = resolveKnownCoords(token);
+            generatedPlan.push({
+                ident: token,
+                name: wptRes ? wptRes.name : "Waypoint Rotta",
+                lat: wptRes ? wptRes.lat : null,
+                lon: wptRes ? wptRes.lon : null,
+                alt_ft: cruiseAlt,
+                type: "WPT"
+            });
+        }
+    }
+
+    const destRes = resolveKnownCoords(destInput);
+    const destApt = findAirport(destInput);
+    generatedPlan.push({
+        ident: destInput,
+        name: destRes ? destRes.name : "Aeroporto di Arrivo",
+        lat: destRes ? destRes.lat : null,
+        lon: destRes ? destRes.lon : null,
+        alt_ft: destApt ? (destApt.elev || 0) : 0,
+        type: "DEST",
+        metar: destRes ? destRes.metar : ""
+    });
+
+    if (generatedPlan[0].lat === null || generatedPlan[generatedPlan.length - 1].lat === null) {
+        alert("Coordinate non trovate per l'aeroporto di partenza o di arrivo inserito. Verifica il codice ICAO (es. LIPD, LIRF, LIPZ, LITY).");
+        return;
+    }
+
+    generatedPlan = applyClimbDescentProfile(generatedPlan, cruiseAlt);
+
+    flightPlan = generatedPlan;
+    currentAlternate = null;
+    closeCreateFplModal();
+    updateFlightPlanUI(null, true);
+
+    if (doExport) {
+        await exportCurrentFlightPlan();
     }
 }
 
@@ -1139,56 +1302,7 @@ async function processAndRenderPlnXml(xmlText) {
         }
     }
 
-    const lastIdx = parsed.length - 1;
-    if (parsed.length >= 2 && parsed[0].lat !== null && parsed[lastIdx].lat !== null) {
-        for (let i = 1; i < lastIdx; i++) {
-            if (parsed[i].lat === null || isNaN(parsed[i].lat)) {
-                let prevIdx = i - 1;
-                while (prevIdx > 0 && parsed[prevIdx].lat === null) prevIdx--;
-                let nextIdx = i + 1;
-                while (nextIdx < lastIdx && parsed[nextIdx].lat === null) nextIdx++;
-
-                const span = nextIdx - prevIdx;
-                const frac = (i - prevIdx) / span;
-                parsed[i].lat = Number((parsed[prevIdx].lat + frac * (parsed[nextIdx].lat - parsed[prevIdx].lat)).toFixed(5));
-                parsed[i].lon = Number((parsed[prevIdx].lon + frac * (parsed[nextIdx].lon - parsed[prevIdx].lon)).toFixed(5));
-            }
-        }
-    }
-
-    if (parsed.length >= 4) {
-        const midAlts = parsed.slice(1, lastIdx).map(w => Number(w.alt_ft) || 0);
-        const maxCruise = Math.max(...midAlts);
-        const allSame = midAlts.every(a => a === maxCruise && a > 0);
-        
-        if (allSame) {
-            let totalDist = 0;
-            let cumDist = [0];
-            for (let i = 0; i < lastIdx; i++) {
-                if (parsed[i].lat !== null && parsed[i+1].lat !== null) {
-                    totalDist += L.latLng(parsed[i].lat, parsed[i].lon).distanceTo(L.latLng(parsed[i+1].lat, parsed[i+1].lon));
-                }
-                cumDist.push(totalDist);
-            }
-            if (totalDist > 0) {
-                const depAlt = Number(parsed[0].alt_ft) || 0;
-                const destAlt = Number(parsed[lastIdx].alt_ft) || 0;
-                const climbEndFrac = 0.22;
-                const descStartFrac = 0.75;
-                
-                for (let i = 1; i < lastIdx; i++) {
-                    const frac = cumDist[i] / totalDist;
-                    if (frac < climbEndFrac) {
-                        const cFrac = frac / climbEndFrac;
-                        parsed[i].alt_ft = Math.round((depAlt + cFrac * (maxCruise - depAlt)) / 100) * 100;
-                    } else if (frac > descStartFrac) {
-                        const dFrac = (frac - descStartFrac) / (1 - descStartFrac);
-                        parsed[i].alt_ft = Math.round((maxCruise - dFrac * (maxCruise - destAlt)) / 100) * 100;
-                    }
-                }
-            }
-        }
-    }
+    parsed = applyClimbDescentProfile(parsed, null);
 
     flightPlan = parsed;
     currentAlternate = null;

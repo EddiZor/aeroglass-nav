@@ -13,6 +13,16 @@ def get_base_dir():
     return os.path.abspath(".")
 
 
+def _format_dms_coord(val, is_lat=True):
+    hemi = ("N" if val >= 0 else "S") if is_lat else ("E" if val >= 0 else "W")
+    abs_val = abs(float(val))
+    deg = int(abs_val)
+    rem = (abs_val - deg) * 60.0
+    minutes = int(rem)
+    seconds = (rem - minutes) * 60.0
+    return f"{hemi}{deg}° {minutes}' {seconds:.2f}\""
+
+
 class AeroGlassAPI:
     def __init__(self):
         self._telemetry = TelemetryManager()
@@ -153,6 +163,74 @@ class AeroGlassAPI:
             except Exception as e:
                 return {"success": False, "error": str(e)}
         return {"success": False}
+
+    def export_pln_file(self, flight_plan_data):
+        """Genera e salva un file .pln standard per MSFS nella cartella Download."""
+        try:
+            if not flight_plan_data or len(flight_plan_data) < 2:
+                return {"success": False, "error": "Il piano di volo deve contenere almeno Partenza e Arrivo."}
+
+            downloads_path = os.path.join(os.path.expanduser("~"), "Downloads")
+            if not os.path.exists(downloads_path):
+                downloads_path = os.path.abspath(".")
+
+            dep_icao = str(flight_plan_data[0].get("ident", "DEP")).strip().upper()
+            dest_icao = str(flight_plan_data[-1].get("ident", "DEST")).strip().upper()
+            file_name = f"{dep_icao}-{dest_icao}.pln"
+            file_path = os.path.join(downloads_path, file_name)
+
+            altitudes = [int(float(w.get("alt_ft", 24000) or 0)) for w in flight_plan_data]
+            cruise_alt = max(altitudes) if altitudes else 24000
+
+            root = ET.Element("SimBase.Document", Type="AceXML", version="1,0")
+            ET.SubElement(root, "Descr").text = "AceXML Document"
+
+            fpl = ET.SubElement(root, "FlightPlan.FlightPlan")
+            ET.SubElement(fpl, "Title").text = f"{dep_icao} to {dest_icao}"
+            ET.SubElement(fpl, "FPType").text = "IFR"
+            ET.SubElement(fpl, "RouteType").text = "HighAltitude"
+            ET.SubElement(fpl, "CruisingAlt").text = str(cruise_alt)
+            ET.SubElement(fpl, "DepartureID").text = dep_icao
+            ET.SubElement(fpl, "DestinationID").text = dest_icao
+
+            if flight_plan_data[0].get("lat") is not None and flight_plan_data[0].get("lon") is not None:
+                dep_lat = _format_dms_coord(flight_plan_data[0]["lat"], True)
+                dep_lon = _format_dms_coord(flight_plan_data[0]["lon"], False)
+                dep_alt = int(float(flight_plan_data[0].get("alt_ft", 0) or 0))
+                ET.SubElement(fpl, "DepartureLLA").text = f"{dep_lat},{dep_lon},+{dep_alt:06d}.00"
+
+            if flight_plan_data[-1].get("lat") is not None and flight_plan_data[-1].get("lon") is not None:
+                 dst_lat = _format_dms_coord(flight_plan_data[-1]["lat"], True)
+                 dst_lon = _format_dms_coord(flight_plan_data[-1]["lon"], False)
+                 dst_alt = int(float(flight_plan_data[-1].get("alt_ft", 0) or 0))
+                 ET.SubElement(fpl, "DestinationLLA").text = f"{dst_lat},{dst_lon},+{dst_alt:06d}.00"
+
+            for i, wp in enumerate(flight_plan_data):
+                ident = str(wp.get("ident", f"WPT{i}")).strip().upper()
+                atc_wpt = ET.SubElement(fpl, "ATCWaypoint", id=ident)
+
+                w_type = "Airport" if (i == 0 or i == len(flight_plan_data) - 1) else "Intersection"
+                ET.SubElement(atc_wpt, "ATCWaypointType").text = w_type
+
+                lat_val = wp.get("lat") if wp.get("lat") is not None else 0.0
+                lon_val = wp.get("lon") if wp.get("lon") is not None else 0.0
+                alt_val = int(float(wp.get("alt_ft", 0) or 0))
+
+                dms_lat = _format_dms_coord(lat_val, True)
+                dms_lon = _format_dms_coord(lon_val, False)
+                ET.SubElement(atc_wpt, "WorldPosition").text = f"{dms_lat},{dms_lon},+{alt_val:06d}.00"
+
+                icao_node = ET.SubElement(atc_wpt, "ICAO")
+                ET.SubElement(icao_node, "ICAOIdent").text = ident
+
+            tree = ET.ElementTree(root)
+            ET.indent(tree, space="  ", level=0)
+            tree.write(file_path, encoding="utf-8", xml_declaration=True)
+
+            self._flight_plan = flight_plan_data
+            return {"success": True, "path": file_path}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     def enrich_flight_plan(self, parsed_waypoints):
         self._flight_plan = parsed_waypoints

@@ -103,7 +103,12 @@ class TelemetryManager:
 
                 acft_name = "MSFS 2024"
                 if title:
-                    acft_name = str(title).strip().replace('\x00', '')[:24]
+                    if isinstance(title, bytes):
+                        title = title.decode("utf-8", errors="ignore")
+                    acft_name = str(title).strip().replace("\x00", "")
+                    if acft_name.startswith("b'") and acft_name.endswith("'"):
+                        acft_name = acft_name[2:-1]
+                    acft_name = acft_name[:24]
 
                 self._data = {
                     "connected": True,
