@@ -1,112 +1,130 @@
 ﻿import math
-try:
-    from SimConnect import SimConnect, AircraftRequests
-except ImportError:
-    SimConnect = None
-    AircraftRequests = None
+import time
+import threading
+
 
 class TelemetryManager:
     def __init__(self):
-        self.sm = None
-        self.aq = None
-        self.connected = False
+        self._sm = None
+        self._aq = None
+        self._connected = False
+        self._null_reads = 0
+        self._data = self._demo_payload()
+        self._thread = None
+        self._started = False
 
-    def connect(self):
-        if SimConnect is None:
-            self.connected = False
-            return False
-        
-        try:
-            self.sm = SimConnect()
-            self.aq = AircraftRequests(self.sm, _time=200)
-            self.connected = True
-            return True
-        except Exception as e:
-            print(f"DEBUG - Errore connessione SimConnect: {e}")
-            self.connected = False
-            return False
+    def _start_worker_if_needed(self):
+        if not self._started:
+            self._started = True
+            self._thread = threading.Thread(target=self._worker_loop, daemon=True)
+            self._thread.start()
+
+    def _demo_payload(self):
+        return {
+            "connected": False,
+            "mode": "DEMO",
+            "aircraft": "MSFS 2024 (DEMO)",
+            "lat": 41.8003,
+            "lon": 12.2389,
+            "alt_ft": "17 ft",
+            "gs_kt": "0 kt",
+            "hdg_deg": "250°",
+            "hdg_true": 250
+        }
+
+    def _reset_connection(self):
+        self._sm = None
+        self._aq = None
+        self._connected = False
+        self._null_reads = 0
+        self._data = self._demo_payload()
 
     def _normalize_angle(self, val):
         if val is None:
             return 0
         val = float(val)
-        # Python-SimConnect restituisce gli angoli in radianti (0 .. 2*pi = 6.283185)
-        # Se il valore è nel range dei radianti, lo convertiamo in gradi
-        if abs(val) <= (2 * math.pi + 0.05) and val != 0:
-            return int(round(math.degrees(val))) % 360
+        if 0 < abs(val) <= (2 * math.pi + 0.001):
+            deg = math.degrees(val)
+            return int(round(deg)) % 360
         return int(round(val)) % 360
 
-    def get_aircraft_data(self):
-        if not self.connected or not self.aq:
-            return {
-                "connected": False,
-                "mode": "DEMO",
-                "lat": 41.8003,
-                "lon": 12.2389,
-                "alt_ft": 17,
-                "gs_kt": 0,
-                "hdg_deg": 250,
-                "hdg_true": 250,
-                "aircraft": "MSFS 2024 (DEMO)"
-            }
+    def _worker_loop(self):
+        # Piccola pausa iniziale per lasciare completare il rendering della UI
+        time.sleep(0.4)
 
         try:
-            lat = self.aq.get("PLANE_LATITUDE") or 41.8003
-            lon = self.aq.get("PLANE_LONGITUDE") or 12.2389
-            
-            alt = self.aq.get("PLANE_ALTITUDE")
-            alt_ft = int(alt) if alt is not None else 0
-            
-            gs = self.aq.get("GROUND_VELOCITY")
-            gs_kt = int(gs) if gs is not None else 0
-            
-            # Prua Vera per l'orientamento geometrico sulla mappa (True North)
-            hdg_true_raw = self.aq.get("PLANE_HEADING_DEGREES_TRUE")
-            # Prua Magnetica per il display testuale in cabina
-            hdg_mag_raw = self.aq.get("PLANE_HEADING_DEGREES_MAGNETIC")
-            if hdg_mag_raw is None:
-                hdg_mag_raw = self.aq.get("PLANE_HEADING_DEGREES_GYRO")
+            from SimConnect import SimConnect, AircraftRequests
+        except ImportError:
+            SimConnect = None
+            AircraftRequests = None
 
-            hdg_true = self._normalize_angle(hdg_true_raw)
-            hdg_mag = self._normalize_angle(hdg_mag_raw) if hdg_mag_raw is not None else hdg_true
+        while True:
+            if SimConnect is None:
+                self._reset_connection()
+                time.sleep(2.0)
+                continue
 
-            # Se l'aereo è in movimento (> 3 nodi), calcoliamo o usiamo la prua vera per allineare l'icona
-            aircraft_title = self.aq.get("TITLE")
-            if isinstance(aircraft_title, bytes):
+            if not self._connected or self._sm is None or self._aq is None:
                 try:
-                    aircraft_title = aircraft_title.decode('utf-8', errors='ignore').strip(" '\x00")
+                    sm = SimConnect()
+                    aq = AircraftRequests(sm, _time=200)
+                    self._sm = sm
+                    self._aq = aq
+                    self._connected = True
+                    self._null_reads = 0
                 except Exception:
-                    pass
+                    self._reset_connection()
+                    time.sleep(2.0)
+                    continue
 
-            if not aircraft_title:
-                aircraft_title = self.aq.get("ATC_MODEL") or "MSFS 2024"
-                if isinstance(aircraft_title, bytes):
-                    try:
-                        aircraft_title = aircraft_title.decode('utf-8', errors='ignore').strip(" '\x00")
-                    except Exception:
-                        pass
+            try:
+                lat = self._aq.get("PLANE_LATITUDE")
+                lon = self._aq.get("PLANE_LONGITUDE")
 
-            return {
-                "connected": True,
-                "mode": "LIVE",
-                "lat": round(float(lat), 6),
-                "lon": round(float(lon), 6),
-                "alt_ft": alt_ft,
-                "gs_kt": gs_kt,
-                "hdg_deg": hdg_mag,
-                "hdg_true": hdg_true,
-                "aircraft": str(aircraft_title).strip()
-            }
-        except Exception:
-            self.connected = False
-            return {
-                "connected": False,
-                "mode": "DISCONNECTED",
-                "lat": 41.8003,
-                "lon": 12.2389,
-                "alt_ft": "---",
-                "gs_kt": "---",
-                "hdg_deg": "---",
-                "hdg_true": 0,
-                "aircraft": "MSFS 2024"
-            }
+                if lat is None or lon is None or (abs(float(lat)) < 0.001 and abs(float(lon)) < 0.001):
+                    self._null_reads += 1
+                    self._data = self._demo_payload()
+                    if self._null_reads >= 3:
+                        self._reset_connection()
+                    time.sleep(1.0)
+                    continue
+
+                self._null_reads = 0
+                alt = self._aq.get("PLANE_ALTITUDE")
+                gs = self._aq.get("GROUND_VELOCITY")
+                hdg_mag = self._aq.get("PLANE_HEADING_DEGREES_MAGNETIC")
+                hdg_true = self._aq.get("PLANE_HEADING_DEGREES_TRUE")
+                title = self._aq.get("TITLE")
+
+                alt_val = int(round(float(alt))) if alt is not None else 0
+                gs_val = int(round(float(gs))) if gs is not None else 0
+                mag_deg = self._normalize_angle(hdg_mag)
+                true_deg = self._normalize_angle(hdg_true) if hdg_true is not None else mag_deg
+
+                acft_name = "MSFS 2024"
+                if title:
+                    acft_name = str(title).strip().replace('\x00', '')[:24]
+
+                self._data = {
+                    "connected": True,
+                    "mode": "LIVE",
+                    "aircraft": acft_name,
+                    "lat": round(float(lat), 6),
+                    "lon": round(float(lon), 6),
+                    "alt_ft": f"{alt_val} ft",
+                    "gs_kt": f"{gs_val} kt",
+                    "hdg_deg": f"{mag_deg}°",
+                    "hdg_true": true_deg
+                }
+            except Exception:
+                self._reset_connection()
+
+            time.sleep(0.5)
+
+    def connect(self):
+        self._start_worker_if_needed()
+        return self._connected
+
+    def get_data(self):
+        self._start_worker_if_needed()
+        return self._data

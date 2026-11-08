@@ -11,12 +11,11 @@ const translations = {
         btnReload: "Reload",
         btnSimbrief: "SimBrief",
         btnFilters: "Filters & SID/STAR",
-        btnNavaids: "VOR / ILS: ON",
-        btnNavaidsOff: "VOR / ILS: OFF",
+        btnNavaids: "📡 VOR / ILS: ON",
+        btnNavaidsOff: "📡 VOR / ILS: OFF",
         btnFollowOn: "🎯 Follow Acft: ON",
         btnFollowFree: "✋ Free Map",
-        btnReduce: "[ Reduce / Expand ]",
-        mapStyleLabel: "Map: IFR Dark Cockpit"
+        btnReduce: "[ Reduce / Expand ]"
     },
     it: {
         searchPlaceholder: "Cerca ICAO, VOR o Aeroporto...",
@@ -28,12 +27,11 @@ const translations = {
         btnReload: "Ricarica",
         btnSimbrief: "SimBrief",
         btnFilters: "Filtri & SID/STAR",
-        btnNavaids: "VOR / ILS: ON",
-        btnNavaidsOff: "VOR / ILS: OFF",
+        btnNavaids: "📡 VOR / ILS: ON",
+        btnNavaidsOff: "📡 VOR / ILS: OFF",
         btnFollowOn: "🎯 Segui Aereo: ON",
         btnFollowFree: "✋ Mappa Libera",
-        btnReduce: "[ Riduci / Espandi ]",
-        mapStyleLabel: "Mappa: IFR Dark Cockpit"
+        btnReduce: "[ Riduci / Espandi ]"
     }
 };
 
@@ -46,53 +44,49 @@ function checkSystemLanguage() {
     if (langBtn) {
         if (isItalianSystem) {
             langBtn.style.display = 'inline-flex';
+            currentLang = 'it';
         } else {
             langBtn.style.display = 'none';
             currentLang = 'en';
         }
     }
+    applyCurrentLanguageUI();
 }
 
-function toggleLanguage() {
-    // Inverte la lingua corrente
-    currentLang = currentLang === 'en' ? 'it' : 'en';
-    
-    // Se adesso siamo in italiano ('it'), sul pulsante mostriamo 'EN' (per poter tornare a inglese).
-    // Se adesso siamo in inglese ('en'), sul pulsante mostriamo 'IT' (per poter passare a italiano).
-    const nextLangDisplay = currentLang === 'en' ? 'IT' : 'EN';
-    
+function applyCurrentLanguageUI() {
     const langLabel = document.getElementById('langLabel');
-    if (langLabel) langLabel.innerText = nextLangDisplay;
-    
+    if (langLabel) langLabel.innerText = currentLang.toUpperCase();
+
     const t = translations[currentLang];
-    
-    // Ricerca
+
     const searchInput = document.getElementById('omniSearch');
     if (searchInput) searchInput.placeholder = t.searchPlaceholder;
-    
-    // Titolo Sezione Piano di Volo
-    const fplTitleEl = document.querySelector('.sidebar-section-title');
+
+    const fplTitleEl = document.getElementById('fplSectionTitle');
     if (fplTitleEl) fplTitleEl.innerText = t.activeFpl.toUpperCase();
 
-    // Pulsanti Sidebar
-    const btnImport = document.querySelector('button[onclick="importPlnFile()"]');
+    const btnImport = document.getElementById('btnImportPln');
     if (btnImport) btnImport.innerHTML = `📁 ${t.btnImport}`;
-    
-    const btnClear = document.querySelector('button[onclick="clearFlightPlanUI()"]');
+
+    const btnClear = document.getElementById('btnClearPln');
     if (btnClear) btnClear.innerHTML = `🗑️ ${t.btnClear}`;
 
-    // VNAV Testo
+    const btnReload = document.getElementById('simbriefCompactBtn');
+    if (btnReload) btnReload.innerHTML = `✈️ ${t.btnReload}`;
+
+    const lblFilters = document.getElementById('lblFilters');
+    if (lblFilters) lblFilters.innerText = t.btnFilters;
+
     const vnavText = document.getElementById('vnavText');
     if (vnavText) {
         if (!flightPlan || flightPlan.length === 0) {
-            vnavText.textContent = t.noFpl;
+            vnavText.textContent = t.noFpl.toUpperCase();
         } else {
             const maxAlt = Math.max(...flightPlan.map(w => Number(w.alt_ft) || 5000), 5000);
-            vnavText.textContent = `${t.vnavTitle.split('(')[0].trim()} (Max Alt: ${maxAlt.toLocaleString()} ft)`;
+            vnavText.textContent = `VNAV MULTI-STEP (MAX ALT: ${maxAlt.toLocaleString()} FT)`;
         }
     }
 
-    // Pulsanti Superiori (Barra strumenti)
     const btnFollow = document.getElementById('btnFollowAcft');
     if (btnFollow) {
         btnFollow.innerText = followAircraft ? t.btnFollowOn : t.btnFollowFree;
@@ -103,11 +97,15 @@ function toggleLanguage() {
         btnNavaids.innerText = showNavaids ? t.btnNavaids : t.btnNavaidsOff;
     }
 
-    // Toggle cassetto VNAV in basso a destra
-    const drawerToggleText = document.querySelector('.elevation-toggle span:last-child');
-    if (drawerToggleText) {
-        drawerToggleText.innerText = t.btnReduce;
+    const lblReduce = document.getElementById('lblReduceExpand');
+    if (lblReduce) {
+        lblReduce.innerText = t.btnReduce;
     }
+}
+
+function toggleLanguage() {
+    currentLang = currentLang === 'en' ? 'it' : 'en';
+    applyCurrentLanguageUI();
 }
 
 const tileSources = {
@@ -156,11 +154,7 @@ const EXTRA_AIRPORTS = [
     {"icao": "LIRN", "name": "Napoli Capodichino", "lat": 40.8860, "lon": 14.2908, "elev": 294, "rwy": "06/24", "metar": "LIRN 061650Z 24007KT CAVOK 19/12 Q1017"},
     {"icao": "LICJ", "name": "Palermo Punta Raisi", "lat": 38.1759, "lon": 13.0910, "elev": 65, "rwy": "07/25", "metar": "LICJ 061650Z 07009KT CAVOK 21/14 Q1016"},
     {"icao": "LICC", "name": "Catania Fontanarossa", "lat": 37.4668, "lon": 15.0664, "elev": 39, "rwy": "08/26", "metar": "LICC 061650Z 10008KT CAVOK 21/14 Q1016"},
-    {"icao": "BIKF", "name": "Keflavik Intl", "lat": 63.9850, "lon": -22.6056, "elev": 171, "rwy": "01/19", "metar": "BIKF 061650Z 04014KT 9999 FEW025 04/M01 Q1012"},
-    {"icao": "BIRK", "name": "Reykjavik Airport", "lat": 64.1300, "lon": -21.9406, "elev": 45, "rwy": "01/19", "metar": "BIRK 061650Z 05012KT 9999 FEW030 05/M01 Q1012"},
-    {"icao": "BGKK", "name": "Kulusuk Airport", "lat": 65.5736, "lon": -37.1236, "elev": 117, "rwy": "10/28", "metar": "BGKK 061650Z 07008KT 9999 SCT030 M03/M08 Q1009"},
-    {"icao": "BGSF", "name": "Kangerlussuaq", "lat": 67.0122, "lon": -50.7116, "elev": 165, "rwy": "09/27", "metar": "BGSF 061650Z 09010KT CAVOK M06/M12 Q1014"},
-    {"icao": "BGGH", "name": "Nuuk Airport", "lat": 64.1909, "lon": -51.6781, "elev": 283, "rwy": "04/22", "metar": "BGGH 061650Z 12008KT 9999 FEW025 M02/M07 Q1010"}
+    {"icao": "LKPR", "name": "Prague Ruzyne Airport", "lat": 50.1008, "lon": 14.2600, "elev": 1247, "rwy": "06/24", "metar": "LKPR 061650Z 24008KT CAVOK 14/07 Q1017"}
 ];
 
 const KNOWN_FIXES = {
@@ -169,25 +163,13 @@ const KNOWN_FIXES = {
     "IBRID": { lat: 43.5186, lon: 11.3328 },
     "KUGIX": { lat: 43.9114, lon: 11.1831 },
     "LOMED": { lat: 44.1758, lon: 11.1683 },
-    "PE544": { lat: 44.3650, lon: 11.3500 },
-    "ELVEB": { lat: 44.4200, lon: 11.4500 },
-    "PE543": { lat: 44.4600, lon: 11.5200 },
-    "PE820": { lat: 44.4900, lon: 11.4800 },
-    "IBNEL": { lat: 44.4750, lon: 11.4100 },
-    "ABLEX": { lat: 44.5050, lon: 11.3500 },
-    "PODET": { lat: 45.8936, lon: 15.5419 },
-    "LUPIX": { lat: 45.9250, lon: 14.9189 },
-    "RIFEN": { lat: 45.9522, lon: 13.6264 },
-    "ADOSA": { lat: 45.8211, lon: 12.8719 },
-    "IDREK": { lat: 45.6983, lon: 12.1644 },
-    "ELTAR": { lat: 45.5947, lon: 11.5311 },
-    "NOBMI": { lat: 45.5244, lon: 10.9750 },
-    "NEVNI": { lat: 45.5186, lon: 10.4283 },
-    "LEGLO": { lat: 45.5392, lon: 9.8736 },
-    "PEXUG": { lat: 45.5681, lon: 9.4214 },
-    "SORIR": { lat: 64.5500, lon: -26.5000 },
-    "SOSIT": { lat: 65.2500, lon: -32.0000 },
-    "DA":    { lat: 65.5736, lon: -37.1500, name: "Kulusuk NDB" }
+    "GAVRA": { lat: 43.7850, lon: 11.2400 },
+    "ERTUK": { lat: 44.6200, lon: 11.4800 },
+    "LOBSI": { lat: 45.4200, lon: 11.8300 },
+    "MALUG": { lat: 46.5400, lon: 12.4200 },
+    "NEMAL": { lat: 47.5800, lon: 13.2400 },
+    "MEDEL": { lat: 48.3200, lon: 13.6800 },
+    "APRAQ": { lat: 49.4500, lon: 14.0500 }
 };
 
 const DEFAULT_VORS = [
@@ -215,16 +197,17 @@ let lastAcftHdgTrue = 0;
 function setFollowState(state) {
     followAircraft = state;
     const btn = document.getElementById('btnFollowAcft');
+    const t = translations[currentLang];
     if (!btn) return;
     if (followAircraft) {
         btn.classList.add('active');
-        btn.innerText = '🎯 Segui Aereo: ON';
+        btn.innerText = t.btnFollowOn;
         if (lastAcftLatLng) {
             map.panTo(lastAcftLatLng, { animate: true, duration: 0.4 });
         }
     } else {
         btn.classList.remove('active');
-        btn.innerText = '✋ Mappa Libera';
+        btn.innerText = t.btnFollowFree;
     }
 }
 
@@ -235,13 +218,14 @@ function toggleFollowAircraft() {
 function toggleNavaidsLayer() {
     showNavaids = !showNavaids;
     const btn = document.getElementById('btnToggleNavaids');
+    const t = translations[currentLang];
     if (btn) {
         if (showNavaids) {
             btn.classList.add('active');
-            btn.innerText = '📡 VOR / ILS: ON';
+            btn.innerText = t.btnNavaids;
         } else {
             btn.classList.remove('active');
-            btn.innerText = '📡 VOR / ILS: OFF';
+            btn.innerText = t.btnNavaidsOff;
         }
     }
     renderNavAids(vorsData, ilsData);
@@ -254,15 +238,11 @@ function toggleProceduresPanel() {
     }
 }
 
-function toggleAirspaceLayer(enabled) {}
-
 function toggleFixesLayer(enabled) {
     waypointMarkers.forEach(m => {
         if (enabled) { map.addLayer(m); } else { map.removeLayer(m); }
     });
 }
-
-function toggleTodLayer(enabled) {}
 
 map.on('dragstart', function() {
     if (followAircraft) {
@@ -304,8 +284,8 @@ function setSimbriefCompactMode(isCompact) {
     if (!setupBox || !compactBtn || !editIdBtn) return;
     if (isCompact) {
         setupBox.style.display = 'none';
-        compactBtn.style.display = 'block';
-        editIdBtn.style.display = 'block';
+        compactBtn.style.display = 'inline-flex';
+        editIdBtn.style.display = 'inline-flex';
     } else {
         setupBox.style.display = 'flex';
         compactBtn.style.display = 'none';
@@ -343,6 +323,7 @@ function toggleDrawer() {
     drawerOpen = !drawerOpen;
     const drawer = document.getElementById('elevationDrawer');
     const sidebar = document.getElementById('sidebarPanel');
+    const infoBar = document.getElementById('flightInfoBar');
     const arrow = document.getElementById('drawerArrow');
     const label = document.getElementById('drawerLabel');
     if (!drawer || !sidebar) return;
@@ -350,11 +331,13 @@ function toggleDrawer() {
     if (drawerOpen) {
         drawer.classList.remove('collapsed');
         sidebar.style.bottom = '134px';
+        if (infoBar) infoBar.style.bottom = '134px';
         if (arrow) arrow.innerText = '▼';
         if (label) label.style.display = 'none';
     } else {
         drawer.classList.add('collapsed');
-        sidebar.style.bottom = '16px';
+        sidebar.style.bottom = '56px';
+        if (infoBar) infoBar.style.bottom = '56px';
         if (arrow) arrow.innerText = '▲';
         if (label) label.style.display = 'inline';
     }
@@ -649,7 +632,7 @@ async function clearFlightPlanUI() {
         const svgPath = document.getElementById('vnavPath');
         const svgText = document.getElementById('vnavText');
         if (svgPath) svgPath.setAttribute('d', 'M0,50 L1000,50 Z');
-        if (svgText) svgText.textContent = translations[currentLang].noFpl;
+        if (svgText) svgText.textContent = translations[currentLang].noFpl.toUpperCase();
         updateHoverSync(null);
         
         try {
@@ -683,7 +666,7 @@ function renderVnavChart(alts) {
 
     pathD += `L${width},50 Z`;
     svgPath.setAttribute('d', pathD);
-    if (svgText) svgText.textContent = `VNAV Multi-Step (Max Alt: ${maxAlt.toLocaleString()} ft)`;
+    if (svgText) svgText.textContent = `VNAV MULTI-STEP (MAX ALT: ${maxAlt.toLocaleString()} FT)`;
 }
 
 function calculateRouteProgress(lat, lon) {
@@ -1062,10 +1045,24 @@ function parsePlnXmlString(xmlText) {
             }
         }
 
+        let altFt = null;
+        const altNodes = wp.getElementsByTagName("Altitude");
+        if (altNodes.length > 0 && altNodes[0].textContent) {
+            altFt = parseInt(parseFloat(altNodes[0].textContent.trim()), 10);
+        }
+
         const worldPosNodes = wp.getElementsByTagName("WorldPosition");
-        if ((wpLat === null || isNaN(wpLat)) && worldPosNodes.length > 0 && worldPosNodes[0].textContent) {
+        if (worldPosNodes.length > 0 && worldPosNodes[0].textContent) {
             const dms = parseDmsCoord(worldPosNodes[0].textContent);
-            if (dms) { wpLat = dms.lat; wpLon = dms.lon; }
+            if (dms) {
+                if (wpLat === null || isNaN(wpLat)) {
+                    wpLat = dms.lat;
+                    wpLon = dms.lon;
+                }
+                if (!altFt && dms.alt !== null) {
+                    altFt = dms.alt;
+                }
+            }
         }
 
         if (wpLat === null || isNaN(wpLat) || wpLat === 0) {
@@ -1077,10 +1074,8 @@ function parsePlnXmlString(xmlText) {
             }
         }
 
-        let altFt = cruiseAlt;
-        const altNodes = wp.getElementsByTagName("Altitude");
-        if (altNodes.length > 0 && altNodes[0].textContent) {
-            altFt = parseInt(parseFloat(altNodes[0].textContent.trim()), 10) || cruiseAlt;
+        if (!altFt || isNaN(altFt)) {
+            altFt = cruiseAlt;
         }
 
         if (parsedWaypoints.length === 0 || parsedWaypoints[parsedWaypoints.length - 1].ident !== code) {
@@ -1157,6 +1152,40 @@ async function processAndRenderPlnXml(xmlText) {
                 const frac = (i - prevIdx) / span;
                 parsed[i].lat = Number((parsed[prevIdx].lat + frac * (parsed[nextIdx].lat - parsed[prevIdx].lat)).toFixed(5));
                 parsed[i].lon = Number((parsed[prevIdx].lon + frac * (parsed[nextIdx].lon - parsed[prevIdx].lon)).toFixed(5));
+            }
+        }
+    }
+
+    if (parsed.length >= 4) {
+        const midAlts = parsed.slice(1, lastIdx).map(w => Number(w.alt_ft) || 0);
+        const maxCruise = Math.max(...midAlts);
+        const allSame = midAlts.every(a => a === maxCruise && a > 0);
+        
+        if (allSame) {
+            let totalDist = 0;
+            let cumDist = [0];
+            for (let i = 0; i < lastIdx; i++) {
+                if (parsed[i].lat !== null && parsed[i+1].lat !== null) {
+                    totalDist += L.latLng(parsed[i].lat, parsed[i].lon).distanceTo(L.latLng(parsed[i+1].lat, parsed[i+1].lon));
+                }
+                cumDist.push(totalDist);
+            }
+            if (totalDist > 0) {
+                const depAlt = Number(parsed[0].alt_ft) || 0;
+                const destAlt = Number(parsed[lastIdx].alt_ft) || 0;
+                const climbEndFrac = 0.22;
+                const descStartFrac = 0.75;
+                
+                for (let i = 1; i < lastIdx; i++) {
+                    const frac = cumDist[i] / totalDist;
+                    if (frac < climbEndFrac) {
+                        const cFrac = frac / climbEndFrac;
+                        parsed[i].alt_ft = Math.round((depAlt + cFrac * (maxCruise - depAlt)) / 100) * 100;
+                    } else if (frac > descStartFrac) {
+                        const dFrac = (frac - descStartFrac) / (1 - descStartFrac);
+                        parsed[i].alt_ft = Math.round((maxCruise - dFrac * (maxCruise - destAlt)) / 100) * 100;
+                    }
+                }
             }
         }
     }
@@ -1400,4 +1429,4 @@ window.addEventListener('resize', () => {
 });
 
 window.addEventListener('pywebviewready', initApp);
-setTimeout(initApp, 600);
+setTimeout(initApp, 150);

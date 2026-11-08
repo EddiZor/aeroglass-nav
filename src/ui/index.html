@@ -2,7 +2,8 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>AeroGlass Nav</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AeroGlass Nav - Flight Planner & Moving Map</title>
     <link rel="icon" type="image/x-icon" href="../../assets/icons/AeroGlass-icon.ico">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="style.css" />
@@ -11,106 +12,102 @@
 <body>
     <div id="map" class="map-dark-filter"></div>
 
-    <aside class="sidebar glass" id="sidebarPanel">
-        <div class="sidebar-resizer" id="sidebarResizer" title="Trascina per ridimensionare"></div>
-        <button class="panel-arrow-btn sidebar-toggle-btn glass" id="btnToggleSidebar" onclick="toggleSidebar()" title="Nascondi / Mostra barra laterale">
-            <span id="sidebarArrow">◀</span>
-            <span id="sidebarLabel" class="collapsed-label" style="display:none;">P<br>L<br>N</span>
-        </button>
-        
-        <div class="brand">
-            <div style="display: flex; align-items: baseline; gap: 6px; overflow: hidden;">
-                <h1>AEROGLASS NAV</h1>
-                <span style="font-size: 11px; color: var(--text-muted); white-space: nowrap;">by EddiZor</span>
+    <!-- Overlay Drag & Drop .pln -->
+    <div id="dropZoneOverlay" class="drop-overlay" style="display: none;">
+        <div class="drop-box">
+            <div style="font-size: 38px; margin-bottom: 10px;">✈️</div>
+            <div style="font-size: 18px; font-weight: 700; color: var(--cyan);">Rilascia qui il tuo file .PLN</div>
+            <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Caricamento immediato della rotta e del profilo VNAV</div>
+        </div>
+    </div>
+
+    <!-- Barra superiore flottante: controlli e telemetria -->
+    <div class="top-controls-bar">
+        <div class="top-pills-group">
+            <button id="btnFilters" class="top-btn" onclick="toggleProceduresPanel()">
+                ⚙️ <span id="lblFilters">Filtri & SID/STAR</span>
+            </button>
+            <button id="btnToggleNavaids" class="top-btn active" onclick="toggleNavaidsLayer()">
+                📡 VOR / ILS: ON
+            </button>
+            <button id="btnFollowAcft" class="top-btn active" onclick="toggleFollowAircraft()">
+                🎯 Segui Aereo: ON
+            </button>
+            <button id="btnLangSelect" class="top-btn" onclick="toggleLanguage()">
+                🌐 <span id="langLabel">IT</span>
+            </button>
+            <select id="mapStyleSelect" class="top-select" onchange="switchMapStyle(this.value)">
+                <option value="dark">Mappa: IFR Dark Cockpit</option>
+                <option value="vfr">Mappa: VFR Topo</option>
+                <option value="lowifr">Mappa: Low IFR Dark</option>
+                <option value="highifr">Mappa: High IFR Light</option>
+                <option value="sat">Mappa: Satellite Imagery</option>
+            </select>
+        </div>
+
+        <div class="telemetry-bar glass-panel">
+            <span id="simDot" class="status-dot"></span>
+            <span id="simStatus" class="sim-mode-text">DEMO</span>
+            <span class="tel-sep">|</span>
+            <span class="tel-item">ACFT: <strong id="valAcft">MSFS 2024</strong></span>
+            <span class="tel-item">ALT: <strong id="valAlt">--- ft</strong></span>
+            <span class="tel-item">GS: <strong id="valGs">--- kt</strong></span>
+            <span class="tel-item">HDG: <strong id="valHdg">---°</strong></span>
+        </div>
+    </div>
+
+    <!-- Pannello Filtri a scomparsa -->
+    <div id="proceduresPanel" class="procedures-dropdown glass-panel" style="display: none;">
+        <div style="font-size: 11px; font-weight: 700; color: var(--cyan); margin-bottom: 6px;">LIVELLI MAPPA</div>
+        <label class="filter-check">
+            <input type="checkbox" checked onchange="toggleFixesLayer(this.checked)"> Mostra Waypoint Rotta
+        </label>
+        <label class="filter-check">
+            <input type="checkbox" checked onchange="toggleNavaidsLayer()"> Mostra Radioassistenze (VOR/ILS)
+        </label>
+    </div>
+
+    <!-- Sidebar Laterale Piano di Volo -->
+    <aside id="sidebarPanel" class="sidebar glass-panel">
+        <div class="sidebar-header">
+            <div>
+                <span class="brand-title">AEROGLASS NAV</span>
+                <span class="brand-author">by EddiZor</span>
             </div>
-            <span style="font-size: 11px; color: var(--text-muted); margin-left: 6px;">v0.3.1</span>
+            <span class="version-tag">v0.5.1</span>
         </div>
-        
-        <div class="action-row">
-            <button class="btn-action" onclick="importPlnFile()">📂 Importa .pln</button>
-            <button class="btn-action" style="background: rgba(239, 68, 68, 0.15); border-color: #ef4444; color: #ef4444;" onclick="clearFlightPlanUI()" title="Elimina il piano di volo corrente">🗑️ Pulisci</button>
-            <button class="btn-action btn-simbrief" id="simbriefCompactBtn" style="display: none;" onclick="fetchSimbriefPlan()" title="Ricarica l'ultimo OFP da SimBrief">✈️ Ricarica</button>
-            <button class="btn-icon-muted" id="simbriefEditIdBtn" style="display: none;" onclick="showSimbriefBox()" title="Modifica SimBrief User ID">⚙️</button>
+
+        <div class="action-buttons-row">
+            <button id="btnImportPln" class="btn btn-cyan" onclick="importPlnFile()">📁 Importa .pln</button>
+            <button id="btnClearPln" class="btn btn-danger" onclick="clearFlightPlanUI()">🗑️ Pulisci</button>
+            <button id="simbriefCompactBtn" class="btn btn-purple" style="display: none;" onclick="fetchSimbriefPlan()">✈️ Ricarica</button>
+            <button id="simbriefEditIdBtn" class="btn btn-icon" style="display: none;" onclick="showSimbriefBox()" title="Modifica SimBrief ID">⚙️</button>
         </div>
-        
-        <div class="simbrief-box" id="simbriefSetupBox">
-            <input type="password" id="simbriefIdInput" placeholder="SimBrief User ID (es. 123456)" onchange="saveSimbriefId(this.value)">
-            <button class="btn-action btn-simbrief" style="width: auto; padding: 6px 12px;" onclick="fetchSimbriefPlan()">✈️ SimBrief</button>
+
+        <div id="simbriefSetupBox" class="simbrief-box">
+            <input type="text" id="simbriefIdInput" class="glass-input" placeholder="SimBrief User ID (es. 123456)" onchange="saveSimbriefId(this.value)">
+            <button id="btnSimbriefFetch" class="btn btn-purple" onclick="fetchSimbriefPlan()">✈️ SimBrief</button>
         </div>
 
         <div class="search-box">
-            <input type="text" id="omniSearch" placeholder="Cerca ICAO, VOR o Aeroporto..." oninput="filterAirports(this.value)">
+            <input type="text" id="omniSearch" class="glass-input" placeholder="Cerca ICAO, VOR o Aeroporto..." oninput="filterAirports(this.value)">
         </div>
-        <div class="section-title">Piano di Volo Attivo</div>
-        <div class="fpl-list" id="fplContainer"></div>
+
+        <div class="sidebar-section-title" id="fplSectionTitle">PIANO DI VOLO ATTIVO</div>
+
+        <div id="fplContainer" class="fpl-list"></div>
+
+        <div id="sidebarResizer" class="sidebar-resizer"></div>
+
+        <button class="sidebar-collapse-btn" onclick="toggleSidebar()" title="Riduci / Espandi Sidebar">
+            <span id="sidebarArrow">◀</span>
+            <span id="sidebarLabel" style="display: none; writing-mode: vertical-rl; font-size: 10px; margin-top: 6px;">FPL</span>
+        </button>
     </aside>
 
-    <div class="top-right">
-        <button id="btnProcedures" class="glass btn-follow" onclick="toggleProceduresPanel()" title="Configura Procedure e Filtri Mappa">
-            ⚙️ Filtri & SID/STAR
-        </button>
-
-        <button id="btnToggleNavaids" class="glass btn-follow active" onclick="toggleNavaidsLayer()" title="Mostra/Nascondi stazioni VOR e ILS sulla mappa">
-            📡 VOR / ILS: ON
-        </button>
-
-        <button id="btnFollowAcft" class="glass btn-follow active" onclick="toggleFollowAircraft()" title="Attiva/Disattiva centraggio automatico sull'aereo">
-            🎯 Segui Aereo: ON
-        </button>
-
-        <button id="btnLangSelect" class="top-btn" onclick="toggleLanguage()">
-            🌐 <span id="langLabel">IT</span>
-        </button>
-
-        <select id="mapStyleSelect" class="glass layer-select" onchange="switchMapStyle(this.value)">
-            <option value="dark">Mappa: IFR Dark Cockpit</option>
-            <option value="vfr">Cartografia: VFR Aeronautical</option>
-            <option value="lowifr">Cartografia: Low IFR En-Route</option>
-            <option value="highifr">Cartografia: High IFR En-Route</option>
-            <option value="topo">Mappa: VFR Topo (Rilievi)</option>
-            <option value="sat">Mappa: Satellite (Esri)</option>
-        </select>
-
-        <div class="telemetry-pill glass">
-            <div><span id="simDot" class="status-dot"></span><span id="simStatus">DEMO</span></div>
-            <div>ACFT: <strong id="valAcft">MSFS 2024</strong></div>
-            <div>ALT: <strong id="valAlt">---</strong> ft</div>
-            <div>GS: <strong id="valGs">---</strong> kt</div>
-            <div>HDG: <strong id="valHdg">---</strong>°</div>
-        </div>
-    </div>
-
-    <!-- Pannello a scomparsa per Procedure e Filtri Layer -->
-    <div class="glass overlay-panel" id="proceduresPanel">
-        <div class="overlay-header">
-            <span>Procedure & Filtri Mappa</span>
-            <button class="overlay-close" onclick="toggleProceduresPanel()">×</button>
-        </div>
-        <div class="toggle-row">
-            <span>Spazi Aerei TMA / CTR</span>
-            <label class="toggle-switch"><input type="checkbox" id="chkAirspace" onchange="toggleAirspaceLayer(this.checked)"><span class="toggle-slider"></span></label>
-        </div>
-        <div class="toggle-row">
-            <span>Waypoint En-Route (Fix)</span>
-            <label class="toggle-switch"><input type="checkbox" id="chkFixes" checked onchange="toggleFixesLayer(this.checked)"><span class="toggle-slider"></span></label>
-        </div>
-        <div class="toggle-row">
-            <span>Visualizza Linea ToD (Discesa)</span>
-            <label class="toggle-switch"><input type="checkbox" id="chkTod" checked onchange="toggleTodLayer(this.checked)"><span class="toggle-slider"></span></label>
-        </div>
-    </div>
-
-    <!-- Overlay Drag & Drop per file .pln -->
-    <div id="dropZoneOverlay">
-        <div class="drop-message">
-            <span>📂 Rilascia qui il piano di volo (.pln)</span>
-            <span style="font-size: 12px; color: var(--text-muted); font-weight: normal;">AeroGlass Nav caricherà la rotta istantaneamente</span>
-        </div>
-    </div>
-
-    <!-- Barra Info in basso a destra (Data, UTC, Sistema e Coordinate) -->
-    <div class="glass flight-info-bar" id="flightInfoBar">
-        <span id="infoDate">---</span>
+    <!-- Barra Info in basso a destra (Data, UTC, SYS, Coords) -->
+    <div id="flightInfoBar" class="flight-info-bar glass-panel">
+        <span id="infoDate">-- --- ----</span>
         <span class="info-sep">|</span>
         <span id="infoUtc">UTC: --:--:--</span>
         <span class="info-sep">|</span>
@@ -119,21 +116,27 @@
         <span id="infoCoords">LAT: --.----- LON: --.-----</span>
     </div>
 
-    <!-- Cassetto Altimetrico VNAV -->
-    <div class="elevation-drawer glass" id="elevationDrawer">
-        <button class="panel-arrow-btn drawer-arrow-btn glass" id="btnToggleDrawer" onclick="toggleDrawer()" title="Nascondi / Mostra profilo VNAV">
-            <span id="drawerLabel" class="collapsed-label" style="display:none; margin-right:4px;">ALT</span>
-            <span id="drawerArrow">▼</span>
-        </button>
-        <div class="drawer-header">
-            <span id="vnavText">Nessun piano di volo attivo</span>
-            <button class="drawer-toggle" onclick="toggleDrawer()">[ Riduci / Espandi ]</button>
+    <!-- Cassetto Altimetrico VNAV a 16px dal fondo -->
+    <div id="elevationDrawer" class="elevation-drawer glass-panel">
+        <div class="elevation-header" onclick="toggleDrawer()">
+            <span id="vnavText" class="vnav-title-text">NESSUN PIANO DI VOLO ATTIVO</span>
+            <div class="elevation-toggle">
+                <span id="drawerArrow">▼</span>
+                <span id="drawerLabel" style="display: none; font-size: 10px; margin-left: 4px;">VNAV</span>
+                <span id="lblReduceExpand" style="margin-left: 8px; color: var(--cyan); font-size: 11px;">[ Riduci / Espandi ]</span>
+            </div>
         </div>
         <div class="elevation-canvas-container">
-            <svg id="vnavSvg" viewBox="0 0 1000 60" preserveAspectRatio="none" style="width:100%; height:100%;">
-                <path id="vnavPath" d="M0,50 L1000,50 Z" fill="rgba(56, 189, 248, 0.15)" stroke="#38bdf8" stroke-width="2"/>
-                <line id="mouseVnavLine" x1="0" y1="0" x2="0" y2="60" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="3,3" style="display:none;"/>
-                <line id="acftVnavLine" x1="0" y1="0" x2="0" y2="60" stroke="#34d399" stroke-width="2" style="display:none;"/>
+            <svg id="vnavSvg" viewBox="0 0 1000 55" preserveAspectRatio="none">
+                <defs>
+                    <linearGradient id="vnavGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.45"/>
+                        <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.02"/>
+                    </linearGradient>
+                </defs>
+                <path id="vnavPath" d="M0,50 L1000,50 Z" fill="url(#vnavGrad)" stroke="#38bdf8" stroke-width="2"/>
+                <line id="acftVnavLine" x1="0" y1="0" x2="0" y2="55" stroke="#34d399" stroke-width="2.5" style="display: none;"/>
+                <line id="mouseVnavLine" x1="0" y1="0" x2="0" y2="55" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="3,3" style="display: none;"/>
             </svg>
         </div>
     </div>
