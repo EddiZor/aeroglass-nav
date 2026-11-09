@@ -15,7 +15,7 @@ def main():
     api = AeroGlassAPI()
     ui_path = get_resource_path(os.path.join("src", "ui", "index.html"))
 
-    webview.create_window(
+    window = webview.create_window(
         title="AeroGlass Nav - Flight Planner & Moving Map",
         url=ui_path,
         js_api=api,
@@ -24,6 +24,10 @@ def main():
         min_size=(960, 600),
         background_color="#0f172a"
     )
+    
+    # Assicura la chiusura pulita di SimConnect e dei thread in background alla chiusura della finestra
+    window.events.closed += lambda: api._telemetry.shutdown()
+    
     webview.start(debug=False)
 
 

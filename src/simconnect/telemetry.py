@@ -1,4 +1,5 @@
 ﻿import time
+import math
 import threading
 
 try:
@@ -15,8 +16,9 @@ class TelemetryManager:
         self.connected = False
         self._lock = threading.Lock()
         self._running = True
-        self._last_title_check = 0
+        self._title_fetched = False
         self._cached_title = "MSFS 2024"
+        self._fail_count = 0
 
         self._data = {
             "connected": False,
@@ -34,15 +36,16 @@ class TelemetryManager:
         self._thread.start()
 
     def connect(self):
-        # Il thread in background gestisce già la connessione in modo sicuro
         return self.connected
 
     def _safe_disconnect(self):
         with self._lock:
             self.connected = False
+            self._title_fetched = False
             self.aq = None
             if self.sm is not None:
                 try:
+                    self.sm.quit = 1
                     self.sm.exit()
                 except Exception:
                     pass
@@ -55,9 +58,10 @@ class TelemetryManager:
         with self._lock:
             try:
                 self.sm = SimConnect()
-                # _time=400 evita di inondare la coda SimConnect di MSFS
-                self.aq = AircraftRequests(self.sm, _time=400)
+                # _time=1200 mantiene la cache per 1.2s evitando richieste duplicate a MSFS
+                self.aq = AircraftRequests(self.sm, _time=1200)
                 self.connected = True
+                self._fail_count = 0
                 return True
             except Exception:
                 self.sm = None
@@ -70,26 +74,45 @@ class TelemetryManager:
             if not self.connected:
                 if not self._try_connect():
                     self._set_demo_state()
-                    # Attende 5 secondi prima di riprovare per non bloccare MSFS durante i caricamenti
                     time.sleep(5.0)
                     continue
 
             try:
                 with self._lock:
                     if not self.aq:
-                        raise RuntimeError("AircraftRequests non inizializzato")
+                        raise RuntimeError("SimConnect non attivo")
+
                     lat = self.aq.get("PLANE_LATITUDE")
                     lon = self.aq.get("PLANE_LONGITUDE")
+
+                # Se MSFS ha un micro-stutter in volo (lat/lon = None), NON disconnettere subito:
+                # ignora il ciclo saltato e disconnetti solo dopo 10 fallimenti consecutivi (~15s)
+                if lat is None or lon is None:
+                    self._fail_count += 1
+                    if self._fail_count >= 10:
+                        self._safe_disconnect()
+                        self._set_demo_state()
+                    time.sleep(1.5)
+                    continue
+
+                # Se siamo nel menu principale di MSFS (coordinate ~ 0,0)
+                if abs(float(lat)) < 0.01 and abs(float(lon)) < 0.01:
+                    self._title_fetched = False
+                    self._set_demo_state()
+                    time.sleep(2.5)
+                    continue
+
+                self._fail_count = 0
+
+                with self._lock:
                     alt = self.aq.get("PLANE_ALTITUDE")
                     gs = self.aq.get("GROUND_VELOCITY")
                     hdg_mag = self.aq.get("PLANE_HEADING_DEGREES_MAGNETIC")
                     hdg_true = self.aq.get("PLANE_HEADING_DEGREES_TRUE")
 
-                    # Legge TITLE solo ogni 10 secondi per non saturare il buffer stringhe di SimConnect
-                    now = time.time()
-                    if now - self._last_title_check > 10.0:
+                    # Legge il nome dell'aereo UNA SOLA VOLTA a inizio volo
+                    if not self._title_fetched:
                         raw_title = self.aq.get("TITLE")
-                        self._last_title_check = now
                         if raw_title:
                             if isinstance(raw_title, bytes):
                                 raw_title = raw_title.decode("utf-8", errors="ignore")
@@ -98,17 +121,11 @@ class TelemetryManager:
                                 clean = clean[2:-1]
                             if clean:
                                 self._cached_title = clean[:24]
-
-                # Se MSFS è nel menu principale (coordinate 0,0 o None), resta in DEMO senza forzare riconnessioni
-                if lat is None or lon is None or (abs(float(lat)) < 0.01 and abs(float(lon)) < 0.01):
-                    self._set_demo_state()
-                    time.sleep(2.0)
-                    continue
+                                self._title_fetched = True
 
                 alt_val = int(round(float(alt))) if alt is not None else 0
                 gs_val = int(round(float(gs))) if gs is not None else 0
 
-                import math
                 hdg_mag_deg = int(round(math.degrees(float(hdg_mag)))) % 360 if hdg_mag is not None else 0
                 hdg_true_deg = round(math.degrees(float(hdg_true)), 1) % 360 if hdg_true is not None else float(hdg_mag_deg)
 
@@ -128,13 +145,16 @@ class TelemetryManager:
                     "hdg_deg": f"{hdg_mag_deg}°",
                     "hdg_true": hdg_true_deg
                 }
-                time.sleep(1.0)
+
+                # Ciclo morbido ogni 1.5 secondi per lasciare libero il thread di MSFS
+                time.sleep(1.5)
 
             except Exception:
-                # Se MSFS viene chiuso o cade il pipe, rilascia subito l'handle SimConnect
-                self._safe_disconnect()
-                self._set_demo_state()
-                time.sleep(3.0)
+                self._fail_count += 1
+                if self._fail_count >= 5:
+                    self._safe_disconnect()
+                    self._set_demo_state()
+                time.sleep(2.5)
 
     def _set_demo_state(self):
         self._data["connected"] = False
