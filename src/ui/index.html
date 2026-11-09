@@ -130,7 +130,7 @@
 
         <button class="sidebar-collapse-btn" onclick="toggleSidebar()" title="Riduci / Espandi Sidebar">
             <span id="sidebarArrow">◀</span>
-            <span id="sidebarLabel" style="display: none; writing-mode: vertical-rl; font-size: 10px; margin-top: 6px;">FPL</span>
+            <span id="sidebarLabel" class="sidebar-vertical-label" style="display: none;">FPL</span>
         </button>
     </aside>
 
@@ -175,13 +175,14 @@
 
     <!-- Cassetto Altimetrico VNAV -->
     <div id="elevationDrawer" class="elevation-drawer glass-panel">
-        <div class="elevation-header" onclick="toggleDrawer()">
+            <div class="elevation-header" onclick="toggleDrawer()">
             <span id="vnavText" class="vnav-title-text">NESSUN PIANO DI VOLO ATTIVO</span>
             <div class="elevation-toggle">
                 <span id="drawerArrow">▼</span>
-                <span id="drawerLabel" style="display: none; font-size: 10px; margin-left: 4px;">VNAV</span>
-                <span id="lblReduceExpand" style="margin-left: 8px; color: var(--cyan); font-size: 11px;">[ Riduci / Espandi ]</span>
+                <span id="drawerLabel" class="vnav-center-label">VNAV</span>
+                <span id="lblReduceExpand" style="color: var(--cyan); font-size: 11px;">[ Riduci / Espandi ]</span>
             </div>
+            <div class="elevation-header-spacer"></div>
         </div>
         <div class="elevation-canvas-container">
             <svg id="vnavSvg" viewBox="0 0 1000 55" preserveAspectRatio="none">

@@ -542,20 +542,17 @@ function toggleDrawer() {
     const sidebar = document.getElementById('sidebarPanel');
     const infoBar = document.getElementById('flightInfoBar');
     const arrow = document.getElementById('drawerArrow');
-    const label = document.getElementById('drawerLabel');
     if (!drawer || !sidebar) return;
     if (drawerOpen) {
         drawer.classList.remove('collapsed');
         sidebar.style.bottom = '134px';
         if (infoBar) infoBar.style.bottom = '134px';
         if (arrow) arrow.innerText = '▼';
-        if (label) label.style.display = 'none';
     } else {
         drawer.classList.add('collapsed');
         sidebar.style.bottom = '56px';
         if (infoBar) infoBar.style.bottom = '56px';
         if (arrow) arrow.innerText = '▲';
-        if (label) label.style.display = 'inline';
     }
 }
 
