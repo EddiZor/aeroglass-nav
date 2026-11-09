@@ -16,7 +16,7 @@ class TelemetryManager:
         self.connected = False
         self._lock = threading.Lock()
         self._running = True
-        self._title_fetched = False
+        self._last_meta_time = 0.0
         self._cached_title = "MSFS 2024"
         self._fail_count = 0
 
@@ -41,7 +41,7 @@ class TelemetryManager:
     def _safe_disconnect(self):
         with self._lock:
             self.connected = False
-            self._title_fetched = False
+            self._last_meta_time = 0.0
             self.aq = None
             if self.sm is not None:
                 try:
@@ -51,6 +51,16 @@ class TelemetryManager:
                     pass
                 self.sm = None
 
+    def _clean_sim_string(self, raw_val, max_len=42):
+        if not raw_val:
+            return ""
+        if isinstance(raw_val, bytes):
+            raw_val = raw_val.decode("utf-8", errors="ignore")
+        clean = str(raw_val).strip().replace("\x00", "")
+        if clean.startswith("b'") and clean.endswith("'"):
+            clean = clean[2:-1]
+        return clean.strip()[:max_len]
+
     def _try_connect(self):
         if not SIMCONNECT_AVAILABLE:
             return False
@@ -58,8 +68,7 @@ class TelemetryManager:
         with self._lock:
             try:
                 self.sm = SimConnect()
-                # _time=1200 mantiene la cache per 1.2s evitando richieste duplicate a MSFS
-                self.aq = AircraftRequests(self.sm, _time=1200)
+                self.aq = AircraftRequests(self.sm, _time=1000)
                 self.connected = True
                 self._fail_count = 0
                 return True
@@ -85,8 +94,6 @@ class TelemetryManager:
                     lat = self.aq.get("PLANE_LATITUDE")
                     lon = self.aq.get("PLANE_LONGITUDE")
 
-                # Se MSFS ha un micro-stutter in volo (lat/lon = None), NON disconnettere subito:
-                # ignora il ciclo saltato e disconnetti solo dopo 10 fallimenti consecutivi (~15s)
                 if lat is None or lon is None:
                     self._fail_count += 1
                     if self._fail_count >= 10:
@@ -95,9 +102,8 @@ class TelemetryManager:
                     time.sleep(1.5)
                     continue
 
-                # Se siamo nel menu principale di MSFS (coordinate ~ 0,0)
                 if abs(float(lat)) < 0.01 and abs(float(lon)) < 0.01:
-                    self._title_fetched = False
+                    self._last_meta_time = 0.0
                     self._set_demo_state()
                     time.sleep(2.5)
                     continue
@@ -110,18 +116,12 @@ class TelemetryManager:
                     hdg_mag = self.aq.get("PLANE_HEADING_DEGREES_MAGNETIC")
                     hdg_true = self.aq.get("PLANE_HEADING_DEGREES_TRUE")
 
-                    # Legge il nome dell'aereo UNA SOLA VOLTA a inizio volo
-                    if not self._title_fetched:
-                        raw_title = self.aq.get("TITLE")
-                        if raw_title:
-                            if isinstance(raw_title, bytes):
-                                raw_title = raw_title.decode("utf-8", errors="ignore")
-                            clean = str(raw_title).strip().replace("\x00", "")
-                            if clean.startswith("b'") and clean.endswith("'"):
-                                clean = clean[2:-1]
-                            if clean:
-                                self._cached_title = clean[:24]
-                                self._title_fetched = True
+                    now = time.time()
+                    if (now - self._last_meta_time) >= 12.0 or self._cached_title == "MSFS 2024":
+                        self._last_meta_time = now
+                        title_str = self._clean_sim_string(self.aq.get("TITLE"), max_len=42)
+                        if title_str:
+                            self._cached_title = title_str
 
                 alt_val = int(round(float(alt))) if alt is not None else 0
                 gs_val = int(round(float(gs))) if gs is not None else 0
@@ -146,8 +146,7 @@ class TelemetryManager:
                     "hdg_true": hdg_true_deg
                 }
 
-                # Ciclo morbido ogni 1.5 secondi per lasciare libero il thread di MSFS
-                time.sleep(1.5)
+                time.sleep(1.2)
 
             except Exception:
                 self._fail_count += 1
