@@ -28,6 +28,7 @@ class AeroGlassAPI:
         self._telemetry = TelemetryManager()
         self._flight_plan = []
         self._config_path = os.path.join(os.path.abspath("."), "config.json")
+        self._user_waypoints_path = os.path.join(os.path.abspath("."), "user_waypoints.json")
         self._config = self._load_config()
 
     def _load_config(self):
@@ -45,6 +46,23 @@ class AeroGlassAPI:
                 json.dump(self._config, f, indent=4)
         except Exception as e:
             print(f"Errore salvataggio config: {e}")
+
+    def get_user_waypoints(self):
+        if os.path.exists(self._user_waypoints_path):
+            try:
+                with open(self._user_waypoints_path, "r", encoding="utf-8") as f:
+                    return {"success": True, "waypoints": json.load(f)}
+            except Exception:
+                pass
+        return {"success": True, "waypoints": []}
+
+    def save_user_waypoints(self, waypoints):
+        try:
+            with open(self._user_waypoints_path, "w", encoding="utf-8") as f:
+                json.dump(waypoints, f, indent=4)
+            return {"success": True}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     def connect_sim(self):
         return self._telemetry.connect()
@@ -130,20 +148,8 @@ class AeroGlassAPI:
                 else:
                     fpl.append(dest_entry)
 
-            alternate_data = None
-            alt_node = root.find("alternate")
-            if alt_node is not None and alt_node.findtext("icao_code"):
-                alternate_data = {
-                    "ident": alt_node.findtext("icao_code", ""),
-                    "name": alt_node.findtext("name", "Alternate"),
-                    "lat": float(alt_node.findtext("pos_lat", 0)),
-                    "lon": float(alt_node.findtext("pos_long", 0)),
-                    "alt_ft": int(float(alt_node.findtext("elevation", 0))),
-                    "metar": alt_node.findtext("metar", "")
-                }
-
             self._flight_plan = fpl
-            return {"success": True, "flight_plan": fpl, "alternate": alternate_data}
+            return {"success": True, "flight_plan": fpl}
 
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -165,7 +171,6 @@ class AeroGlassAPI:
         return {"success": False}
 
     def export_pln_file(self, flight_plan_data):
-        """Genera e salva un file .pln standard per MSFS nella cartella Download."""
         try:
             if not flight_plan_data or len(flight_plan_data) < 2:
                 return {"success": False, "error": "Il piano di volo deve contenere almeno Partenza e Arrivo."}
@@ -193,22 +198,9 @@ class AeroGlassAPI:
             ET.SubElement(fpl, "DepartureID").text = dep_icao
             ET.SubElement(fpl, "DestinationID").text = dest_icao
 
-            if flight_plan_data[0].get("lat") is not None and flight_plan_data[0].get("lon") is not None:
-                dep_lat = _format_dms_coord(flight_plan_data[0]["lat"], True)
-                dep_lon = _format_dms_coord(flight_plan_data[0]["lon"], False)
-                dep_alt = int(float(flight_plan_data[0].get("alt_ft", 0) or 0))
-                ET.SubElement(fpl, "DepartureLLA").text = f"{dep_lat},{dep_lon},+{dep_alt:06d}.00"
-
-            if flight_plan_data[-1].get("lat") is not None and flight_plan_data[-1].get("lon") is not None:
-                 dst_lat = _format_dms_coord(flight_plan_data[-1]["lat"], True)
-                 dst_lon = _format_dms_coord(flight_plan_data[-1]["lon"], False)
-                 dst_alt = int(float(flight_plan_data[-1].get("alt_ft", 0) or 0))
-                 ET.SubElement(fpl, "DestinationLLA").text = f"{dst_lat},{dst_lon},+{dst_alt:06d}.00"
-
             for i, wp in enumerate(flight_plan_data):
                 ident = str(wp.get("ident", f"WPT{i}")).strip().upper()
                 atc_wpt = ET.SubElement(fpl, "ATCWaypoint", id=ident)
-
                 w_type = "Airport" if (i == 0 or i == len(flight_plan_data) - 1) else "Intersection"
                 ET.SubElement(atc_wpt, "ATCWaypointType").text = w_type
 

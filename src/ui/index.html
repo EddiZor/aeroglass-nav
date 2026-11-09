@@ -56,7 +56,7 @@
         </div>
     </div>
 
-    <!-- Pannello Filtri a scomparsa -->
+    <!-- Pannello Filtri a scomparsa (inclusi Spazi Aerei Avanzati) -->
     <div id="proceduresPanel" class="procedures-dropdown glass-panel" style="display: none;">
         <div style="font-size: 11px; font-weight: 700; color: var(--cyan); margin-bottom: 6px;">LIVELLI MAPPA</div>
         <label class="filter-check">
@@ -64,6 +64,16 @@
         </label>
         <label class="filter-check">
             <input type="checkbox" checked onchange="toggleNavaidsLayer()"> Mostra Radioassistenze (VOR/ILS)
+        </label>
+        <div style="font-size: 11px; font-weight: 700; color: var(--cyan); margin-top: 8px; margin-bottom: 4px; border-top: 1px solid rgba(148,163,184,0.2); padding-top: 6px;">SPAZI AEREI AVANZATI</div>
+        <label class="filter-check">
+            <input type="checkbox" id="chkAirspaceTma" onchange="toggleAirspaceLayer('tma', this.checked)"> Mostra TMA (Terminal Control)
+        </label>
+        <label class="filter-check">
+            <input type="checkbox" id="chkAirspaceCtr" onchange="toggleAirspaceLayer('ctr', this.checked)"> Mostra CTR (Control Zone)
+        </label>
+        <label class="filter-check">
+            <input type="checkbox" id="chkAirspaceRestricted" onchange="toggleAirspaceLayer('restricted', this.checked)"> Zone Restrittive / Pericolose
         </label>
     </div>
 
@@ -74,7 +84,7 @@
                 <span class="brand-title">AEROGLASS NAV</span>
                 <span class="brand-author">by EddiZor</span>
             </div>
-            <span class="version-tag">v0.5.2</span>
+            <span class="version-tag">v0.5.3</span>
         </div>
 
         <div class="action-buttons-row">
@@ -95,8 +105,25 @@
             <input type="text" id="omniSearch" class="glass-input" placeholder="Cerca ICAO, VOR o Aeroporto..." oninput="filterAirports(this.value)">
         </div>
 
-        <div class="sidebar-section-title" id="fplSectionTitle">PIANO DI VOLO ATTIVO</div>
+        <!-- Sezione Waypoints Utente Personalizzati -->
+        <div class="sidebar-section-title" style="margin-top: 4px;">WAYPOINTS UTENTE (CUSTOM)</div>
+        <div class="user-wp-form">
+            <div style="display: flex; gap: 4px; margin-bottom: 4px;">
+                <input type="text" id="uwId" class="glass-input" placeholder="ID (es. WP1)" style="text-transform: uppercase; flex: 1;">
+                <input type="number" id="uwAlt" class="glass-input" placeholder="Alt ft" style="width: 75px;" value="5000">
+            </div>
+            <div style="display: flex; gap: 4px; margin-bottom: 6px;">
+                <input type="number" id="uwLat" class="glass-input" placeholder="Lat (es. 41.8)" step="0.0001" style="flex: 1;">
+                <input type="number" id="uwLon" class="glass-input" placeholder="Lon (es. 12.2)" step="0.0001" style="flex: 1;">
+            </div>
+            <div style="display: flex; gap: 4px;">
+                <button id="btnPickMapWp" class="btn btn-cyan" onclick="toggleMapPickMode()" title="Clicca un punto sulla mappa per prelevare le coordinate">📍 Mappa</button>
+                <button class="btn btn-emerald" onclick="addUserWaypoint()" style="flex: 2;">➕ Aggiungi & Salva</button>
+            </div>
+        </div>
+        <div id="userWpContainer" class="fpl-list" style="max-height: 100px; margin-bottom: 6px;"></div>
 
+        <div class="sidebar-section-title" id="fplSectionTitle">PIANO DI VOLO ATTIVO</div>
         <div id="fplContainer" class="fpl-list"></div>
 
         <div id="sidebarResizer" class="sidebar-resizer"></div>
@@ -107,7 +134,7 @@
         </button>
     </aside>
 
-    <!-- Modale di Creazione Manuale Piano di Volo ed Esportazione PLN -->
+    <!-- Modale di Creazione Manuale Piano di Volo -->
     <div id="createFplModal" class="custom-modal" style="display: none;">
         <div class="modal-content glass-panel">
             <div class="modal-header">
@@ -135,7 +162,7 @@
         </div>
     </div>
 
-    <!-- Barra Info in basso a destra (Data, UTC, SYS, Coords) -->
+    <!-- Barra Info in basso a destra -->
     <div id="flightInfoBar" class="flight-info-bar glass-panel">
         <span id="infoDate">-- --- ----</span>
         <span class="info-sep">|</span>
@@ -146,7 +173,7 @@
         <span id="infoCoords">LAT: --.----- LON: --.-----</span>
     </div>
 
-    <!-- Cassetto Altimetrico VNAV a 16px dal fondo -->
+    <!-- Cassetto Altimetrico VNAV -->
     <div id="elevationDrawer" class="elevation-drawer glass-panel">
         <div class="elevation-header" onclick="toggleDrawer()">
             <span id="vnavText" class="vnav-title-text">NESSUN PIANO DI VOLO ATTIVO</span>
