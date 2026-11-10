@@ -52,7 +52,11 @@ function applyCurrentLanguageUI() {
     }
 
     const btnFollow = document.getElementById('btnFollowAcft');
-    if (btnFollow) btnFollow.innerText = followAircraft ? t.btnFollowOn : t.btnFollowFree;
+    if (btnFollow) {
+        if (followState === 0) btnFollow.innerText = t.btnFollowFree;
+        else if (followState === 1) btnFollow.innerText = t.btnFollowNorth;
+        else if (followState === 2) btnFollow.innerText = t.btnFollowTrack;
+    }
 
     const btnNavaids = document.getElementById('btnToggleNavaids');
     if (btnNavaids) btnNavaids.innerText = showNavaids ? t.btnNavaids : t.btnNavaidsOff;

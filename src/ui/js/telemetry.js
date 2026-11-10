@@ -139,9 +139,18 @@ async function pollTelemetry() {
                     if (svgEl) svgEl.style.transform = `rotate(${mapHeading}deg)`;
                 }
 
-                if (followAircraft) {
+            if (followState !== 0) {
                     map.panTo(newLatLng, { animate: true, duration: 0.5 });
                 }
+
+                // Rotazione dinamica per Track Up
+                const mapEl = document.getElementById('map');
+                if (followState === 2 && mapEl) {
+                    mapEl.style.transition = 'transform 0.25s linear';
+                    // Lo scale(1.45) serve a nascondere i bordi neri mentre la mappa quadrata ruota
+                    mapEl.style.transform = `scale(1.45) rotate(${-mapHeading}deg)`;
+                }
+
             } else if (aircraftMarker) {
                 map.removeLayer(aircraftMarker);
                 aircraftMarker = null;

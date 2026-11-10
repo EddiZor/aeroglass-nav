@@ -15,29 +15,47 @@ function switchMapStyle(style) {
 }
 
 // --- FOLLOW AIRCRAFT & CONTROLLI MAPPA ---
-function setFollowState(state) {
-    followAircraft = state;
+function setFollowState(stateIdx) {
+    // Gestione retrocompatibilità per le chiamate boolean da altri script
+    if (typeof stateIdx === 'boolean') followState = stateIdx ? 1 : 0;
+    else followState = stateIdx;
+
     const btn = document.getElementById('btnFollowAcft');
     const t = translations[currentLang];
+    const mapEl = document.getElementById('map');
     if (!btn) return;
-    if (followAircraft) {
-        btn.classList.add('active');
-        btn.innerText = t.btnFollowOn;
-        if (lastAcftLatLng) map.panTo(lastAcftLatLng, { animate: true, duration: 0.4 });
-    } else {
+
+    if (followState === 0) {
         btn.classList.remove('active');
         btn.innerText = t.btnFollowFree;
+        if (mapEl) {
+            mapEl.style.transition = 'transform 0.4s ease';
+            mapEl.style.transform = `rotate(0deg)`;
+        }
+    } else if (followState === 1) {
+        btn.classList.add('active');
+        btn.innerText = t.btnFollowNorth;
+        if (mapEl) {
+            mapEl.style.transition = 'transform 0.4s ease';
+            mapEl.style.transform = `rotate(0deg)`;
+        }
+        if (lastAcftLatLng) map.panTo(lastAcftLatLng, { animate: true, duration: 0.4 });
+    } else if (followState === 2) {
+        btn.classList.add('active');
+        btn.innerText = t.btnFollowTrack;
+        // La rotazione continua (Track Up) è applicata in telemetry.js
+        if (lastAcftLatLng) map.panTo(lastAcftLatLng, { animate: true, duration: 0.4 });
     }
 }
 
 function toggleFollowAircraft() {
-    setFollowState(!followAircraft);
+    // Passa ciclicamente tra: 0 (Libera) -> 1 (North) -> 2 (Track) -> 0...
+    setFollowState((followState + 1) % 3);
 }
 
 map.on('dragstart', function() {
-    if (followAircraft) setFollowState(false);
+    if (followState !== 0) setFollowState(0);
 });
-
 // --- RADIOASSISTENZE CON BUFFER SPAZIALE DEL 25% ---
 function createVorIcon(ident) {
     return L.divIcon({ className: '', html: `<div class="navaid-badge navaid-vor"><span>❖</span><span>${ident}</span></div>`, iconSize: [0, 0] });

@@ -238,6 +238,12 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
                 '</div>';
         }
 
+        // Pulsante eliminazione per waypoint intermedi
+        let deleteBtnHtml = '';
+        if (!isEndpoint) {
+            deleteBtnHtml = `<button class="btn btn-danger" style="padding:1px 5px; font-size:10px; margin-top:3px; align-self:flex-end;" title="Rimuovi dalla rotta" onclick="event.stopPropagation(); removeWaypointFromRoute(${index})">✕</button>`;
+        }
+
         div.innerHTML =
             '<div style="min-width: 0; flex: 1; padding-right: 8px;">' +
                 '<div style="display:flex; align-items:center; gap:6px;">' +
@@ -252,6 +258,7 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
                 '<span class="wpt-alt" onclick="event.stopPropagation(); editWaypointAlt(' + index + ', ' + altVal + ')">' + altVal + ' ft</span>' +
                 '<span class="wpt-dist" id="wptDist_' + index + '">--- NM</span>' +
                 '<span style="font-size:10px;color:var(--text-muted);">' + (apt && apt.rwy ? ('RWY ' + apt.rwy) : (wp.type || 'WPT')) + '</span>' +
+                deleteBtnHtml + 
             '</div>';
         container.appendChild(div);
     });
@@ -259,8 +266,16 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
     if (coords.length > 1) {
         routeLine = L.polyline(coords, { color: '#e879f9', weight: 2.5, dashArray: '6, 4' }).addTo(map);
         if (fitMap) {
-            setFollowState(false);
-            map.fitBounds(routeLine.getBounds(), { padding: [80, 80] });
+            setFollowState(0);
+            
+            // Compensa il 35% di mappa nascosta ai bordi (più 60px di margine di sicurezza)
+            const padX = (window.innerWidth * 0.35) + 60;
+            const padY = (window.innerHeight * 0.35) + 60;
+            
+            map.fitBounds(routeLine.getBounds(), {
+                paddingTopLeft: [padX, padY],
+                paddingBottomRight: [padX, padY]
+            });
         }
     }
 
@@ -279,6 +294,19 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
     }
 
     renderVnavChart(altitutes);
+}
+
+// Rimuove un waypoint dal piano di volo e aggiorna l'UI
+function removeWaypointFromRoute(index) {
+    if (!flightPlan || index <= 0 || index >= flightPlan.length - 1) {
+        return; 
+    }
+    flightPlan.splice(index, 1);
+    
+    const maxCruise = Math.max(...flightPlan.map(w => Number(w.alt_ft) || 0));
+    flightPlan = applyClimbDescentProfile(flightPlan, maxCruise);
+    
+    updateFlightPlanUI(currentAlternate, false);
 }
 
 async function editWaypointAlt(index, currentAlt) {
@@ -381,8 +409,11 @@ async function clearFlightPlanUI() {
         clearMapRoutes();
         document.getElementById('fplContainer').innerHTML = '';
         document.getElementById('vnavPath').setAttribute('d', 'M0,50 L1000,50 Z');
+        
+        // Azzera la sagoma orografica quando elimini la rotta
         const tp = document.getElementById('terrainPath');
         if (tp) tp.setAttribute('d', 'M0,50 L1000,50 Z');
+        
         document.getElementById('vnavText').textContent = translations[currentLang].noFpl.toUpperCase();
         updateHoverSync(null);
         if (window.pywebview && window.pywebview.api && window.pywebview.api.clear_flight_plan) {

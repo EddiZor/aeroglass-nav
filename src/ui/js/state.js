@@ -13,8 +13,9 @@ const translations = {
         btnFilters: "Filters & SID/STAR",
         btnNavaids: "📡 VOR / ILS: ON",
         btnNavaidsOff: "📡 VOR / ILS: OFF",
-        btnFollowOn: "🎯 Follow Acft: ON",
-        btnFollowFree: "✋ Free Map",
+        btnFollowFree: "✋ Mappa Libera",
+        btnFollowNorth: "🎯 Follow (North Up)",
+        btnFollowTrack: "🧭 Follow (Track Up)",
         btnReduce: "[ Reduce / Expand ]"
     },
     it: {
@@ -32,6 +33,8 @@ const translations = {
         btnNavaidsOff: "📡 VOR / ILS: OFF",
         btnFollowOn: "🎯 Segui Aereo: ON",
         btnFollowFree: "✋ Mappa Libera",
+        btnFollowNorth: "🎯 Segui (North Up)",
+        btnFollowTrack: "🧭 Segui (Track Up)",
         btnReduce: "[ Riduci / Espandi ]"
     }
 };
@@ -123,8 +126,7 @@ const AIRSPACES_DATA = {
 // --- VARIABILI DI STATO GLOBALE ---
 let currentLang = 'it';
 let showNavaids = true;
-let followAircraft = true;
-let lastAcftLatLng = null;
+let followState = 1; // 0 = Free, 1 = North Up, 2 = Track Up
 let lastAcftHdgTrue = 0;
 let lastRenderedAcftKey = null;
 

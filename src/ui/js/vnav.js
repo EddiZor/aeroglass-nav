@@ -338,12 +338,18 @@ function updateActiveWaypointHighlight(acftLat, acftLon, acftHdg) {
         }
     });
 
+    const fplContainer = document.getElementById('fplContainer');
     const cards = document.querySelectorAll('#fplContainer .wpt-card');
     cards.forEach((card, idx) => {
         if (idx === activeIdx) {
             card.style.borderColor = 'var(--emerald)';
             card.style.background = 'rgba(52, 211, 153, 0.12)';
-            card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (fplContainer) {
+                fplContainer.scrollTo({
+                    top: card.offsetTop - fplContainer.offsetTop,
+                    behavior: 'smooth'
+                });
+            }
         } else {
             card.style.borderColor = '';
             card.style.background = '';
