@@ -102,7 +102,7 @@ class TelemetryManager:
                     time.sleep(1.5)
                     continue
 
-                if abs(float(lat)) < 0.01 and abs(float(lon)) < 0.01:
+                if (abs(float(lat)) < 0.01 and abs(float(lon)) < 0.01) or (abs(float(lat)) < 0.01 and abs(float(lon) - 90.0) < 0.05):
                     self._last_meta_time = 0.0
                     self._set_demo_state()
                     time.sleep(2.5)
