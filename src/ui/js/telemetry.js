@@ -97,6 +97,7 @@ function updateFlightInfoBar(lat, lon) {
 
 // --- POLLING TELEMETRIA SIMCONNECT ---
 async function pollTelemetry() {
+    updateFlightInfoBar();
     if (!window.pywebview || !window.pywebview.api) return;
     try {
         const data = await window.pywebview.api.get_telemetry();

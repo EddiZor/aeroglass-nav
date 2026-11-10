@@ -40,79 +40,107 @@ function sampleRouteCoordinates(coords, numPoints) {
     return result;
 }
 
-// Costruisce la stringa SVG 'd' per le quote (adattato al viewBox h:50 di AeroGlass)
-// Costruisce la stringa SVG 'd' per le quote (altezza calibrata a 100 per il cassetto VNAV)
-function buildSvgAreaPath(samples, maxAlt, width = 1000, height = 100) {
-    if (!samples || samples.length === 0) return `M0,${height} L${width},${height} Z`;
-    let d = `M0,${height} `;
-    
+// Costruisce la stringa SVG 'd' per le quote (calibrata sul viewBox 0 0 1000 50)
+function buildSvgAreaPath(samples, maxAlt, width = 1000, height = 40) {
+    if (!samples || samples.length === 0) return 'M0,50 L1000,50 Z';
+    let d = 'M0,50 ';
     if (samples.length === 1) {
-        const y = Math.max(2, height - (samples[0] / maxAlt) * height);
+        const y = Math.max(2, Math.min(49, height - (samples[0] / maxAlt) * height + 5));
         d += `L0,${y.toFixed(1)} L${width},${y.toFixed(1)} `;
     } else {
-        const stepX = width / (samples.length - 1);
         samples.forEach((alt, i) => {
-            const x = i * stepX;
-            const y = Math.max(2, height - (alt / maxAlt) * height);
+            const x = (i / (samples.length - 1)) * width;
+            const y = Math.max(2, Math.min(49, height - (alt / maxAlt) * height + 5));
             d += `L${x.toFixed(1)},${y.toFixed(1)} `;
         });
     }
-    d += `L${width},${height} Z`;
+    d += `L${width},50 Z`;
     return d;
 }
 
+// Scarica le elevazioni reali (DEM/SRTM) su 40 punti lungo la rotta
+async function fetchRouteTerrainProfile(maxAlt) {
+    const terrainPath = document.getElementById('terrainPath');
+    if (!terrainPath) return;
+
+    if (!flightPlan || flightPlan.length < 2) {
+        currentTerrainSamples = [];
+        terrainPath.setAttribute('d', 'M0,50 L1000,50 Z');
+        return;
+    }
+
+    const token = ++terrainFetchToken;
+    const numSamples = 40;
+    const lats = [];
+    const lons = [];
+
+    for (let i = 0; i < numSamples; i++) {
+        const frac = i / (numSamples - 1);
+        const pt = getRouteDetailsAtFraction(frac);
+        if (!pt || !pt.latlng) return;
+        lats.push(pt.latlng.lat.toFixed(4));
+        lons.push(pt.latlng.lng.toFixed(4));
+    }
+
+    try {
+        const url = `https://api.open-meteo.com/v1/elevation?latitude=${lats.join(',')}&longitude=${lons.join(',')}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("Elevation API non raggiungibile");
+        const data = await res.json();
+
+        if (token !== terrainFetchToken || !data.elevation) return;
+
+        currentTerrainSamples = data.elevation.map(m => Math.max(0, Math.round(Number(m || 0) * 3.28084)));
+        terrainPath.setAttribute('d', buildSvgAreaPath(currentTerrainSamples, maxAlt));
+    } catch (err) {
+        if (token !== terrainFetchToken) return;
+        const depApt = findAirport(flightPlan[0]?.ident);
+        const destApt = findAirport(flightPlan[flightPlan.length - 1]?.ident);
+        const startElev = depApt ? (depApt.elev || 0) : 0;
+        const endElev = destApt ? (destApt.elev || 0) : 0;
+
+        currentTerrainSamples = [];
+        for (let i = 0; i < numSamples; i++) {
+            const frac = i / (numSamples - 1);
+            currentTerrainSamples.push(Math.round(startElev + frac * (endElev - startElev)));
+        }
+        terrainPath.setAttribute('d', buildSvgAreaPath(currentTerrainSamples, maxAlt));
+    }
+}
+
+// Restituisce l'elevazione del terreno in ft alla frazione di rotta (0..1)
+function getTerrainAtFraction(fraction) {
+    if (!currentTerrainSamples || currentTerrainSamples.length === 0) return null;
+    const idx = Math.min(
+        currentTerrainSamples.length - 1,
+        Math.max(0, Math.round(fraction * (currentTerrainSamples.length - 1)))
+    );
+    return currentTerrainSamples[idx];
+}
+
 // --- DISEGNO PROFILO VNAV MULTI-STEP + TERRENO ---
-async function renderVnavChart(alts) {
+function renderVnavChart(alts) {
     const svgPath = document.getElementById('vnavPath');
     const terrainPath = document.getElementById('terrainPath');
     const svgText = document.getElementById('vnavText');
     if (!svgPath) return;
 
-    // 1. Disegna immediatamente il profilo di volo stimato
-    const validAlts = (alts || []).map(a => Number(a) || 0);
-    const maxPlannedAlt = validAlts.length > 0 ? Math.max(...validAlts, 5000) : 5000;
-    
-    svgPath.setAttribute('d', buildSvgAreaPath(validAlts, maxPlannedAlt));
-    if (terrainPath) terrainPath.setAttribute('d', 'M0,50 L1000,50 Z');
-    if (svgText) svgText.textContent = `VNAV PENDING (MAX ALT: ${maxPlannedAlt.toLocaleString()} FT)`;
-    currentTerrainSamples = [];
-
-    if (typeof flightPlan === 'undefined' || flightPlan.length < 2) return;
-
-    // 2. Scarica e disegna l'orografia del terreno sottostante (Open-Meteo API)
-    const token = ++terrainFetchToken;
-    const routeCoords = flightPlan.filter(w => w.lat !== null && w.lon !== null).map(w => [w.lat, w.lon]);
-    if (routeCoords.length < 2) return;
-
-    try {
-        const sampled = sampleRouteCoordinates(routeCoords, 50);
-        const lats = sampled.map(c => c[0].toFixed(4)).join(',');
-        const lons = sampled.map(c => c[1].toFixed(4)).join(',');
-
-        const url = `https://api.open-meteo.com/v1/elevation?latitude=${lats}&longitude=${lons}`;
-        const response = await fetch(url);
-        const data = await response.json();
-
-        // Evita sovrascritture se è stato caricato un nuovo piano di volo nel frattempo
-        if (token !== terrainFetchToken) return;
-
-        if (data && data.elevation) {
-            currentTerrainSamples = data.elevation.map(m => Math.max(0, Math.round(m * 3.28084)));
-            
-            // Ricalcola l'altezza massima per far combaciare perfettamente le due scale (Rotta e Terreno)
-            const maxTerrainAlt = Math.max(...currentTerrainSamples);
-            const absoluteMaxAlt = Math.max(maxPlannedAlt, maxTerrainAlt + 1500); // 1500ft di margine visivo
-
-            svgPath.setAttribute('d', buildSvgAreaPath(validAlts, absoluteMaxAlt));
-            if (terrainPath) terrainPath.setAttribute('d', buildSvgAreaPath(currentTerrainSamples, absoluteMaxAlt));
-            
-            if (svgText) {
-                svgText.textContent = `VNAV & TERRAIN (CHART MAX: ${absoluteMaxAlt.toLocaleString()} FT)`;
-            }
-        }
-    } catch (e) {
-        console.warn("Impossibile caricare il profilo orografico del terreno:", e);
+    if (!alts || alts.length === 0) {
+        svgPath.setAttribute('d', 'M0,50 L1000,50 Z');
+        if (terrainPath) terrainPath.setAttribute('d', 'M0,50 L1000,50 Z');
+        currentTerrainSamples = [];
+        return;
     }
+
+    const validAlts = alts.map(a => Number(a) || 0);
+    const maxAlt = Math.max(...validAlts, 5000);
+    svgPath.setAttribute('d', buildSvgAreaPath(validAlts, maxAlt));
+
+    if (svgText) {
+        svgText.textContent = `VNAV MULTI-STEP (MAX ALT: ${maxAlt.toLocaleString()} FT)`;
+    }
+
+    fetchRouteTerrainProfile(maxAlt);
 }
 
 // --- CALCOLO PROGRESSO ROTTA E HOVER SINCRONIZZATO ---
@@ -154,15 +182,6 @@ function calculateRouteProgress(lat, lon) {
         accumulatedDist += segLen;
     }
     return { fraction: Math.max(0, Math.min(1, bestFraction)), distanceToRoute: minGlobalDist };
-}
-
-function getTerrainAtFraction(fraction) {
-    if (!currentTerrainSamples || currentTerrainSamples.length === 0) return null;
-    const idx = Math.min(
-        currentTerrainSamples.length - 1,
-        Math.max(0, Math.round(fraction * (currentTerrainSamples.length - 1)))
-    );
-    return currentTerrainSamples[idx];
 }
 
 function getRouteDetailsAtFraction(fraction) {

@@ -1,119 +1,190 @@
-// --- LINGUE E TRADUZIONI ---
-let currentLang = 'it';
-const translations = {
-    it: {
-        btnFollowFree: "Mappa Libera",
-        btnFollowNorth: "Segui (North Up)",
-        btnFollowTrack: "Segui (Track Up)",
-        btnNavaids: "VOR/ILS: ON",
-        btnNavaidsOff: "VOR/ILS: OFF",
-        noFpl: "NESSUN PIANO DI VOLO ATTIVO"
-    },
-    en: {
-        btnFollowFree: "Free Map",
-        btnFollowNorth: "Follow (North Up)",
-        btnFollowTrack: "Follow (Track Up)",
-        btnNavaids: "VOR/ILS: ON",
-        btnNavaidsOff: "VOR/ILS: OFF",
-        noFpl: "NO ACTIVE FLIGHT PLAN"
-    }
-};
+// --- GESTIONE SIDEBAR FPL E CASSETTO VNAV ---
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebarPanel');
+    const arrow = document.getElementById('sidebarArrow');
+    const label = document.getElementById('sidebarLabel');
+    if (!sidebar) return;
 
-// --- INIZIALIZZAZIONE UI E OROLOGIO ---
-function updateClock() {
-    const now = new Date();
-    const dateEl = document.getElementById('infoDate');
-    const utcEl = document.getElementById('infoUtc');
-    const sysEl = document.getElementById('infoSys');
+    sidebarOpen = !sidebarOpen;
+    sidebar.classList.toggle('collapsed', !sidebarOpen);
 
-    if (dateEl) {
-        const day = String(now.getUTCDate()).padStart(2, '0');
-        const month = now.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' }).toUpperCase();
-        const year = now.getUTCFullYear();
-        dateEl.textContent = `${day} ${month} ${year}`;
-    }
-    if (utcEl) {
-        const h = String(now.getUTCHours()).padStart(2, '0');
-        const m = String(now.getUTCMinutes()).padStart(2, '0');
-        const s = String(now.getUTCSeconds()).padStart(2, '0');
-        utcEl.textContent = `UTC: ${h}:${m}:${s}`;
-    }
-    if (sysEl) {
-        const h = String(now.getHours()).padStart(2, '0');
-        const m = String(now.getMinutes()).padStart(2, '0');
-        const s = String(now.getSeconds()).padStart(2, '0');
-        sysEl.textContent = `SYS: ${h}:${m}:${s}`;
+    if (arrow) arrow.innerText = sidebarOpen ? '◀' : '▶';
+    if (label) label.style.display = sidebarOpen ? 'none' : 'block';
+}
+
+function toggleDrawer() {
+    const drawer = document.getElementById('elevationDrawer');
+    const arrow = document.getElementById('drawerArrow');
+    const infoBar = document.getElementById('bottomInfoBar');
+    if (!drawer) return;
+
+    drawerOpen = !drawerOpen;
+    drawer.classList.toggle('collapsed', !drawerOpen);
+
+    if (arrow) arrow.innerText = drawerOpen ? '▼' : '▲';
+    if (infoBar) {
+        infoBar.style.bottom = drawerOpen ? '134px' : '36px';
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    // Avvia l'orologio della barra inferiore
-    setInterval(updateClock, 1000);
-    updateClock();
+// --- CAMBIO LINGUA IT / EN ---
+function applyTranslations() {
+    const t = translations[currentLang];
+    if (!t) return;
 
-    window.onclick = function(event) {
+    const langLabel = document.getElementById('langLabel');
+    if (langLabel) langLabel.innerText = currentLang.toUpperCase();
+
+    const omniSearch = document.getElementById('omniSearch');
+    if (omniSearch) omniSearch.placeholder = t.searchPlaceholder;
+
+    const fplTitle = document.getElementById('fplSectionTitle');
+    if (fplTitle) fplTitle.innerText = t.activeFpl.toUpperCase();
+
+    const lblFilters = document.getElementById('lblFilters');
+    if (lblFilters) lblFilters.innerText = t.btnFilters;
+
+    const lblReduce = document.getElementById('lblReduceExpand');
+    if (lblReduce) lblReduce.innerText = t.btnReduce;
+
+    const btnNavaids = document.getElementById('btnToggleNavaids');
+    if (btnNavaids) btnNavaids.innerText = showNavaids ? t.btnNavaids : t.btnNavaidsOff;
+
+    setFollowState(followState);
+
+    const vnavText = document.getElementById('vnavText');
+    if (vnavText && (!flightPlan || flightPlan.length === 0)) {
+        vnavText.innerText = t.noFpl.toUpperCase();
+    }
+}
+
+function toggleLanguage() {
+    currentLang = (currentLang === 'it') ? 'en' : 'it';
+    applyTranslations();
+}
+
+// --- RIDIMENSIONAMENTO LARGHEZZA SIDEBAR ---
+function initSidebarResizer() {
+    const sidebar = document.getElementById('sidebarPanel');
+    const resizer = document.getElementById('sidebarResizer');
+    if (!sidebar || !resizer) return;
+
+    let isResizing = false;
+
+    resizer.addEventListener('mousedown', (e) => {
+        if (!sidebarOpen) return;
+        isResizing = true;
+        document.body.style.cursor = 'ew-resize';
+        e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+        const newWidth = Math.max(260, Math.min(520, e.clientX - 16));
+        sidebar.style.width = `${newWidth}px`;
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isResizing) {
+            isResizing = false;
+            document.body.style.cursor = '';
+        }
+    });
+}
+
+// --- DRAG & DROP FILE .PLN SULLA FINESTRA ---
+function initDragAndDropPln() {
+    const overlay = document.getElementById('dropZoneOverlay');
+    if (!overlay) return;
+
+    window.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        overlay.style.display = 'flex';
+    });
+
+    overlay.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        overlay.style.display = 'none';
+    });
+
+    overlay.addEventListener('drop', (e) => {
+        e.preventDefault();
+        overlay.style.display = 'none';
+        const files = e.dataTransfer?.files;
+        if (files && files.length > 0) {
+            const reader = new FileReader();
+            reader.onload = async (ev) => {
+                if (ev.target?.result) {
+                    await processAndRenderPlnXml(ev.target.result);
+                }
+            };
+            reader.readAsText(files[0]);
+        }
+    });
+}
+
+// --- INIZIALIZZAZIONE APPLICAZIONE E DATI PYWEBVIEW ---
+async function initAeroGlassApp() {
+    if (initialized) return;
+    initialized = true;
+
+    updateFlightInfoBar(43.5, 12.0);
+    setFollowState(followState);
+    renderNavAids(vorsData, ilsData);
+    updateMapScale();
+
+    if (window.pywebview && window.pywebview.api) {
+        try {
+            if (window.pywebview.api.get_initial_data) {
+                const initData = await window.pywebview.api.get_initial_data();
+                if (initData) {
+                    if (initData.airports && initData.airports.length > 0) {
+                        airportsData = [...initData.airports, ...EXTRA_AIRPORTS];
+                    }
+                    if (initData.vors && initData.vors.length > 0) {
+                        vorsData = initData.vors;
+                    }
+                    if (initData.ils && initData.ils.length > 0) {
+                        ilsData = initData.ils;
+                    }
+                    if (initData.simbrief_id) {
+                        const sbInput = document.getElementById('simbriefIdInput');
+                        if (sbInput) sbInput.value = initData.simbrief_id;
+                        setSimbriefCompactMode(true);
+                    }
+                    renderNavAids(vorsData, ilsData);
+                }
+            }
+            await loadUserWaypoints();
+        } catch (e) {}
+    }
+
+    setInterval(pollTelemetry, 1000);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initSidebarResizer();
+    initDragAndDropPln();
+    updateFlightInfoBar(43.5, 12.0);
+
+    // Aggiorna le coordinate al passaggio del mouse quando non connesso a MSFS
+    if (typeof map !== 'undefined' && map) {
+        map.on('mousemove', (e) => {
+            const coordsEl = document.getElementById('infoCoords');
+            if (coordsEl) {
+                coordsEl.innerText = `LAT: ${e.latlng.lat.toFixed(5)} LON: ${e.latlng.lng.toFixed(5)}`;
+            }
+        });
+    }
+
+    window.addEventListener('click', (event) => {
         const createModal = document.getElementById('createFplModal');
         if (createModal && event.target === createModal) {
             closeCreateFplModal();
         }
-    };
+    });
 
-    const vnavContainer = document.getElementById('vnavContainer');
-    const infoBar = document.getElementById('bottomInfoBar');
-    if (vnavContainer && infoBar) {
-        const isClosed = vnavContainer.classList.contains('collapsed');
-        infoBar.style.bottom = isClosed ? '36px' : '134px';
-    }
+    setTimeout(initAeroGlassApp, 300);
 });
 
-// --- GESTIONE PANNELLI E CASSETTI UI ---
-function toggleFpl() {
-    const sidebar = document.querySelector('.sidebar') || document.getElementById('sidebar');
-    if (sidebar) sidebar.classList.toggle('collapsed');
-}
-
-function toggleVnav() {
-    const vnavContainer = document.getElementById('vnavContainer');
-    if (!vnavContainer) return;
-    
-    vnavContainer.classList.toggle('collapsed');
-    
-    const infoBar = document.getElementById('bottomInfoBar');
-    if (infoBar) {
-        const isClosed = vnavContainer.classList.contains('collapsed');
-        infoBar.style.bottom = isClosed ? '36px' : '134px';
-    }
-}
-
-function switchLanguage(lang) {
-    currentLang = lang;
-    const t = translations[currentLang];
-    
-    const btnFollow = document.getElementById('btnFollowAcft');
-    if (btnFollow && typeof followState !== 'undefined') {
-        if (followState === 0) btnFollow.innerText = t.btnFollowFree;
-        else if (followState === 1) btnFollow.innerText = t.btnFollowNorth;
-        else if (followState === 2) btnFollow.innerText = t.btnFollowTrack;
-    }
-    
-    const btnNavaids = document.getElementById('btnToggleNavaids');
-    if (btnNavaids && typeof showNavaids !== 'undefined') {
-        btnNavaids.innerText = showNavaids ? t.btnNavaids : t.btnNavaidsOff;
-    }
-
-    const vnavText = document.getElementById('vnavText');
-    if (vnavText && (typeof flightPlan === 'undefined' || flightPlan.length === 0)) {
-        vnavText.textContent = t.noFpl;
-    }
-}
-
-// --- CONTROLLI FINESTRA NATIVI (PYWEBVIEW) ---
-function closeApp() {
-    if (window.pywebview && window.pywebview.api) window.pywebview.api.close_app();
-}
-function minimizeApp() {
-    if (window.pywebview && window.pywebview.api) window.pywebview.api.minimize_app();
-}
-function toggleMaximizeApp() {
-    if (window.pywebview && window.pywebview.api) window.pywebview.api.toggle_maximize_app();
-}
+window.addEventListener('pywebviewready', initAeroGlassApp);

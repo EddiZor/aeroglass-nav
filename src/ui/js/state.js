@@ -128,6 +128,7 @@ let currentLang = 'it';
 let showNavaids = true;
 let followState = 1; // 0 = Free, 1 = North Up, 2 = Track Up
 let lastAcftHdgTrue = 0;
+let lastAcftLatLng = null;
 let lastRenderedAcftKey = null;
 
 let airportsData = [...EXTRA_AIRPORTS];
