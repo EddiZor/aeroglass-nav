@@ -279,3 +279,33 @@ async function quickSaveMapWaypoint(lat, lon) {
     }
     await saveAndRefreshUserWaypoints();
 }
+
+// --- AGGIORNAMENTO DINAMICO BARRA DI SCALA (NM) ---
+function updateMapScale() {
+    const scaleTextEl = document.getElementById('scaleText');
+    if (!scaleTextEl || typeof map === 'undefined' || !map) return;
+
+    // Riferimento basato sulla larghezza della barra grafica (80 pixel)
+    const p1 = map.containerPointToLatLng([0, 0]);
+    const p2 = map.containerPointToLatLng([80, 0]);
+    
+    // Calcola la distanza in metri su Leaflet e convertila in miglia nautiche (NM)
+    const meters = p1.distanceTo(p2);
+    let nm = meters / 1852;
+
+    // Arrotonda il valore per renderlo pulito e leggibile
+    if (nm >= 10) nm = Math.round(nm);
+    else if (nm >= 1) nm = nm.toFixed(1);
+    else nm = nm.toFixed(2);
+
+    scaleTextEl.innerText = `${nm} NM`;
+}
+
+// Aggiorna la scala ogni volta che la mappa viene mossa o zoomata
+if (typeof map !== 'undefined' && map) {
+    map.on('move zoom viewreset', updateMapScale);
+}
+
+// Esegue il calcolo ripetuto nei primi secondi per essere sicuri che la mappa sia inizializzata
+setTimeout(updateMapScale, 300);
+setTimeout(updateMapScale, 1000);
