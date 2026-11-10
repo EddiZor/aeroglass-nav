@@ -520,3 +520,11 @@ body, html {
     color: var(--amber) !important;
     box-shadow: 0 0 10px rgba(251, 191, 36, 0.35);
 }
+
+/* Stile Orografia Terreno nel Cassetto VNAV */
+#terrainPath {
+    fill: rgba(180, 83, 9, 0.42);
+    stroke: #f59e0b;
+    stroke-width: 1.3;
+    transition: d 0.25s ease;
+}

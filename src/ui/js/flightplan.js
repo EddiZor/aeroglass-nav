@@ -381,6 +381,8 @@ async function clearFlightPlanUI() {
         clearMapRoutes();
         document.getElementById('fplContainer').innerHTML = '';
         document.getElementById('vnavPath').setAttribute('d', 'M0,50 L1000,50 Z');
+        const tp = document.getElementById('terrainPath');
+        if (tp) tp.setAttribute('d', 'M0,50 L1000,50 Z');
         document.getElementById('vnavText').textContent = translations[currentLang].noFpl.toUpperCase();
         updateHoverSync(null);
         if (window.pywebview && window.pywebview.api && window.pywebview.api.clear_flight_plan) {
