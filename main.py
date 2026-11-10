@@ -1,5 +1,7 @@
 ﻿import os
 import sys
+import time
+import threading
 import ctypes
 from ctypes import wintypes
 import webview
@@ -55,32 +57,35 @@ def main():
         js_api=api,
         width=init_w,
         height=init_h,
-        min_size=(640, 480),  # Abbassato per supportare anche l'80% su display con altezza 720px
+        min_size=(640, 480),
         background_color="#0f172a"
     )
 
-    # Collega il riferimento della finestra all'API (nel caso serva anche da JS)
+    # Collega il riferimento della finestra all'API
     api._window = window
 
-    # Traccia il monitor corrente per ridimensionare all'80% quando cambi schermo
-    state = {"hmon": current_mon, "resizing": False}
-
-    def on_window_moved(x, y):
-        if state["resizing"]:
-            return
-        # Usa il punto centrale approssimativo della barra del titolo per capire su quale monitor si trova
-        hmon, w, h, mon_left, mon_top = get_monitor_info_from_point(int(x) + 200, int(y) + 20)
-        if hmon and hmon != state["hmon"]:
-            state["hmon"] = hmon
-            state["resizing"] = True
+    # Thread in background per il monitoraggio fluido del cambio monitor
+    def monitor_tracker():
+        last_hmon = current_mon
+        while True:
+            time.sleep(0.4)
             try:
-                target_w = int(w * 0.8)
-                target_h = int(h * 0.8)
-                window.resize(target_w, target_h)
-            finally:
-                state["resizing"] = False
+                pos = window.get_position()
+                if not pos:
+                    continue
+                x, y = pos
+                # Usa un punto interno alla barra del titolo (x + 200, y + 20)
+                hmon, w, h, _, _ = get_monitor_info_from_point(x + 200, y + 20)
+                if hmon and hmon != last_hmon:
+                    last_hmon = hmon
+                    target_w = int(w * 0.8)
+                    target_h = int(h * 0.8)
+                    window.resize(target_w, target_h)
+            except Exception:
+                pass
 
-    window.events.moved += on_window_moved
+    tracker_thread = threading.Thread(target=monitor_tracker, daemon=True)
+    tracker_thread.start()
 
     # Assicura la chiusura pulita di SimConnect e dei thread in background alla chiusura della finestra
     window.events.closed += lambda: api._telemetry.shutdown()
