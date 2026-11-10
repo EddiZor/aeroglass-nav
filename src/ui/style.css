@@ -528,3 +528,13 @@ body, html {
     stroke-width: 1.3;
     transition: d 0.25s ease;
 }
+
+/* Troncamento nome aeromobile per evitare lo sdoppiamento della barra */
+#valAcft {
+    max-width: 170px; /* Regola questo valore per dare più o meno spazio */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: inline-block;
+    vertical-align: bottom;
+}
