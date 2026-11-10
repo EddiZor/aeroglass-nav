@@ -190,3 +190,44 @@ async function initApp() {
 window.addEventListener('resize', () => { if (map) map.invalidateSize(); });
 window.addEventListener('pywebviewready', initApp);
 setTimeout(initApp, 150);
+
+// --- AUTO-RIDIMENSIONAMENTO 80% AL CAMBIO MONITOR ---
+let lastScreenWidth = window.screen.width;
+let lastScreenHeight = window.screen.height;
+let mapResizeTimer = null;
+
+function checkMonitorResolutionChange() {
+    const curW = window.screen.width;
+    const curH = window.screen.height;
+
+    if (curW !== lastScreenWidth || curH !== lastScreenHeight) {
+        lastScreenWidth = curW;
+        lastScreenHeight = curH;
+
+        const targetW = Math.round(curW * 0.8);
+        const targetH = Math.round(curH * 0.8);
+
+        if (window.pywebview && window.pywebview.api) {
+            if (typeof window.pywebview.api.resize_window === 'function') {
+                window.pywebview.api.resize_window(targetW, targetH);
+            } else if (typeof window.pywebview.api.resize_to_monitor === 'function') {
+                window.pywebview.api.resize_to_monitor(curW, curH);
+            } else if (typeof window.pywebview.api.set_window_size === 'function') {
+                window.pywebview.api.set_window_size(targetW, targetH);
+            }
+        }
+    }
+}
+
+// Controlla ogni 500ms se la finestra è stata spostata su un monitor con risoluzione diversa
+setInterval(checkMonitorResolutionChange, 500);
+
+// Ricalcola le dimensioni della mappa Leaflet dopo ogni ridimensionamento finestra
+window.addEventListener('resize', () => {
+    if (mapResizeTimer) clearTimeout(mapResizeTimer);
+    mapResizeTimer = setTimeout(() => {
+        if (typeof map !== 'undefined' && map) {
+            map.invalidateSize();
+        }
+    }, 150);
+});
