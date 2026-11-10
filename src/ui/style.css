@@ -263,6 +263,7 @@ body, html {
 
 .fpl-list {
     flex: 1;
+    min-height: 0; /* Fondamentale per attivare correttamente lo scroll nei flexbox */
     overflow-y: auto;
     display: flex;
     flex-direction: column;

@@ -82,6 +82,61 @@ function getTerrainAtFraction(fraction) {
     return currentTerrainSamples[idx];
 }
 
+// --- PROFILO OROGRAFICO TERRENO LUNGO LA ROTTA ---
+async function updateTerrainProfile(coords) {
+    const terrainPathEl = document.getElementById('terrainPath');
+    if (!terrainPathEl || !coords || coords.length < 2) return;
+
+    try {
+        const sampledCoords = sampleRouteCoordinates(coords, 50);
+        const lats = sampledCoords.map(c => c[0]).join(',');
+        const lons = sampledCoords.map(c => c[1]).join(',');
+
+        const url = `https://api.open-meteo.com/v1/elevation?latitude=${lats}&longitude=${lons}`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data && data.elevation) {
+            const elevations = data.elevation;
+            const maxAlt = 35000;
+            const width = 1000;
+            const height = 100;
+
+            let pathD = `M0,${height} `;
+            const stepX = width / (elevations.length - 1);
+
+            elevations.forEach((elevMeters, idx) => {
+                const elevFt = elevMeters * 3.28084;
+                const y = height - Math.min(Math.max((elevFt / maxAlt) * height, 0), height - 5);
+                const x = idx * stepX;
+                pathD += `L${x.toFixed(1)},${y.toFixed(1)} `;
+            });
+
+            pathD += `L${width},${height} Z`;
+            terrainPathEl.setAttribute('d', pathD);
+        }
+    } catch (e) {
+        console.warn("Impossibile caricare il profilo orografico del terreno:", e);
+    }
+}
+
+// Funzione di supporto per campionare i punti lungo la polilinea
+function sampleRouteCoordinates(coords, numPoints) {
+    let result = [];
+    for (let i = 0; i < numPoints; i++) {
+        const frac = i / (numPoints - 1);
+        const totalIdx = frac * (coords.length - 1);
+        const idx1 = Math.floor(totalIdx);
+        const idx2 = Math.min(idx1 + 1, coords.length - 1);
+        const subFrac = totalIdx - idx1;
+
+        const lat = coords[idx1][0] + subFrac * (coords[idx2][0] - coords[idx1][0]);
+        const lon = coords[idx1][1] + subFrac * (coords[idx2][1] - coords[idx1][1]);
+        result.push([lat, lon]);
+    }
+    return result;
+}
+
 // --- DISEGNO PROFILO VNAV MULTI-STEP + TERRENO ---
 function renderVnavChart(alts) {
     const svgPath = document.getElementById('vnavPath');
@@ -105,6 +160,16 @@ function renderVnavChart(alts) {
 
     // Avvia il campionamento altimetrico del terreno lungo la rotta
     fetchRouteTerrainProfile(maxAlt);
+
+    if (typeof flightPlan !== 'undefined' && flightPlan.length > 0) {
+        const routeCoords = flightPlan
+            .filter(w => w.lat !== null && w.lon !== null)
+            .map(w => [w.lat, w.lon]);
+        
+        if (routeCoords.length > 1) {
+            updateTerrainProfile(routeCoords);
+        }
+    }
 }
 
 // --- CALCOLO PROGRESSO ROTTA E HOVER SINCRONIZZATO ---
@@ -178,181 +243,3 @@ function getRouteDetailsAtFraction(fraction) {
     for (const seg of segments) {
         if (accumulated + seg.d >= targetDist) {
             const segFrac = seg.d === 0 ? 0 : (targetDist - accumulated) / seg.d;
-            const lat = seg.p1.lat + segFrac * (seg.p2.lat - seg.p1.lat);
-            const lng = seg.p1.lng + segFrac * (seg.p2.lng - seg.p1.lng);
-            const alt = Math.round(seg.alt1 + segFrac * (seg.alt2 - seg.alt1));
-            const distNm = (targetDist / 1852).toFixed(1);
-            const totalNm = (totalDist / 1852).toFixed(1);
-            return {
-                latlng: L.latLng(lat, lng),
-                alt,
-                distNm,
-                totalNm,
-                leg: `${seg.fromIdent} ➔ ${seg.toIdent}`
-            };
-        }
-        accumulated += seg.d;
-    }
-
-    const last = segments[segments.length - 1];
-    return {
-        latlng: last.p2,
-        alt: last.alt2,
-        distNm: (totalDist / 1852).toFixed(1),
-        totalNm: (totalDist / 1852).toFixed(1),
-        leg: `${last.fromIdent} ➔ ${last.toIdent}`
-    };
-}
-
-function updateHoverSync(fraction) {
-    const mouseLine = document.getElementById('mouseVnavLine');
-    const container = document.querySelector('.elevation-canvas-container');
-    let vnavBadge = document.getElementById('vnavHoverBadge');
-
-    if (!vnavBadge && container) {
-        vnavBadge = document.createElement('div');
-        vnavBadge.id = 'vnavHoverBadge';
-        vnavBadge.className = 'vnav-hover-badge';
-        container.appendChild(vnavBadge);
-    }
-
-    if (fraction === null || !flightPlan || flightPlan.length < 2) {
-        if (mouseLine) mouseLine.style.display = 'none';
-        if (vnavBadge) vnavBadge.style.display = 'none';
-        if (mouseRouteMarker) {
-            map.removeLayer(mouseRouteMarker);
-            mouseRouteMarker = null;
-        }
-        return;
-    }
-
-    const details = getRouteDetailsAtFraction(fraction);
-    if (!details) return;
-
-    if (mouseLine) {
-        const xPos = fraction * 1000;
-        mouseLine.setAttribute('x1', xPos);
-        mouseLine.setAttribute('x2', xPos);
-        mouseLine.style.display = 'block';
-    }
-
-    const gndElev = getTerrainAtFraction(fraction);
-    const gndInfo = gndElev !== null ? ` (GND: ${gndElev.toLocaleString()} ft)` : '';
-    const labelText = `${details.leg} | ${details.alt.toLocaleString()} ft${gndInfo} | ${details.distNm} NM`;
-
-    if (vnavBadge) {
-        vnavBadge.innerText = labelText;
-        const safePct = Math.max(12, Math.min(88, fraction * 100));
-        vnavBadge.style.left = `${safePct}%`;
-        vnavBadge.style.display = 'block';
-    }
-
-    if (!mouseRouteMarker) {
-        mouseRouteMarker = L.circleMarker(details.latlng, {
-            radius: 6,
-            color: '#fbbf24',
-            fillColor: '#fbbf24',
-            fillOpacity: 0.95,
-            weight: 2,
-            interactive: false
-        }).addTo(map);
-        mouseRouteMarker.bindTooltip(labelText, {
-            permanent: true,
-            direction: 'top',
-            offset: [0, -10],
-            className: 'vnav-route-tooltip'
-        }).openTooltip();
-    } else {
-        mouseRouteMarker.setLatLng(details.latlng);
-        mouseRouteMarker.setTooltipContent(labelText);
-    }
-}
-
-map.on('mousemove', function(e) {
-    if (!flightPlan || flightPlan.length < 2) {
-        updateHoverSync(null);
-        return;
-    }
-    const res = calculateRouteProgress(e.latlng.lat, e.latlng.lng);
-    if (res && res.distanceToRoute < 25000) {
-        updateHoverSync(res.fraction);
-    } else {
-        updateHoverSync(null);
-    }
-});
-
-const vnavSvgEl = document.getElementById('vnavSvg');
-if (vnavSvgEl) {
-    vnavSvgEl.addEventListener('mousemove', function(e) {
-        if (!flightPlan || flightPlan.length < 2) return;
-        const rect = vnavSvgEl.getBoundingClientRect();
-        if (rect.width === 0) return;
-        const fraction = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-        updateHoverSync(fraction);
-    });
-
-    vnavSvgEl.addEventListener('mouseleave', function() {
-        updateHoverSync(null);
-    });
-}
-
-// --- EVIDENZIAZIONE WAYPOINT ATTIVO IN VOLO ---
-function calculateBearing(lat1, lon1, lat2, lon2) {
-    const toRad = d => d * Math.PI / 180;
-    const toDeg = r => r * 180 / Math.PI;
-    const dLon = toRad(lon2 - lon1);
-    const y = Math.sin(dLon) * Math.cos(toRad(lat2));
-    const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
-              Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
-    return (toDeg(Math.atan2(y, x)) + 360) % 360;
-}
-
-function updateActiveWaypointHighlight(acftLat, acftLon, acftHdg) {
-    if (!flightPlan || flightPlan.length === 0) return;
-    let activeIdx = 0;
-    let minDistance = Infinity;
-
-    flightPlan.forEach((wp, i) => {
-        if (wp.lat !== null && wp.lon !== null) {
-            const wptLatLng = L.latLng(wp.lat, wp.lon);
-            const distMeters = L.latLng(acftLat, acftLon).distanceTo(wptLatLng);
-            const distNm = (distMeters / 1852).toFixed(1);
-
-            const bearingToWp = calculateBearing(acftLat, acftLon, wp.lat, wp.lon);
-            let angleDiff = Math.abs(bearingToWp - acftHdg);
-            if (angleDiff > 180) angleDiff = 360 - angleDiff;
-
-            const isAhead = (angleDiff < 90 || distMeters < 3000);
-            const sign = isAhead ? '+' : '-';
-
-            const distEl = document.getElementById('wptDist_' + i);
-            if (distEl) {
-                distEl.innerText = `${sign}${distNm} NM`;
-                distEl.style.color = isAhead ? 'var(--cyan)' : 'var(--text-muted)';
-            }
-
-            if ((angleDiff < 90 || distMeters < 5000) && distMeters < minDistance) {
-                minDistance = distMeters;
-                activeIdx = i;
-            }
-        }
-    });
-
-    const fplContainer = document.getElementById('fplContainer');
-    const cards = document.querySelectorAll('#fplContainer .wpt-card');
-    cards.forEach((card, idx) => {
-        if (idx === activeIdx) {
-            card.style.borderColor = 'var(--emerald)';
-            card.style.background = 'rgba(52, 211, 153, 0.12)';
-            if (fplContainer) {
-                fplContainer.scrollTo({
-                    top: card.offsetTop - fplContainer.offsetTop,
-                    behavior: 'smooth'
-                });
-            }
-        } else {
-            card.style.borderColor = '';
-            card.style.background = '';
-        }
-    });
-}

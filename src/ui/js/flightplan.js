@@ -190,10 +190,18 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
         const rawMetar = wp.metar || (apt ? apt.metar : '');
         const wx = isEndpoint ? parseMetarInfo(rawMetar) : null;
         const altVal = Number(wp.alt_ft) || 0;
+        altitutes.push(altVal > 0 ? altVal : 5000);
+
+        let legDistNm = "0.0";
+        if (index > 0 && flightPlan[index - 1].lat !== null && wp.lat !== null) {
+            const prevLatLng = L.latLng(flightPlan[index - 1].lat, flightPlan[index - 1].lon);
+            const currLatLng = L.latLng(wp.lat, wp.lon);
+            const distMeters = prevLatLng.distanceTo(currLatLng);
+            legDistNm = (distMeters / 1852).toFixed(1);
+        }
 
         if (wp.lat !== undefined && wp.lat !== null && wp.lon !== undefined && wp.lon !== null) {
             coords.push([wp.lat, wp.lon]);
-            altitutes.push(altVal);
 
             const marker = L.circleMarker([wp.lat, wp.lon], {
                 radius: isEndpoint ? 5 : 4,
@@ -238,7 +246,6 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
                 '</div>';
         }
 
-        // Pulsante eliminazione per waypoint intermedi
         let deleteBtnHtml = '';
         if (!isEndpoint) {
             deleteBtnHtml = `<button class="btn btn-danger" style="padding:1px 5px; font-size:10px; margin-top:3px; align-self:flex-end;" title="Rimuovi dalla rotta" onclick="event.stopPropagation(); removeWaypointFromRoute(${index})">✕</button>`;
@@ -256,7 +263,7 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
             '</div>' +
             '<div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px; flex-shrink:0;">' +
                 '<span class="wpt-alt" onclick="event.stopPropagation(); editWaypointAlt(' + index + ', ' + altVal + ')">' + altVal + ' ft</span>' +
-                '<span class="wpt-dist" id="wptDist_' + index + '">--- NM</span>' +
+                '<span class="wpt-dist" id="wptDist_' + index + '">' + (index === 0 ? '0.0 NM' : `+${legDistNm} NM`) + '</span>' +
                 '<span style="font-size:10px;color:var(--text-muted);">' + (apt && apt.rwy ? ('RWY ' + apt.rwy) : (wp.type || 'WPT')) + '</span>' +
                 deleteBtnHtml + 
             '</div>';
@@ -267,11 +274,8 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
         routeLine = L.polyline(coords, { color: '#e879f9', weight: 2.5, dashArray: '6, 4' }).addTo(map);
         if (fitMap) {
             setFollowState(0);
-            
-            // Compensa il 35% di mappa nascosta ai bordi (più 60px di margine di sicurezza)
             const padX = (window.innerWidth * 0.35) + 60;
             const padY = (window.innerHeight * 0.35) + 60;
-            
             map.fitBounds(routeLine.getBounds(), {
                 paddingTopLeft: [padX, padY],
                 paddingBottomRight: [padX, padY]
@@ -296,7 +300,6 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
     renderVnavChart(altitutes);
 }
 
-// Rimuove un waypoint dal piano di volo e aggiorna l'UI
 function removeWaypointFromRoute(index) {
     if (!flightPlan || index <= 0 || index >= flightPlan.length - 1) {
         return; 
@@ -410,7 +413,6 @@ async function clearFlightPlanUI() {
         document.getElementById('fplContainer').innerHTML = '';
         document.getElementById('vnavPath').setAttribute('d', 'M0,50 L1000,50 Z');
         
-        // Azzera la sagoma orografica quando elimini la rotta
         const tp = document.getElementById('terrainPath');
         if (tp) tp.setAttribute('d', 'M0,50 L1000,50 Z');
         
