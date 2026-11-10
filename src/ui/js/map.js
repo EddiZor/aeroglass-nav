@@ -309,3 +309,11 @@ if (typeof map !== 'undefined' && map) {
 // Esegue il calcolo ripetuto nei primi secondi per essere sicuri che la mappa sia inizializzata
 setTimeout(updateMapScale, 300);
 setTimeout(updateMapScale, 1000);
+
+// Aggiorna le coordinate nella barra inferiore al movimento del mouse
+map.on('mousemove', function(e) {
+    const coordsEl = document.getElementById('infoCoords');
+    if (coordsEl) {
+        coordsEl.innerText = `LAT: ${e.latlng.lat.toFixed(5)} LON: ${e.latlng.lng.toFixed(5)}`;
+    }
+});

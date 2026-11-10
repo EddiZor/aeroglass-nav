@@ -274,11 +274,9 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
         routeLine = L.polyline(coords, { color: '#e879f9', weight: 2.5, dashArray: '6, 4' }).addTo(map);
         if (fitMap) {
             setFollowState(0);
-            const padX = (window.innerWidth * 0.35) + 60;
-            const padY = (window.innerHeight * 0.35) + 60;
+            // Padding sicuro e fisso per evitare crash del vettoriale Leaflet su schermi piccoli
             map.fitBounds(routeLine.getBounds(), {
-                paddingTopLeft: [padX, padY],
-                paddingBottomRight: [padX, padY]
+                padding: [50, 50]
             });
         }
     }

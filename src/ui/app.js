@@ -1,233 +1,119 @@
-// --- GESTIONE LINGUA INTERFACCIA ---
-function checkSystemLanguage() {
-    const sysLang = navigator.language || navigator.userLanguage || '';
-    const isItalianSystem = sysLang.toLowerCase().startsWith('it');
-    const langBtn = document.getElementById('btnLangSelect');
-    if (langBtn) {
-        if (isItalianSystem) {
-            langBtn.style.display = 'inline-flex';
-            currentLang = 'it';
-        } else {
-            langBtn.style.display = 'none';
-            currentLang = 'en';
-        }
+// --- LINGUE E TRADUZIONI ---
+let currentLang = 'it';
+const translations = {
+    it: {
+        btnFollowFree: "Mappa Libera",
+        btnFollowNorth: "Segui (North Up)",
+        btnFollowTrack: "Segui (Track Up)",
+        btnNavaids: "VOR/ILS: ON",
+        btnNavaidsOff: "VOR/ILS: OFF",
+        noFpl: "NESSUN PIANO DI VOLO ATTIVO"
+    },
+    en: {
+        btnFollowFree: "Free Map",
+        btnFollowNorth: "Follow (North Up)",
+        btnFollowTrack: "Follow (Track Up)",
+        btnNavaids: "VOR/ILS: ON",
+        btnNavaidsOff: "VOR/ILS: OFF",
+        noFpl: "NO ACTIVE FLIGHT PLAN"
     }
-    applyCurrentLanguageUI();
+};
+
+// --- INIZIALIZZAZIONE UI E OROLOGIO ---
+function updateClock() {
+    const now = new Date();
+    const dateEl = document.getElementById('infoDate');
+    const utcEl = document.getElementById('infoUtc');
+    const sysEl = document.getElementById('infoSys');
+
+    if (dateEl) {
+        const day = String(now.getUTCDate()).padStart(2, '0');
+        const month = now.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' }).toUpperCase();
+        const year = now.getUTCFullYear();
+        dateEl.textContent = `${day} ${month} ${year}`;
+    }
+    if (utcEl) {
+        const h = String(now.getUTCHours()).padStart(2, '0');
+        const m = String(now.getUTCMinutes()).padStart(2, '0');
+        const s = String(now.getUTCSeconds()).padStart(2, '0');
+        utcEl.textContent = `UTC: ${h}:${m}:${s}`;
+    }
+    if (sysEl) {
+        const h = String(now.getHours()).padStart(2, '0');
+        const m = String(now.getMinutes()).padStart(2, '0');
+        const s = String(now.getSeconds()).padStart(2, '0');
+        sysEl.textContent = `SYS: ${h}:${m}:${s}`;
+    }
 }
 
-function applyCurrentLanguageUI() {
-    const langLabel = document.getElementById('langLabel');
-    if (langLabel) langLabel.innerText = currentLang.toUpperCase();
-    const t = translations[currentLang];
+document.addEventListener('DOMContentLoaded', () => {
+    // Avvia l'orologio della barra inferiore
+    setInterval(updateClock, 1000);
+    updateClock();
 
-    const searchInput = document.getElementById('omniSearch');
-    if (searchInput) searchInput.placeholder = t.searchPlaceholder;
-
-    const fplTitleEl = document.getElementById('fplSectionTitle');
-    if (fplTitleEl) fplTitleEl.innerText = t.activeFpl.toUpperCase();
-
-    const btnCreate = document.getElementById('btnCreateFpl');
-    if (btnCreate) btnCreate.innerHTML = `➕ ${t.btnCreate}`;
-
-    const btnImport = document.getElementById('btnImportPln');
-    if (btnImport) btnImport.innerHTML = `📁 ${t.btnImport}`;
-
-    const btnExport = document.getElementById('btnExportPln');
-    if (btnExport) btnExport.innerHTML = `💾 ${t.btnExport}`;
-
-    const btnReload = document.getElementById('simbriefCompactBtn');
-    if (btnReload) btnReload.innerHTML = `✈️ ${t.btnReload}`;
-
-    const lblFilters = document.getElementById('lblFilters');
-    if (lblFilters) lblFilters.innerText = t.btnFilters;
-
-    const vnavText = document.getElementById('vnavText');
-    if (vnavText) {
-        if (!flightPlan || flightPlan.length === 0) {
-            vnavText.textContent = t.noFpl.toUpperCase();
-        } else {
-            const maxAlt = Math.max(...flightPlan.map(w => Number(w.alt_ft) || 5000), 5000);
-            vnavText.textContent = `VNAV MULTI-STEP (MAX ALT: ${maxAlt.toLocaleString()} FT)`;
+    window.onclick = function(event) {
+        const createModal = document.getElementById('createFplModal');
+        if (createModal && event.target === createModal) {
+            closeCreateFplModal();
         }
-    }
+    };
 
+    const vnavContainer = document.getElementById('vnavContainer');
+    const infoBar = document.getElementById('bottomInfoBar');
+    if (vnavContainer && infoBar) {
+        const isClosed = vnavContainer.classList.contains('collapsed');
+        infoBar.style.bottom = isClosed ? '36px' : '134px';
+    }
+});
+
+// --- GESTIONE PANNELLI E CASSETTI UI ---
+function toggleFpl() {
+    const sidebar = document.querySelector('.sidebar') || document.getElementById('sidebar');
+    if (sidebar) sidebar.classList.toggle('collapsed');
+}
+
+function toggleVnav() {
+    const vnavContainer = document.getElementById('vnavContainer');
+    if (!vnavContainer) return;
+    
+    vnavContainer.classList.toggle('collapsed');
+    
+    const infoBar = document.getElementById('bottomInfoBar');
+    if (infoBar) {
+        const isClosed = vnavContainer.classList.contains('collapsed');
+        infoBar.style.bottom = isClosed ? '36px' : '134px';
+    }
+}
+
+function switchLanguage(lang) {
+    currentLang = lang;
+    const t = translations[currentLang];
+    
     const btnFollow = document.getElementById('btnFollowAcft');
-    if (btnFollow) {
+    if (btnFollow && typeof followState !== 'undefined') {
         if (followState === 0) btnFollow.innerText = t.btnFollowFree;
         else if (followState === 1) btnFollow.innerText = t.btnFollowNorth;
         else if (followState === 2) btnFollow.innerText = t.btnFollowTrack;
     }
-
+    
     const btnNavaids = document.getElementById('btnToggleNavaids');
-    if (btnNavaids) btnNavaids.innerText = showNavaids ? t.btnNavaids : t.btnNavaidsOff;
+    if (btnNavaids && typeof showNavaids !== 'undefined') {
+        btnNavaids.innerText = showNavaids ? t.btnNavaids : t.btnNavaidsOff;
+    }
 
-    const lblReduce = document.getElementById('lblReduceExpand');
-    if (lblReduce) lblReduce.innerText = t.btnReduce;
-}
-
-function toggleLanguage() {
-    currentLang = currentLang === 'en' ? 'it' : 'en';
-    applyCurrentLanguageUI();
-}
-
-// --- GESTIONE SIDEBAR RIDIMENSIONABILE E CASSETTO VNAV ---
-const sidebarPanel = document.getElementById('sidebarPanel');
-const sidebarResizer = document.getElementById('sidebarResizer');
-let isResizingSidebar = false;
-
-if (sidebarResizer && sidebarPanel) {
-    sidebarResizer.addEventListener('mousedown', function(e) {
-        isResizingSidebar = true;
-        document.body.style.cursor = 'ew-resize';
-        e.preventDefault();
-    });
-    document.addEventListener('mousemove', function(e) {
-        if (!isResizingSidebar) return;
-        const newWidth = Math.max(260, Math.min(680, e.clientX - 16));
-        sidebarPanel.style.width = newWidth + 'px';
-    });
-    document.addEventListener('mouseup', function() {
-        if (isResizingSidebar) {
-            isResizingSidebar = false;
-            document.body.style.cursor = '';
-        }
-    });
-}
-
-function toggleSidebar() {
-    sidebarOpen = !sidebarOpen;
-    const sidebar = document.getElementById('sidebarPanel');
-    const arrow = document.getElementById('sidebarArrow');
-    const label = document.getElementById('sidebarLabel');
-    if (!sidebar) return;
-    if (sidebarOpen) {
-        sidebar.classList.remove('collapsed');
-        if (arrow) arrow.innerText = '◀';
-        if (label) label.style.display = 'none';
-    } else {
-        sidebar.classList.add('collapsed');
-        if (arrow) arrow.innerText = '▶';
-        if (label) label.style.display = 'block';
+    const vnavText = document.getElementById('vnavText');
+    if (vnavText && (typeof flightPlan === 'undefined' || flightPlan.length === 0)) {
+        vnavText.textContent = t.noFpl;
     }
 }
 
-function toggleDrawer() {
-    drawerOpen = !drawerOpen;
-    const drawer = document.getElementById('elevationDrawer');
-    const sidebar = document.getElementById('sidebarPanel');
-    const infoBar = document.getElementById('flightInfoBar');
-    const arrow = document.getElementById('drawerArrow');
-    if (!drawer || !sidebar) return;
-    if (drawerOpen) {
-        drawer.classList.remove('collapsed');
-        sidebar.style.bottom = '134px';
-        if (infoBar) infoBar.style.bottom = '134px';
-        if (arrow) arrow.innerText = '▼';
-    } else {
-        drawer.classList.add('collapsed');
-        sidebar.style.bottom = '56px';
-        if (infoBar) infoBar.style.bottom = '56px';
-        if (arrow) arrow.innerText = '▲';
-    }
+// --- CONTROLLI FINESTRA NATIVI (PYWEBVIEW) ---
+function closeApp() {
+    if (window.pywebview && window.pywebview.api) window.pywebview.api.close_app();
 }
-
-// --- DRAG & DROP FILE .PLN ---
-const dropOverlay = document.getElementById('dropZoneOverlay');
-window.addEventListener('dragenter', (e) => { e.preventDefault(); if (dropOverlay) dropOverlay.style.display = 'flex'; });
-window.addEventListener('dragover', (e) => { e.preventDefault(); });
-if (dropOverlay) {
-    dropOverlay.addEventListener('dragleave', (e) => {
-        e.preventDefault();
-        if (e.clientX <= 0 || e.clientY <= 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight) {
-            dropOverlay.style.display = 'none';
-        }
-    });
-    dropOverlay.addEventListener('dragover', (e) => { e.preventDefault(); });
+function minimizeApp() {
+    if (window.pywebview && window.pywebview.api) window.pywebview.api.minimize_app();
 }
-window.addEventListener('drop', (e) => {
-    e.preventDefault();
-    if (dropOverlay) dropOverlay.style.display = 'none';
-    const files = e.dataTransfer ? e.dataTransfer.files : null;
-    if (files && files.length > 0) {
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-            try { await processAndRenderPlnXml(event.target.result); }
-            catch (err) { alert("Formato XML non valido: " + err.message); }
-        };
-        reader.readAsText(files[0]);
-    }
-});
-
-// --- AVVIO APPLICAZIONE ---
-async function initApp() {
-    if (initialized || !window.pywebview || !window.pywebview.api) return;
-    initialized = true;
-    checkSystemLanguage();
-    map.invalidateSize();
-
-    renderNavAids(vorsData, ilsData);
-    updateFlightInfoBar(41.8003, 12.2389);
-
-    await window.pywebview.api.connect_sim();
-    const nav = await window.pywebview.api.get_navdata();
-    if (nav) {
-        if (nav.vors && nav.vors.length > 0) vorsData = nav.vors;
-        if (nav.ils && nav.ils.length > 0) ilsData = nav.ils;
-        renderNavAids(vorsData, ilsData);
-
-        if (nav.simbrief_userid) {
-            document.getElementById('simbriefIdInput').value = nav.simbrief_userid;
-            setSimbriefCompactMode(true);
-        }
-    }
-
-    await loadUserWaypoints();
-
-    pollTelemetry();
-    setInterval(pollTelemetry, 1000);
+function toggleMaximizeApp() {
+    if (window.pywebview && window.pywebview.api) window.pywebview.api.toggle_maximize_app();
 }
-
-window.addEventListener('resize', () => { if (map) map.invalidateSize(); });
-window.addEventListener('pywebviewready', initApp);
-setTimeout(initApp, 150);
-
-// --- AUTO-RIDIMENSIONAMENTO 80% AL CAMBIO MONITOR ---
-let lastScreenWidth = window.screen.width;
-let lastScreenHeight = window.screen.height;
-let mapResizeTimer = null;
-
-function checkMonitorResolutionChange() {
-    const curW = window.screen.width;
-    const curH = window.screen.height;
-
-    if (curW !== lastScreenWidth || curH !== lastScreenHeight) {
-        lastScreenWidth = curW;
-        lastScreenHeight = curH;
-
-        const targetW = Math.round(curW * 0.8);
-        const targetH = Math.round(curH * 0.8);
-
-        if (window.pywebview && window.pywebview.api) {
-            if (typeof window.pywebview.api.resize_window === 'function') {
-                window.pywebview.api.resize_window(targetW, targetH);
-            } else if (typeof window.pywebview.api.resize_to_monitor === 'function') {
-                window.pywebview.api.resize_to_monitor(curW, curH);
-            } else if (typeof window.pywebview.api.set_window_size === 'function') {
-                window.pywebview.api.set_window_size(targetW, targetH);
-            }
-        }
-    }
-}
-
-// Controlla ogni 500ms se la finestra è stata spostata su un monitor con risoluzione diversa
-setInterval(checkMonitorResolutionChange, 500);
-
-// Ricalcola le dimensioni della mappa Leaflet dopo ogni ridimensionamento finestra
-window.addEventListener('resize', () => {
-    if (mapResizeTimer) clearTimeout(mapResizeTimer);
-    mapResizeTimer = setTimeout(() => {
-        if (typeof map !== 'undefined' && map) {
-            map.invalidateSize();
-        }
-    }, 150);
-});

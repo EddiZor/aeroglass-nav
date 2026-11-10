@@ -165,13 +165,15 @@
     <!-- Contenitore in basso a destra per Info Bar e Barra di Scala -->
     <div style="position: absolute; right: 16px; bottom: 134px; z-index: 500; display: flex; align-items: center; gap: 8px; transition: bottom 0.25s ease;">
         
+        <div id="bottomInfoBar" style="position: absolute; right: 16px; bottom: 134px; z-index: 500; display: flex; align-items: center; gap: 8px; transition: bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
+        
         <!-- Barra di Scala in Miglia Nautiche (NM) -->
-        <div class="glass-panel" style="padding: 5px 10px; border-radius: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;">
+        <div class="glass-panel" id="scaleBarBox" style="padding: 5px 10px; border-radius: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;">
             <span id="scaleText" style="font-size: 10px; font-family: Consolas, monospace; font-weight: 700; color: var(--cyan);">-- NM</span>
             <div style="width: 80px; height: 5px; border-left: 1px solid var(--cyan); border-right: 1px solid var(--cyan); border-bottom: 1px solid var(--cyan);"></div>
         </div>
-        
-        <!-- Barra Info Data/UTC/Coordinate esistente -->
+
+        <!-- Barra Info Data/UTC/Coordinate -->
         <div class="flight-info-bar glass-panel" style="position: static; padding: 5px 12px; border-radius: 6px; font-size: 11px; font-family: Consolas, monospace; color: var(--cyan); display: flex; align-items: center; gap: 8px;">
             <span id="infoDate"></span>
             <span class="info-sep">|</span>
@@ -181,6 +183,8 @@
             <span class="info-sep">|</span>
             <span id="infoCoords"></span>
         </div>
+
+</div>
 
     </div>
 
