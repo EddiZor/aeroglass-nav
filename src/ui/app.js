@@ -186,6 +186,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (createModal && event.target === createModal) {
             closeCreateFplModal();
         }
+        const histModal = document.getElementById('flightHistoryModal');
+        if (histModal && event.target === histModal) {
+            closeFlightHistoryModal();
+        }
     });
 
     setTimeout(initAeroGlassApp, 300);

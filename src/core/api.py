@@ -69,39 +69,55 @@ class AeroGlassAPI:
             except Exception:
                 saved_alt = None
 
-        airports, vors, ils = [], [], []
-        cache_path = os.path.join(os.path.abspath("."), "nav_cache.json")
-        if os.path.exists(cache_path):
-            try:
-                with open(cache_path, "r", encoding="utf-8") as f:
-                    cache_data = json.load(f)
-                if isinstance(cache_data, dict):
-                    airports = cache_data.get("airports", [])
-                    vors = cache_data.get("vors", [])
-                    ils = cache_data.get("ils", [])
-                elif isinstance(cache_data, list):
-                    airports = cache_data
-            except Exception:
-                pass
+        airports = []
+        try:
+            with get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT icao, name, lat, lon, elev, rwy, metar FROM cached_airports")
+                airports = [dict(row) for row in cursor.fetchall()]
+        except Exception:
+            airports = []
 
         self.flight_plan = saved_fpl
 
         return {
             "airports": airports,
-            "vors": vors,
-            "ils": ils,
+            "vors": [],
+            "ils": [],
             "simbrief_id": simbrief_id or "",
             "flight_plan": saved_fpl,
             "alternate": saved_alt
         }
 
     def resolve_icao(self, ident):
-        """Risolve coordinate, quota e METAR di qualsiasi aeroporto ICAO (locale o via API AviationWeather)."""
+        """Risolve coordinate, quota e METAR di qualsiasi aeroporto ICAO e lo salva nella tabella SQLite cached_airports."""
         code = str(ident or "").strip().upper()
         if not code:
             return {"success": False}
 
-        # 1. Hub principali europei di fallback immediato
+        result = None
+
+        # 1. Controlla prima se l'aeroporto è già presente nel database SQLite
+        try:
+            with get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT icao, name, lat, lon, elev, rwy, metar FROM cached_airports WHERE icao = ?", (code,))
+                row = cursor.fetchone()
+                if row:
+                    result = {
+                        "success": True,
+                        "icao": row["icao"],
+                        "name": row["name"],
+                        "lat": float(row["lat"]),
+                        "lon": float(row["lon"]),
+                        "elev": int(row["elev"] or 0),
+                        "metar": row["metar"] or "",
+                        "is_airport": True
+                    }
+        except Exception:
+            pass
+
+        # 2. Hub principali europei di fallback immediato
         hub_airports = {
             "EDDF": {"name": "Frankfurt Main", "lat": 50.0333, "lon": 8.5706, "elev": 364},
             "EDDM": {"name": "Munich Franz Josef Strauss", "lat": 48.3538, "lon": 11.7861, "elev": 1487},
@@ -129,8 +145,7 @@ class AeroGlassAPI:
             "LMML": {"name": "Malta Luqa", "lat": 35.8575, "lon": 14.4775, "elev": 300}
         }
 
-        result = None
-        if code in hub_airports:
+        if not result and code in hub_airports:
             h = hub_airports[code]
             result = {
                 "success": True,
@@ -143,7 +158,7 @@ class AeroGlassAPI:
                 "is_airport": True
             }
 
-        # 2. Ricerca live tramite API AviationWeather (coordinate + METAR aggiornato per qualsiasi ICAO mondiale)
+        # 3. Ricerca live tramite API AviationWeather (coordinate + METAR aggiornato)
         try:
             url = f"https://aviationweather.gov/api/data/metar?ids={code}&format=json"
             req = urllib.request.Request(url, headers={"User-Agent": "AeroGlassNav/1.0"})
@@ -168,7 +183,7 @@ class AeroGlassAPI:
         except Exception:
             pass
 
-        # 3. Fallback su endpoint anagrafica aeroporti AviationWeather se non ha METAR attivo
+        # 4. Fallback su endpoint anagrafica aeroporti AviationWeather se non ha METAR attivo
         if not result:
             try:
                 url_apt = f"https://aviationweather.gov/api/data/airport?ids={code}&format=json"
@@ -194,8 +209,28 @@ class AeroGlassAPI:
             except Exception:
                 pass
 
+        # 5. Salva o aggiorna l'aeroporto trovato nella tabella SQLite cached_airports
         if result:
+            try:
+                with get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        INSERT OR REPLACE INTO cached_airports (icao, name, lat, lon, elev, rwy, metar)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        result["icao"],
+                        result["name"],
+                        float(result["lat"]),
+                        float(result["lon"]),
+                        int(result["elev"]),
+                        "",
+                        result.get("metar", "")
+                    ))
+                    conn.commit()
+            except Exception:
+                pass
             return result
+
         return {"success": False}
 
     def get_setting(self, key):
@@ -298,7 +333,25 @@ class AeroGlassAPI:
                 cursor.execute("""
                     INSERT INTO flight_history (date, aircraft, departure, destination, distance_nm, fuel_used_gal)
                     VALUES (?, ?, ?, ?, ?, ?)
-                """, (now_str, aircraft, departure, destination, float(distance_nm), float(fuel_used_gal)))
+                """, (
+                    now_str,
+                    str(aircraft or "MSFS 2024").strip(),
+                    str(departure or "---").strip().upper(),
+                    str(destination or "---").strip().upper(),
+                    round(float(distance_nm or 0.0), 1),
+                    round(float(fuel_used_gal or 0.0), 1)
+                ))
+                conn.commit()
+            return {"success": True}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def delete_flight_record(self, record_id):
+        """Elimina un singolo volo dallo storico SQLite."""
+        try:
+            with get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM flight_history WHERE id = ?", (int(record_id),))
                 conn.commit()
             return {"success": True}
         except Exception as e:
@@ -547,7 +600,25 @@ class AeroGlassAPI:
                 cursor.execute("""
                     INSERT INTO flight_history (date, aircraft, departure, destination, distance_nm, fuel_used_gal)
                     VALUES (?, ?, ?, ?, ?, ?)
-                """, (now_str, aircraft, departure, destination, float(distance_nm), float(fuel_used_gal)))
+                """, (
+                    now_str,
+                    str(aircraft or "MSFS 2024").strip(),
+                    str(departure or "---").strip().upper(),
+                    str(destination or "---").strip().upper(),
+                    round(float(distance_nm or 0.0), 1),
+                    round(float(fuel_used_gal or 0.0), 1)
+                ))
+                conn.commit()
+            return {"success": True}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def delete_flight_record(self, record_id):
+        """Elimina un singolo volo dallo storico SQLite."""
+        try:
+            with get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM flight_history WHERE id = ?", (int(record_id),))
                 conn.commit()
             return {"success": True}
         except Exception as e:

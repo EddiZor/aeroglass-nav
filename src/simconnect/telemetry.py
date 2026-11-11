@@ -106,6 +106,12 @@ class TelemetryManager:
                     gs = self.aq.get("GROUND_VELOCITY")
                     hdg_mag = self.aq.get("PLANE_HEADING_DEGREES_MAGNETIC")
                     hdg_true = self.aq.get("PLANE_HEADING_DEGREES_TRUE")
+                    try:
+                        fuel_gal = self.aq.get("FUEL_TOTAL_QUANTITY")
+                        on_ground = self.aq.get("SIM_ON_GROUND")
+                    except Exception:
+                        fuel_gal = None
+                        on_ground = None
 
                     now = time.time()
                     if (now - self._last_meta_time) >= 10.0:
@@ -117,6 +123,8 @@ class TelemetryManager:
 
                 alt_val = int(round(float(alt))) if alt is not None else 0
                 gs_val = int(round(float(gs))) if gs is not None else 0
+                fuel_val = round(float(fuel_gal), 1) if fuel_gal is not None else None
+                on_gnd_val = bool(int(on_ground)) if on_ground is not None else (gs_val < 30)
 
                 hdg_mag_deg = int(round(math.degrees(float(hdg_mag)))) % 360 if hdg_mag is not None else 0
                 hdg_true_deg = round(math.degrees(float(hdg_true)), 1) % 360 if hdg_true is not None else float(hdg_mag_deg)
@@ -134,6 +142,9 @@ class TelemetryManager:
                     "lon": round(float(lon), 6),
                     "alt_ft": f"{alt_val} ft",
                     "gs_kt": f"{gs_val} kt",
+                    "gs_num": gs_val,
+                    "fuel_gal": fuel_val,
+                    "on_ground": on_gnd_val,
                     "hdg_deg": f"{hdg_mag_deg}°",
                     "hdg_true": hdg_true_deg
                 }

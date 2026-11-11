@@ -24,6 +24,9 @@
     <!-- Barra superiore flottante: controlli e telemetria -->
     <div class="top-controls-bar">
         <div class="top-pills-group">
+            <button id="btnLogbook" class="top-btn" onclick="openFlightHistoryModal()">
+                📒 <span id="lblLogbook">Logbook</span>
+            </button>
             <button id="btnFilters" class="top-btn" onclick="toggleProceduresPanel()">
                 ⚙️ <span id="lblFilters">Filtri & SID/STAR</span>
             </button>
@@ -170,6 +173,51 @@
                 <button id="btnModalGenerate" class="btn btn-emerald" onclick="buildAndExportManualFlightPlan(false)">Mostra su Mappa</button>
                 <button id="btnModalExport" class="btn btn-cyan" onclick="buildAndExportManualFlightPlan(true)">💾 Crea & Salva .PLN</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Modale Storico Voli & Fuel Log (SQLite) -->
+    <div id="flightHistoryModal" class="custom-modal" style="display: none;">
+        <div class="modal-content glass-panel" style="width: 580px; max-height: 82vh;">
+            <div class="modal-header">
+                <span style="font-weight: 700; color: var(--cyan);">📒 STORICO VOLI & FUEL LOG (SQLITE)</span>
+                <span style="cursor: pointer; color: var(--text-muted); font-size: 16px;" onclick="closeFlightHistoryModal()">✕</span>
+            </div>
+
+            <!-- Riepilogo Statistiche Totali -->
+            <div style="display: flex; gap: 8px;">
+                <div style="flex: 1; background: rgba(9,13,22,0.6); border: 1px solid rgba(56,189,248,0.25); border-radius: 8px; padding: 8px; text-align: center;">
+                    <div style="font-size: 10px; color: var(--text-muted);">VOLI REGISTRATI</div>
+                    <div id="histTotalFlights" style="font-size: 16px; font-weight: 800; color: var(--cyan); font-family: Consolas, monospace;">0</div>
+                </div>
+                <div style="flex: 1; background: rgba(9,13,22,0.6); border: 1px solid rgba(52,211,153,0.25); border-radius: 8px; padding: 8px; text-align: center;">
+                    <div style="font-size: 10px; color: var(--text-muted);">DISTANZA TOTALE</div>
+                    <div id="histTotalDist" style="font-size: 16px; font-weight: 800; color: var(--emerald); font-family: Consolas, monospace;">0.0 NM</div>
+                </div>
+                <div style="flex: 1; background: rgba(9,13,22,0.6); border: 1px solid rgba(251,191,36,0.25); border-radius: 8px; padding: 8px; text-align: center;">
+                    <div style="font-size: 10px; color: var(--text-muted);">CARBURANTE USATO</div>
+                    <div id="histTotalFuel" style="font-size: 16px; font-weight: 800; color: var(--amber); font-family: Consolas, monospace;">0.0 GAL</div>
+                </div>
+            </div>
+
+            <!-- Modulo di Registrazione Rapida Volo Attivo / Manuale -->
+            <div style="background: rgba(30,41,59,0.45); border: 1px solid rgba(148,163,184,0.2); border-radius: 8px; padding: 10px;">
+                <div style="font-size: 10px; font-weight: 700; color: var(--emerald); margin-bottom: 6px;">REGISTRA VOLO ATTIVO O MANUALE</div>
+                <div style="display: flex; gap: 6px; margin-bottom: 6px;">
+                    <input type="text" id="histAcft" class="glass-input" placeholder="Aeromobile (es. MB-339)" style="flex: 2;">
+                    <input type="text" id="histDep" class="glass-input" placeholder="DEP (ICAO)" style="flex: 1; text-transform: uppercase;">
+                    <input type="text" id="histDest" class="glass-input" placeholder="ARR (ICAO)" style="flex: 1; text-transform: uppercase;">
+                </div>
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    <input type="number" id="histDist" class="glass-input" placeholder="Distanza (NM)" step="0.1" style="flex: 1;">
+                    <input type="number" id="histFuel" class="glass-input" placeholder="Fuel Usato (GAL)" step="0.1" style="flex: 1;">
+                    <button class="btn btn-emerald" style="flex: 1.2; padding: 7px 12px;" onclick="saveFlightRecordFromModal()">➕ Salva nel Logbook</button>
+                </div>
+            </div>
+
+            <!-- Lista Voli Salvati in SQLite -->
+            <div class="sidebar-section-title" style="margin-bottom: 0;">REGISTRO STORICO VOLI</div>
+            <div id="flightHistoryContainer" class="fpl-list" style="max-height: 260px; min-height: 140px;"></div>
         </div>
     </div>
 

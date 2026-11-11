@@ -174,6 +174,25 @@ async function pollTelemetry() {
             } else if (acftLine) {
                 acftLine.style.display = 'none';
             }
+
+            // Tracciamento automatico carburante usato e auto-registrazione volo all'atterraggio
+            if (data.connected) {
+                if (data.fuel_gal !== undefined && data.fuel_gal !== null) {
+                    if (window._sessionStartFuelGal === undefined || window._sessionStartFuelGal === null || data.fuel_gal > window._sessionStartFuelGal) {
+                        window._sessionStartFuelGal = data.fuel_gal;
+                    }
+                    window._sessionFuelUsedGal = Math.max(0, Number((window._sessionStartFuelGal - data.fuel_gal).toFixed(1)));
+                }
+
+                if (data.on_ground === false && (data.gs_num || 0) > 40) {
+                    window._wasAirborneInSession = true;
+                } else if (window._wasAirborneInSession && data.on_ground === true && (data.gs_num || 0) < 25) {
+                    window._wasAirborneInSession = false;
+                    if (typeof autoLogCompletedFlight === 'function') {
+                        autoLogCompletedFlight(data.aircraft, data.lat, data.lon);
+                    }
+                }
+            }
         }
     } catch (err) {}
 }

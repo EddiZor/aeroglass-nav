@@ -41,11 +41,24 @@ def init_db():
             )
         """)
         
-        # 3. Tabella Impostazioni generali (es. SimBrief ID)
+        # 3. Tabella Impostazioni generali (es. SimBrief ID e Piano di Volo attivo)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
                 value TEXT
+            )
+        """)
+
+        # 4. Tabella Cache Aeroporti ICAO risolti (coordinate, quota e ultimo METAR)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS cached_airports (
+                icao TEXT PRIMARY KEY,
+                name TEXT,
+                lat REAL NOT NULL,
+                lon REAL NOT NULL,
+                elev INTEGER DEFAULT 0,
+                rwy TEXT DEFAULT '',
+                metar TEXT DEFAULT ''
             )
         """)
         conn.commit()
