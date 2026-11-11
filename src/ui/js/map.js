@@ -252,24 +252,32 @@ map.on('click', function(e) {
 });
 
 map.on('contextmenu', function(e) {
+    if (rubberBandState) return;
     const lat = Number(e.latlng.lat.toFixed(5));
     const lon = Number(e.latlng.lng.toFixed(5));
     const suggestedId = getNextAutoWpId();
     const defaultAlt = parseInt(document.getElementById('uwAlt')?.value, 10) || 5000;
+    const hasActiveRoute = (flightPlan && flightPlan.length >= 2);
 
     const popupContent = `
-        <div style="min-width: 175px; font-family: 'Segoe UI', sans-serif;">
+        <div style="min-width: 195px; font-family: 'Segoe UI', sans-serif;">
             <div style="font-weight: 700; font-size: 12px; color: #fbbf24; margin-bottom: 4px;">📍 NUOVO USER WAYPOINT</div>
             <div style="font-size: 11px; color: #94a3b8; font-family: monospace; margin-bottom: 6px;">
-                LAT: ${lat}<br>LON: ${lon}
+                LAT: ${lat} | LON: ${lon}
             </div>
             <div style="display: flex; gap: 4px; margin-bottom: 6px;">
-                <input type="text" id="ctxWpId" value="${suggestedId}" style="width: 75px; background: #0f172a; border: 1px solid #38bdf8; color: #f8fafc; border-radius: 4px; padding: 3px 6px; font-size: 11px; text-transform: uppercase;">
-                <input type="number" id="ctxWpAlt" value="${defaultAlt}" style="width: 75px; background: #0f172a; border: 1px solid #38bdf8; color: #f8fafc; border-radius: 4px; padding: 3px 6px; font-size: 11px;" step="500">
+                <input type="text" id="ctxWpId" value="${suggestedId}" style="flex: 1; width: 75px; background: #0f172a; border: 1px solid #38bdf8; color: #f8fafc; border-radius: 4px; padding: 4px 6px; font-size: 11px; text-transform: uppercase;">
+                <input type="number" id="ctxWpAlt" value="${defaultAlt}" style="width: 80px; background: #0f172a; border: 1px solid #38bdf8; color: #f8fafc; border-radius: 4px; padding: 4px 6px; font-size: 11px;" step="500">
             </div>
-            <button class="btn btn-emerald" style="width: 100%; padding: 5px; font-size: 11px;" onclick="quickSaveMapWaypoint(${lat}, ${lon})">
-                ➕ Salva User WP
-            </button>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+                <button class="btn btn-emerald" style="width: 100%; padding: 5px; font-size: 11px;" onclick="quickSaveMapWaypoint(${lat}, ${lon}, false)">
+                    💾 Salva in Waypoints Utente
+                </button>
+                ${hasActiveRoute ? `
+                <button class="btn btn-cyan" style="width: 100%; padding: 5px; font-size: 11px;" onclick="quickSaveMapWaypoint(${lat}, ${lon}, true)">
+                    🚀 Salva & Inserisci in Rotta
+                </button>` : ''}
+            </div>
         </div>
     `;
 
@@ -279,20 +287,242 @@ map.on('contextmenu', function(e) {
         .openOn(map);
 });
 
-async function quickSaveMapWaypoint(lat, lon) {
+async function quickSaveMapWaypoint(lat, lon, insertInRoute = false) {
     const idEl = document.getElementById('ctxWpId');
     const altEl = document.getElementById('ctxWpAlt');
     const id = (idEl && idEl.value.trim()) ? idEl.value.trim().toUpperCase() : getNextAutoWpId();
     const alt = (altEl && !isNaN(parseInt(altEl.value, 10))) ? parseInt(altEl.value, 10) : 5000;
 
-    userWaypoints.push({ ident: id, lat: Number(lat), lon: Number(lon), alt_ft: alt, type: "USER" });
+    const wpObj = {
+        ident: id,
+        name: "User Waypoint",
+        lat: Number(lat),
+        lon: Number(lon),
+        alt_ft: alt,
+        type: "USER"
+    };
+
+    const existingIdx = userWaypoints.findIndex(w => w.ident === id);
+    if (existingIdx >= 0) userWaypoints[existingIdx] = wpObj;
+    else userWaypoints.push(wpObj);
+
     map.closePopup();
     if (tempPickMarker) {
         map.removeLayer(tempPickMarker);
         tempPickMarker = null;
     }
     await saveAndRefreshUserWaypoints();
+
+    if (insertInRoute && flightPlan && flightPlan.length >= 2) {
+        addWpToRoute(id);
+    }
 }
+
+// --- LOGICA RUBBER BANDING (MODIFICA ELASTICA DELLA ROTTA SULLA MAPPA) ---
+function findNearestSnapTarget(latlng, excludeIdent = null) {
+    const maxSnapPixels = 20;
+    const cursorPt = map.latLngToContainerPoint(latlng);
+    let bestTarget = null;
+    let minPixelDist = maxSnapPixels;
+
+    const checkCandidate = (ident, name, lat, lon, alt_ft, type) => {
+        if (!ident || ident === excludeIdent || lat === null || lon === null) return;
+        const pt = map.latLngToContainerPoint([lat, lon]);
+        const distPx = cursorPt.distanceTo(pt);
+        if (distPx < minPixelDist) {
+            minPixelDist = distPx;
+            bestTarget = { ident, name, lat: Number(lat), lon: Number(lon), alt_ft, type };
+        }
+    };
+
+    (userWaypoints || []).forEach(w => checkCandidate(w.ident, w.name || "User Waypoint", w.lat, w.lon, w.alt_ft, "USER"));
+    (vorsData || []).forEach(v => checkCandidate(v.ident, v.name, v.lat, v.lon, null, "VOR"));
+    (airportsData || []).forEach(a => checkCandidate(a.icao, a.name, a.lat, a.lon, a.elev || 0, "APT"));
+    Object.keys(KNOWN_FIXES || {}).forEach(k => {
+        const f = KNOWN_FIXES[k];
+        checkCandidate(k, "Waypoint Navlog", f.lat, f.lon, null, "WPT");
+    });
+
+    return bestTarget;
+}
+
+function startRouteRubberBand(mode, index, startLatLng, originalEvent) {
+    if (!flightPlan || flightPlan.length < 2) return;
+    if (originalEvent) L.DomEvent.stopPropagation(originalEvent);
+
+    map.closePopup();
+    map.dragging.disable();
+
+    const startPoint = map.latLngToContainerPoint(startLatLng);
+    rubberBandState = {
+        mode: mode, // 'insert' (da segmento) oppure 'move' (da waypoint intermedio)
+        index: index,
+        startPoint: startPoint,
+        currentLatLng: startLatLng,
+        snapTarget: null,
+        moved: false
+    };
+}
+
+map.on('mousemove', function(e) {
+    if (!rubberBandState) return;
+
+    const curPt = map.latLngToContainerPoint(e.latlng);
+    if (!rubberBandState.moved && curPt.distanceTo(rubberBandState.startPoint) < 7) {
+        return;
+    }
+    rubberBandState.moved = true;
+
+    const excludeId = rubberBandState.mode === 'move' ? flightPlan[rubberBandState.index]?.ident : null;
+    const snap = findNearestSnapTarget(e.latlng, excludeId);
+    rubberBandState.snapTarget = snap;
+
+    const targetLatLng = snap ? L.latLng(snap.lat, snap.lon) : e.latlng;
+    rubberBandState.currentLatLng = targetLatLng;
+
+    let pPrev, pNext;
+    if (rubberBandState.mode === 'insert') {
+        pPrev = flightPlan[rubberBandState.index];
+        pNext = flightPlan[rubberBandState.index + 1];
+    } else {
+        pPrev = flightPlan[rubberBandState.index - 1];
+        pNext = flightPlan[rubberBandState.index + 1];
+    }
+
+    const polyCoords = [
+        [pPrev.lat, pPrev.lon],
+        [targetLatLng.lat, targetLatLng.lng],
+        [pNext.lat, pNext.lon]
+    ];
+
+    if (!rubberBandPoly) {
+        rubberBandPoly = L.polyline(polyCoords, {
+            color: '#fbbf24',
+            weight: 3,
+            dashArray: '6, 6',
+            interactive: false
+        }).addTo(map);
+    } else {
+        rubberBandPoly.setLatLngs(polyCoords);
+    }
+
+    const d1 = (L.latLng(pPrev.lat, pPrev.lon).distanceTo(targetLatLng) / 1852).toFixed(1);
+    const d2 = (targetLatLng.distanceTo(L.latLng(pNext.lat, pNext.lon)) / 1852).toFixed(1);
+    const labelHtml = snap
+        ? `🧲 SNAP: ${snap.ident} (${snap.name}) | ${d1} + ${d2} NM`
+        : `${rubberBandState.mode === 'insert' ? '➕ NUOVO WP: ' + getNextAutoWpId() : '✥ SPOSTA: ' + flightPlan[rubberBandState.index].ident} (${targetLatLng.lat.toFixed(4)}, ${targetLatLng.lng.toFixed(4)}) | ${d1} + ${d2} NM`;
+
+    if (!rubberBandMarker) {
+        rubberBandMarker = L.circleMarker(targetLatLng, {
+            radius: 7,
+            color: snap ? '#34d399' : '#fbbf24',
+            fillColor: snap ? '#34d399' : '#fbbf24',
+            fillOpacity: 0.95,
+            weight: 2,
+            interactive: false
+        }).addTo(map);
+        rubberBandMarker.bindTooltip(labelHtml, {
+            permanent: true,
+            direction: 'top',
+            offset: [0, -10],
+            className: 'vnav-route-tooltip'
+        }).openTooltip();
+    } else {
+        rubberBandMarker.setLatLng(targetLatLng);
+        rubberBandMarker.setStyle({
+            color: snap ? '#34d399' : '#fbbf24',
+            fillColor: snap ? '#34d399' : '#fbbf24'
+        });
+        rubberBandMarker.setTooltipContent(labelHtml);
+    }
+});
+
+window.addEventListener('mouseup', async function() {
+    if (!rubberBandState) return;
+
+    const state = rubberBandState;
+    rubberBandState = null;
+    map.dragging.enable();
+
+    if (rubberBandPoly) { map.removeLayer(rubberBandPoly); rubberBandPoly = null; }
+    if (rubberBandMarker) { map.removeLayer(rubberBandMarker); rubberBandMarker = null; }
+
+    if (!state.moved || !state.currentLatLng) return;
+
+    if (typeof pushFlightPlanUndoState === 'function') {
+        pushFlightPlanUndoState();
+    }
+
+    const lat = Number(state.currentLatLng.lat.toFixed(5));
+    const lon = Number(state.currentLatLng.lng.toFixed(5));
+
+    if (state.mode === 'insert') {
+        const p1 = flightPlan[state.index];
+        const p2 = flightPlan[state.index + 1];
+        const interpAlt = Math.round(((Number(p1.alt_ft) || 5000) + (Number(p2.alt_ft) || 5000)) / 200) * 100;
+
+        let newWp;
+        if (state.snapTarget) {
+            newWp = {
+                ident: state.snapTarget.ident,
+                name: state.snapTarget.name || "Waypoint Rotta",
+                lat: state.snapTarget.lat,
+                lon: state.snapTarget.lon,
+                alt_ft: state.snapTarget.alt_ft || interpAlt,
+                type: "WPT",
+                proc_type: "ENR",
+                proc_name: "DCT"
+            };
+        } else {
+            const newId = getNextAutoWpId();
+            const userWpObj = {
+                ident: newId,
+                name: "User Waypoint",
+                lat: lat,
+                lon: lon,
+                alt_ft: interpAlt,
+                type: "USER"
+            };
+            userWaypoints.push(userWpObj);
+            await persistUserWaypoints();
+
+            newWp = {
+                ident: newId,
+                name: "User Waypoint",
+                lat: lat,
+                lon: lon,
+                alt_ft: interpAlt,
+                type: "WPT",
+                proc_type: "ENR",
+                proc_name: "DCT"
+            };
+        }
+
+        flightPlan.splice(state.index + 1, 0, newWp);
+        updateFlightPlanUI(undefined, false);
+    } else if (state.mode === 'move') {
+        const wpt = flightPlan[state.index];
+        if (!wpt) return;
+
+        if (state.snapTarget) {
+            wpt.ident = state.snapTarget.ident;
+            wpt.name = state.snapTarget.name || wpt.name;
+            wpt.lat = state.snapTarget.lat;
+            wpt.lon = state.snapTarget.lon;
+        } else {
+            wpt.lat = lat;
+            wpt.lon = lon;
+            // Se era un waypoint utente, aggiorna le sue coordinate anche nel DB SQLite
+            const uIdx = userWaypoints.findIndex(u => u.ident === wpt.ident);
+            if (uIdx >= 0) {
+                userWaypoints[uIdx].lat = lat;
+                userWaypoints[uIdx].lon = lon;
+                await persistUserWaypoints();
+            }
+        }
+        updateFlightPlanUI(undefined, false);
+    }
+});
 
 // --- AGGIORNAMENTO DINAMICO BARRA DI SCALA (NM) ---
 function updateMapScale() {

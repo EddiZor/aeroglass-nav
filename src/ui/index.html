@@ -137,7 +137,10 @@
         </div>
         <div id="userWpContainer" class="fpl-list" style="flex: 0 0 auto; max-height: 190px; margin-bottom: 8px;"></div>
 
-        <div class="sidebar-section-title" id="fplSectionTitle">PIANO DI VOLO ATTIVO</div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <div class="sidebar-section-title" id="fplSectionTitle" style="margin-bottom: 0;">PIANO DI VOLO ATTIVO</div>
+            <button id="btnUndoFpl" class="btn btn-cyan" onclick="undoFlightPlanChange()" title="Ripristina la traccia nella posizione precedente (Ctrl+Z)" style="flex: 0 0 auto; padding: 2px 8px; font-size: 10.5px; display: none;">↩️ Ripristina</button>
+        </div>
         <div id="fplContainer" class="fpl-list"></div>
 
         <div id="sidebarResizer" class="sidebar-resizer"></div>

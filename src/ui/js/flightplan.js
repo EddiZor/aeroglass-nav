@@ -133,20 +133,132 @@ function renderUserWaypointsUI() {
     });
 }
 
-function addWpToRoute(ident) {
+function findBestLegIndexForPoint(lat, lon) {
+    if (!flightPlan || flightPlan.length < 2) return 0;
+    const P = L.latLng(lat, lon);
+    let bestLegIdx = flightPlan.length - 2;
+    let minCrossDist = Infinity;
+
+    for (let i = 0; i < flightPlan.length - 1; i++) {
+        if (flightPlan[i].lat === null || flightPlan[i + 1].lat === null) continue;
+        const A = L.latLng(flightPlan[i].lat, flightPlan[i].lon);
+        const B = L.latLng(flightPlan[i + 1].lat, flightPlan[i + 1].lon);
+        const t = Math.max(0, Math.min(1, getSegmentFraction(A, B, P)));
+        const proj = L.latLng(A.lat + t * (B.lat - A.lat), A.lng + t * (B.lng - A.lng));
+        const d = P.distanceTo(proj);
+        if (d < minCrossDist) {
+            minCrossDist = d;
+            bestLegIdx = i;
+        }
+    }
+    return bestLegIdx;
+}
+
+function pushFlightPlanUndoState() {
+    if (!flightPlan || flightPlan.length === 0) return;
+    fplUndoStack.push({
+        flightPlan: JSON.parse(JSON.stringify(flightPlan)),
+        userWaypoints: JSON.parse(JSON.stringify(userWaypoints || []))
+    });
+    if (fplUndoStack.length > 25) fplUndoStack.shift();
+    updateUndoButtonUI();
+}
+
+function clearFlightPlanUndoHistory() {
+    fplUndoStack = [];
+    updateUndoButtonUI();
+}
+
+function ensureUndoButtonExists() {
+    let btn = document.getElementById('btnUndoFpl');
+    if (btn) return btn;
+
+    const titleEl = document.getElementById('fplSectionTitle');
+    if (!titleEl || !titleEl.parentNode) return null;
+
+    const headerRow = document.createElement('div');
+    headerRow.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-shrink: 0;';
+    titleEl.parentNode.insertBefore(headerRow, titleEl);
+    titleEl.style.marginBottom = '0';
+    headerRow.appendChild(titleEl);
+
+    btn = document.createElement('button');
+    btn.id = 'btnUndoFpl';
+    btn.className = 'btn btn-cyan';
+    btn.title = 'Ripristina la traccia nella posizione precedente (Ctrl+Z)';
+    btn.onclick = () => undoFlightPlanChange();
+    headerRow.appendChild(btn);
+    return btn;
+}
+
+function updateUndoButtonUI() {
+    const btn = ensureUndoButtonExists();
+    if (!btn) return;
+
+    const count = (fplUndoStack && fplUndoStack.length) ? fplUndoStack.length : 0;
+    btn.style.display = 'inline-flex';
+    btn.style.flex = '0 0 auto';
+    btn.style.padding = '2px 8px';
+    btn.style.fontSize = '10.5px';
+
+    if (count > 0) {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+        btn.style.borderColor = 'var(--amber)';
+        btn.style.color = 'var(--amber)';
+        btn.style.background = 'rgba(251, 191, 36, 0.18)';
+        btn.innerHTML = `↩️ Ripristina (${count})`;
+    } else {
+        btn.disabled = true;
+        btn.style.opacity = '0.4';
+        btn.style.cursor = 'default';
+        btn.style.borderColor = 'rgba(148, 163, 184, 0.3)';
+        btn.style.color = 'var(--text-muted)';
+        btn.style.background = 'rgba(30, 41, 59, 0.4)';
+        btn.innerHTML = `↩️ Ripristina`;
+    }
+}
+
+async function undoFlightPlanChange() {
+    if (!fplUndoStack || fplUndoStack.length === 0) return;
+    const prevState = fplUndoStack.pop();
+    flightPlan = prevState.flightPlan || [];
+    userWaypoints = prevState.userWaypoints || [];
+    updateUndoButtonUI();
+    await persistUserWaypoints();
+    updateFlightPlanUI(undefined, false);
+}
+
+document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        const activeTag = document.activeElement?.tagName;
+        if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
+        if (fplUndoStack && fplUndoStack.length > 0) {
+            e.preventDefault();
+            undoFlightPlanChange();
+        }
+    }
+});
+
+function addWpToRoute(ident, explicitLegIdx = undefined) {
     const wp = userWaypoints.find(w => w.ident === ident);
     if (!wp) return;
     if (!flightPlan || flightPlan.length === 0) {
         alert("Crea o importa prima un piano di volo attivo.");
         return;
     }
-    flightPlan.splice(flightPlan.length - 1, 0, {
+    pushFlightPlanUndoState();
+    const legIdx = (explicitLegIdx !== undefined) ? explicitLegIdx : findBestLegIndexForPoint(wp.lat, wp.lon);
+    flightPlan.splice(legIdx + 1, 0, {
         ident: wp.ident,
         name: "User Waypoint",
         lat: wp.lat,
         lon: wp.lon,
         alt_ft: wp.alt_ft,
-        type: "WPT"
+        type: "WPT",
+        proc_type: "ENR",
+        proc_name: "DCT"
     });
     updateFlightPlanUI(undefined, false);
 }
@@ -379,6 +491,13 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
             }
 
             marker.bindPopup(popupHtml);
+            if (!isEndpoint && typeof startRouteRubberBand === 'function') {
+                marker.on('mousedown', (ev) => {
+                    if (ev.originalEvent && ev.originalEvent.button === 0) {
+                        startRouteRubberBand('move', index, ev.latlng, ev.originalEvent);
+                    }
+                });
+            }
             waypointMarkers.push(marker);
         }
 
@@ -455,32 +574,46 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
             dashArray: '6, 4'
         }).addTo(map);
 
-        if (showSidStar) {
-            for (let i = 0; i < flightPlan.length - 1; i++) {
-                const p1 = flightPlan[i];
-                const p2 = flightPlan[i + 1];
-                if (p1.lat === null || p2.lat === null) continue;
+        for (let i = 0; i < flightPlan.length - 1; i++) {
+            const p1 = flightPlan[i];
+            const p2 = flightPlan[i + 1];
+            if (p1.lat === null || p2.lat === null) continue;
 
-                let segType = p2.proc_type || 'ENR';
-                if (i === flightPlan.length - 2) segType = 'APPR';
+            let segType = p2.proc_type || 'ENR';
+            if (i === flightPlan.length - 2) segType = 'APPR';
 
-                const segColor = segType === 'SID' ? '#34d399'
-                               : segType === 'STAR' ? '#fbbf24'
-                               : segType === 'APPR' ? '#38bdf8'
-                               : '#e879f9';
+            const segColor = !showSidStar ? '#e879f9'
+                           : segType === 'SID' ? '#34d399'
+                           : segType === 'STAR' ? '#fbbf24'
+                           : segType === 'APPR' ? '#38bdf8'
+                           : '#e879f9';
 
-                const segDash = (segType === 'SID' || segType === 'STAR') ? '5, 5' : null;
-                const segLine = L.polyline([[p1.lat, p1.lon], [p2.lat, p2.lon]], {
-                    color: segColor,
-                    weight: 3.2,
-                    opacity: 0.92,
-                    dashArray: segDash
-                }).addTo(map);
+            const segDash = (showSidStar && (segType === 'SID' || segType === 'STAR')) ? '5, 5' : null;
+            const segLine = L.polyline([[p1.lat, p1.lon], [p2.lat, p2.lon]], {
+                color: segColor,
+                weight: 3.2,
+                opacity: 0.92,
+                dashArray: segDash
+            }).addTo(map);
 
-                const segLabel = p2.proc_name || segType;
-                segLine.bindTooltip(`${p1.ident} ➔ ${p2.ident} (${segLabel})`, { sticky: true, className: 'vnav-route-tooltip' });
-                routeSegmentLines.push(segLine);
-            }
+            // Fascia interattiva invisibile (16px) per agganciare comodamente il segmento col mouse (Rubber Banding)
+            const hitLine = L.polyline([[p1.lat, p1.lon], [p2.lat, p2.lon]], {
+                color: '#000',
+                weight: 16,
+                opacity: 0.01
+            }).addTo(map);
+
+            const segLabel = p2.proc_name || segType;
+            hitLine.bindTooltip(`${p1.ident} ➔ ${p2.ident} (${segLabel}) • Trascina per aggiungere WP`, { sticky: true, className: 'vnav-route-tooltip' });
+
+            hitLine.on('mousedown', (ev) => {
+                if (ev.originalEvent && ev.originalEvent.button === 0 && typeof startRouteRubberBand === 'function') {
+                    startRouteRubberBand('insert', i, ev.latlng, ev.originalEvent);
+                }
+            });
+
+            routeSegmentLines.push(segLine);
+            routeSegmentLines.push(hitLine);
         }
 
         drawApproachFeather(flightPlan);
@@ -528,6 +661,7 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
 
     renderVnavChart(altitutes);
     renderUserWaypointsUI();
+    updateUndoButtonUI();
 
     if (window.pywebview && window.pywebview.api && window.pywebview.api.save_active_flight_plan) {
         window.pywebview.api.save_active_flight_plan(flightPlan, currentAlternate).catch(() => {});
@@ -538,6 +672,7 @@ function removeWaypointFromRoute(index) {
     if (!flightPlan || index <= 0 || index >= flightPlan.length - 1) {
         return; 
     }
+    pushFlightPlanUndoState();
     flightPlan.splice(index, 1);
     
     const maxCruise = Math.max(...flightPlan.map(w => Number(w.alt_ft) || 0));
@@ -549,6 +684,7 @@ function removeWaypointFromRoute(index) {
 async function editWaypointAlt(index, currentAlt) {
     const newAlt = prompt("Inserisci la quota target in piedi (ft) per questo waypoint:", currentAlt);
     if (newAlt !== null && !isNaN(newAlt)) {
+        pushFlightPlanUndoState();
         flightPlan[index].alt_ft = parseInt(newAlt, 10);
         updateFlightPlanUI(undefined, false);
         try {

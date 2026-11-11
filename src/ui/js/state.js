@@ -156,6 +156,12 @@ let userWpMarkers = [];
 let isPickingUserWp = false;
 let tempPickMarker = null;
 
+// Stato Rubber Banding (trascinamento elastico segmenti e waypoint) e Storico Undo
+let rubberBandState = null; // { mode: 'insert'|'move', legIndex, wptIndex, startPoint, currentLatLng, snapTarget }
+let rubberBandPoly = null;
+let rubberBandMarker = null;
+let fplUndoStack = [];
+
 let sidebarOpen = true;
 let drawerOpen = true;
 let initialized = false;
