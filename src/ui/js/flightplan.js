@@ -1,37 +1,91 @@
 // --- GESTIONE WAYPOINT UTENTE (CUSTOM) ---
 async function loadUserWaypoints() {
+    let loaded = false;
+
     if (window.pywebview && window.pywebview.api && window.pywebview.api.get_user_waypoints) {
         try {
             const res = await window.pywebview.api.get_user_waypoints();
-            if (res && res.success) {
-                userWaypoints = res.waypoints || [];
-                renderUserWaypointsUI();
+            if (res && res.success && Array.isArray(res.waypoints)) {
+                userWaypoints = res.waypoints;
+                loaded = true;
+            }
+        } catch (err) {
+            console.warn("Errore lettura user_waypoints da SQLite:", err);
+        }
+    }
+
+    if (!loaded || userWaypoints.length === 0) {
+        try {
+            const localData = localStorage.getItem('aeroglass_user_waypoints');
+            if (localData) {
+                const parsed = JSON.parse(localData);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    userWaypoints = parsed;
+                    if (loaded) await persistUserWaypoints();
+                }
             }
         } catch (e) {}
+    }
+
+    renderUserWaypointsUI();
+    renderUserWaypointsOnMap();
+}
+
+async function persistUserWaypoints() {
+    try {
+        localStorage.setItem('aeroglass_user_waypoints', JSON.stringify(userWaypoints));
+    } catch (e) {}
+
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.save_user_waypoints) {
+        try {
+            const res = await window.pywebview.api.save_user_waypoints(userWaypoints);
+            if (!res || !res.success) {
+                console.warn("Il backend ha restituito un errore nel salvataggio waypoint:", res?.error);
+            }
+        } catch (err) {
+            console.warn("Eccezione nella chiamata a save_user_waypoints:", err);
+        }
     }
 }
 
 async function addUserWaypoint() {
-    const id = document.getElementById('uwId').value.trim().toUpperCase();
-    const alt = parseInt(document.getElementById('uwAlt').value, 10) || 5000;
-    const lat = parseFloat(document.getElementById('uwLat').value);
-    const lon = parseFloat(document.getElementById('uwLon').value);
+    const idEl = document.getElementById('uwId');
+    const altEl = document.getElementById('uwAlt');
+    const latEl = document.getElementById('uwLat');
+    const lonEl = document.getElementById('uwLon');
 
-    if (!id || isNaN(lat) || isNaN(lon)) {
-        alert("Inserisci un ID valido e coordinate numeriche (Lat/Lon) o clicca '📍 Mappa' per selezionarle.");
-        return;
+    const ident = (idEl?.value || '').trim().toUpperCase();
+    const alt_ft = parseInt(altEl?.value || '5000', 10) || 5000;
+    const lat = parseFloat(latEl?.value);
+    const lon = parseFloat(lonEl?.value);
+
+    if (!ident || isNaN(lat) || isNaN(lon)) return;
+
+    const existingIdx = userWaypoints.findIndex(w => w.ident === ident);
+    const wpObj = {
+        ident,
+        name: "User Waypoint",
+        lat: Number(lat.toFixed(5)),
+        lon: Number(lon.toFixed(5)),
+        alt_ft,
+        type: "USER"
+    };
+
+    if (existingIdx >= 0) {
+        userWaypoints[existingIdx] = wpObj;
+    } else {
+        userWaypoints.push(wpObj);
     }
 
-    userWaypoints.push({ ident: id, lat, lon, alt_ft: alt, type: "USER" });
-    if (tempPickMarker) {
-        map.removeLayer(tempPickMarker);
-        tempPickMarker = null;
-    }
-    await saveAndRefreshUserWaypoints();
+    await persistUserWaypoints();
+    renderUserWaypointsUI();
+    renderUserWaypointsOnMap();
 
-    document.getElementById('uwId').value = '';
-    document.getElementById('uwLat').value = '';
-    document.getElementById('uwLon').value = '';
+    if (idEl) idEl.value = '';
+    if (latEl) latEl.value = '';
+    if (lonEl) lonEl.value = '';
+
+    if (isPickingUserWp) toggleMapPickMode();
 }
 
 async function saveAndRefreshUserWaypoints() {
@@ -41,9 +95,11 @@ async function saveAndRefreshUserWaypoints() {
     renderUserWaypointsUI();
 }
 
-async function deleteUserWaypoint(index) {
-    userWaypoints.splice(index, 1);
-    await saveAndRefreshUserWaypoints();
+async function deleteUserWaypoint(ident) {
+    userWaypoints = userWaypoints.filter(w => w.ident !== ident);
+    await persistUserWaypoints();
+    renderUserWaypointsUI();
+    renderUserWaypointsOnMap();
 }
 
 function renderUserWaypointsUI() {
@@ -618,7 +674,19 @@ function showSimbriefBox() {
 }
 
 async function saveSimbriefId(val) {
-    if (window.pywebview && window.pywebview.api) await window.pywebview.api.save_simbrief_id(val);
+    const cleanId = (val || '').trim();
+    if (!cleanId) return;
+
+    try {
+        localStorage.setItem('aeroglass_simbrief_id', cleanId);
+    } catch (e) {}
+
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.save_simbrief_id) {
+        try {
+            await window.pywebview.api.save_simbrief_id(cleanId);
+        } catch (e) {}
+    }
+    setSimbriefCompactMode(true);
 }
 
 async function fetchSimbriefPlan() {
