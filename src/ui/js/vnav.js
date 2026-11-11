@@ -376,11 +376,14 @@ function updateActiveWaypointHighlight(acftLat, acftLon, acftHdg) {
 
     const fplContainer = document.getElementById('fplContainer');
     const cards = document.querySelectorAll('#fplContainer .wpt-card');
+    const hasChangedWpt = (window._lastActiveWptIdx !== activeIdx);
+    window._lastActiveWptIdx = activeIdx;
+
     cards.forEach((card, idx) => {
         if (idx === activeIdx) {
             card.style.borderColor = 'var(--emerald)';
             card.style.background = 'rgba(52, 211, 153, 0.12)';
-            if (fplContainer) {
+            if (fplContainer && hasChangedWpt) {
                 fplContainer.scrollTo({
                     top: card.offsetTop - fplContainer.offsetTop,
                     behavior: 'smooth'

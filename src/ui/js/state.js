@@ -138,6 +138,10 @@ let flightPlan = [];
 let currentAlternate = null;
 
 let routeLine = null;
+let routeSegmentLines = [];
+let approachFeatherLayer = null;
+let showSidStar = true;
+let showApproachCone = true;
 let alternateLine = null;
 let waypointMarkers = [];
 let vorMarkers = [];

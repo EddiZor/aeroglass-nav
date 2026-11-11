@@ -156,6 +156,20 @@ function toggleFixesLayer(enabled) {
     waypointMarkers.forEach(m => { if (enabled) map.addLayer(m); else map.removeLayer(m); });
 }
 
+function toggleSidStarLayer(enabled) {
+    showSidStar = enabled;
+    if (typeof updateFlightPlanUI === 'function' && flightPlan && flightPlan.length > 0) {
+        updateFlightPlanUI(undefined, false);
+    }
+}
+
+function toggleApproachConeLayer(enabled) {
+    showApproachCone = enabled;
+    if (typeof updateFlightPlanUI === 'function' && flightPlan && flightPlan.length > 0) {
+        updateFlightPlanUI(undefined, false);
+    }
+}
+
 function toggleAirspaceLayer(type, enabled) {
     if (!airspaceLayers[type]) airspaceLayers[type] = [];
     if (enabled) {

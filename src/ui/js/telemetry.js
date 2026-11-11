@@ -160,7 +160,7 @@ async function pollTelemetry() {
             updateFlightInfoBar(data.lat, data.lon);
 
             const acftLine = document.getElementById('acftVnavLine');
-            if (acftLine && flightPlan && flightPlan.length >= 2) {
+            if (data.connected && acftLine && flightPlan && flightPlan.length >= 2) {
                 const res = calculateRouteProgress(data.lat, data.lon);
                 if (res) {
                     const xPos = res.fraction * 1000;

@@ -306,7 +306,7 @@ class AeroGlassAPI:
 
     # --- GESTIONE PIANO DI VOLO E SIMBRIEF ---
     def fetch_simbrief_plan(self):
-        """Scarica l'ultimo OFP da SimBrief usando il SimBrief ID salvato in SQLite."""
+        """Scarica l'ultimo OFP da SimBrief includendo SID, STAR, aerovie e piste in uso."""
         res = self.get_setting("simbrief_id")
         sb_id = res.get("value") if res.get("success") else None
         if not sb_id:
@@ -322,7 +322,9 @@ class AeroGlassAPI:
             fpl = []
 
             origin = root.find("origin")
+            dep_rwy = ""
             if origin is not None:
+                dep_rwy = (origin.findtext("plan_rwy") or "").strip()
                 fpl.append({
                     "ident": origin.findtext("icao_code", "DEP"),
                     "name": origin.findtext("name", "Departure Airport"),
@@ -330,6 +332,9 @@ class AeroGlassAPI:
                     "lon": float(origin.findtext("pos_long", 0.0)),
                     "alt_ft": int(float(origin.findtext("elevation", 0))),
                     "type": "DEP",
+                    "rwy": dep_rwy,
+                    "proc_type": "SID",
+                    "proc_name": f"RWY {dep_rwy}" if dep_rwy else "DEP",
                     "metar": origin.findtext("metar", "")
                 })
 
@@ -341,18 +346,33 @@ class AeroGlassAPI:
                         continue
                     if fpl and fpl[-1]["ident"] == ident:
                         continue
+
+                    via = (fix.findtext("via_airway") or "").strip()
+                    is_sid_star = (fix.findtext("is_sid_star") or "0").strip() == "1"
+                    stage = (fix.findtext("stage") or "").strip().upper()
+
+                    proc_type = "ENR"
+                    if is_sid_star or via.upper().startswith("SID") or via.upper().startswith("STAR"):
+                        if stage == "CLB" or via.upper().startswith("SID"):
+                            proc_type = "SID"
+                        else:
+                            proc_type = "STAR"
+
                     fpl.append({
                         "ident": ident,
                         "name": fix.findtext("name", "Waypoint"),
                         "lat": float(fix.findtext("pos_lat", 0.0)),
                         "lon": float(fix.findtext("pos_long", 0.0)),
                         "alt_ft": int(float(fix.findtext("altitude_feet", 5000))),
-                        "type": fix.findtext("type", "WPT")
+                        "type": fix.findtext("type", "WPT"),
+                        "proc_type": proc_type,
+                        "proc_name": via if via and via != "DCT" else proc_type
                     })
 
             destination = root.find("destination")
             if destination is not None:
                 dest_ident = destination.findtext("icao_code", "DEST")
+                dest_rwy = (destination.findtext("plan_rwy") or "").strip()
                 dest_obj = {
                     "ident": dest_ident,
                     "name": destination.findtext("name", "Destination Airport"),
@@ -360,6 +380,9 @@ class AeroGlassAPI:
                     "lon": float(destination.findtext("pos_long", 0.0)),
                     "alt_ft": int(float(destination.findtext("elevation", 0))),
                     "type": "DEST",
+                    "rwy": dest_rwy,
+                    "proc_type": "APPR",
+                    "proc_name": f"APPR RWY {dest_rwy}" if dest_rwy else "APPR",
                     "metar": destination.findtext("metar", "")
                 }
                 if fpl and fpl[-1]["ident"] == dest_ident:
@@ -532,7 +555,7 @@ class AeroGlassAPI:
 
     # --- GESTIONE PIANO DI VOLO E SIMBRIEF ---
     def fetch_simbrief_plan(self):
-        """Scarica l'ultimo OFP da SimBrief usando il SimBrief ID salvato in SQLite."""
+        """Scarica l'ultimo OFP da SimBrief includendo SID, STAR, aerovie e piste in uso."""
         res = self.get_setting("simbrief_id")
         sb_id = res.get("value") if res.get("success") else None
         if not sb_id:
@@ -548,7 +571,9 @@ class AeroGlassAPI:
             fpl = []
 
             origin = root.find("origin")
+            dep_rwy = ""
             if origin is not None:
+                dep_rwy = (origin.findtext("plan_rwy") or "").strip()
                 fpl.append({
                     "ident": origin.findtext("icao_code", "DEP"),
                     "name": origin.findtext("name", "Departure Airport"),
@@ -556,6 +581,9 @@ class AeroGlassAPI:
                     "lon": float(origin.findtext("pos_long", 0.0)),
                     "alt_ft": int(float(origin.findtext("elevation", 0))),
                     "type": "DEP",
+                    "rwy": dep_rwy,
+                    "proc_type": "SID",
+                    "proc_name": f"RWY {dep_rwy}" if dep_rwy else "DEP",
                     "metar": origin.findtext("metar", "")
                 })
 
@@ -567,18 +595,33 @@ class AeroGlassAPI:
                         continue
                     if fpl and fpl[-1]["ident"] == ident:
                         continue
+
+                    via = (fix.findtext("via_airway") or "").strip()
+                    is_sid_star = (fix.findtext("is_sid_star") or "0").strip() == "1"
+                    stage = (fix.findtext("stage") or "").strip().upper()
+
+                    proc_type = "ENR"
+                    if is_sid_star or via.upper().startswith("SID") or via.upper().startswith("STAR"):
+                        if stage == "CLB" or via.upper().startswith("SID"):
+                            proc_type = "SID"
+                        else:
+                            proc_type = "STAR"
+
                     fpl.append({
                         "ident": ident,
                         "name": fix.findtext("name", "Waypoint"),
                         "lat": float(fix.findtext("pos_lat", 0.0)),
                         "lon": float(fix.findtext("pos_long", 0.0)),
                         "alt_ft": int(float(fix.findtext("altitude_feet", 5000))),
-                        "type": fix.findtext("type", "WPT")
+                        "type": fix.findtext("type", "WPT"),
+                        "proc_type": proc_type,
+                        "proc_name": via if via and via != "DCT" else proc_type
                     })
 
             destination = root.find("destination")
             if destination is not None:
                 dest_ident = destination.findtext("icao_code", "DEST")
+                dest_rwy = (destination.findtext("plan_rwy") or "").strip()
                 dest_obj = {
                     "ident": dest_ident,
                     "name": destination.findtext("name", "Destination Airport"),
@@ -586,6 +629,9 @@ class AeroGlassAPI:
                     "lon": float(destination.findtext("pos_long", 0.0)),
                     "alt_ft": int(float(destination.findtext("elevation", 0))),
                     "type": "DEST",
+                    "rwy": dest_rwy,
+                    "proc_type": "APPR",
+                    "proc_name": f"APPR RWY {dest_rwy}" if dest_rwy else "APPR",
                     "metar": destination.findtext("metar", "")
                 }
                 if fpl and fpl[-1]["ident"] == dest_ident:

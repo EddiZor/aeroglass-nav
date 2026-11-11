@@ -172,9 +172,14 @@ function addWpToRoute(ident) {
     updateFlightPlanUI(undefined, false);
 }
 
-// --- RENDERING PIANO DI VOLO ATTIVO E PROFILO SALITA/DISCESA ---
+// --- RENDERING PIANO DI VOLO ATTIVO, PROCEDURE SID/STAR E CONO AVVICINAMENTO ---
 function clearMapRoutes() {
     if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+    if (routeSegmentLines && routeSegmentLines.length > 0) {
+        routeSegmentLines.forEach(l => { if (l) map.removeLayer(l); });
+    }
+    routeSegmentLines = [];
+    if (approachFeatherLayer) { map.removeLayer(approachFeatherLayer); approachFeatherLayer = null; }
     if (alternateLine) { map.removeLayer(alternateLine); alternateLine = null; }
     if (waypointMarkers && waypointMarkers.length > 0) {
         waypointMarkers.forEach(m => { if (m) map.removeLayer(m); });
@@ -182,6 +187,90 @@ function clearMapRoutes() {
     waypointMarkers = [];
     if (alternateMarker) { map.removeLayer(alternateMarker); alternateMarker = null; }
     if (mouseRouteMarker) { map.removeLayer(mouseRouteMarker); mouseRouteMarker = null; }
+}
+
+function destPointNm(lat, lon, brngDeg, distNm) {
+    const R = 3440.065; // Raggio terrestre in Miglia Nautiche
+    const d = distNm / R;
+    const brng = brngDeg * Math.PI / 180;
+    const lat1 = lat * Math.PI / 180;
+    const lon1 = lon * Math.PI / 180;
+    const lat2 = Math.asin(Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(brng));
+    const lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(d) * Math.cos(lat1), Math.cos(d) - Math.sin(lat1) * Math.sin(lat2));
+    return [lat2 * 180 / Math.PI, lon2 * 180 / Math.PI];
+}
+
+function enrichProceduresProfile(waypoints) {
+    if (!waypoints || waypoints.length < 2) return waypoints;
+    const lastIdx = waypoints.length - 1;
+    const hasExplicitProc = waypoints.some((w, i) => i > 0 && i < lastIdx && (w.proc_type === 'SID' || w.proc_type === 'STAR' || w.proc_type === 'APPR'));
+
+    if (!hasExplicitProc && waypoints.length >= 3) {
+        // Assegna automaticamente SID al primo tratto di salita e STAR/APPR agli ultimi tratti
+        waypoints[1].proc_type = 'SID';
+        waypoints[1].proc_name = waypoints[1].proc_name || 'SID TRANS';
+        if (waypoints.length >= 4) {
+            waypoints[lastIdx - 1].proc_type = 'STAR';
+            waypoints[lastIdx - 1].proc_name = waypoints[lastIdx - 1].proc_name || 'STAR TRANS';
+        }
+    }
+    waypoints[0].proc_type = 'SID';
+    waypoints[lastIdx].proc_type = 'APPR';
+    return waypoints;
+}
+
+function drawApproachFeather(waypoints) {
+    if (!showApproachCone || !waypoints || waypoints.length < 2) return;
+    const dest = waypoints[waypoints.length - 1];
+    const prev = waypoints[waypoints.length - 2];
+    if (dest.lat === null || dest.lon === null || prev.lat === null || prev.lon === null) return;
+
+    // Cerca eventuale ILS corrispondente all'aeroporto/pista di arrivo, altrimenti usa l'ultimo leg
+    const apt = findAirport(dest.ident);
+    const destRwy = dest.rwy || (apt && apt.rwy ? apt.rwy.split('/')[0] : '');
+    const matchedIls = (ilsData || []).find(i =>
+        (destRwy && i.rwy === destRwy && L.latLng(dest.lat, dest.lon).distanceTo(L.latLng(i.lat, i.lon)) < 15000) ||
+        L.latLng(dest.lat, dest.lon).distanceTo(L.latLng(i.lat, i.lon)) < 8000
+    );
+
+    const finalCourse = matchedIls ? Number(matchedIls.course) : calculateBearing(prev.lat, prev.lon, dest.lat, dest.lon);
+    const reciprocal = (finalCourse + 180) % 360;
+
+    // Disegna il cono di avvicinamento strumentale (8.5 NM dalla soglia pista)
+    const tip = [dest.lat, dest.lon];
+    const leftWing = destPointNm(dest.lat, dest.lon, (reciprocal - 4.5 + 360) % 360, 8.0);
+    const centerNotch = destPointNm(dest.lat, dest.lon, reciprocal, 6.8);
+    const rightWing = destPointNm(dest.lat, dest.lon, (reciprocal + 4.5) % 360, 8.0);
+    const extCenterline = destPointNm(dest.lat, dest.lon, reciprocal, 10.5);
+
+    const apprGroup = L.layerGroup();
+
+    const conePoly = L.polygon([tip, leftWing, centerNotch, rightWing], {
+        color: '#38bdf8',
+        weight: 1.8,
+        fillColor: '#38bdf8',
+        fillOpacity: 0.22
+    });
+
+    const centerLine = L.polyline([tip, extCenterline], {
+        color: '#38bdf8',
+        weight: 1.5,
+        dashArray: '4, 4'
+    });
+
+    const procLabel = matchedIls
+        ? `ILS RWY ${matchedIls.rwy} (${matchedIls.ident} - ${matchedIls.freq} MHz)`
+        : (dest.proc_name || `RNAV / FINAL RWY ${destRwy || 'ARR'}`);
+
+    conePoly.bindPopup(
+        `<div style="font-weight:700;font-size:12.5px;color:#38bdf8;">🛬 ${procLabel}</div>` +
+        `<div style="font-size:11px;color:#f8fafc;font-family:monospace;margin-top:3px;">FINAL CRS: ${Math.round(finalCourse)}° | GS: ${matchedIls ? matchedIls.gs_alt : '3.0° VNAV'}</div>`
+    );
+
+    apprGroup.addLayer(centerLine);
+    apprGroup.addLayer(conePoly);
+    apprGroup.addTo(map);
+    approachFeatherLayer = apprGroup;
 }
 
 function applyClimbDescentProfile(waypoints, cruiseAlt) {
@@ -245,8 +334,15 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
     container.innerHTML = '';
     clearMapRoutes();
 
+    if (flightPlan && flightPlan.length >= 2) {
+        flightPlan = enrichProceduresProfile(flightPlan);
+    }
+
     const coords = [];
     const altitutes = [];
+    let detectedSid = "---";
+    let detectedStar = "---";
+    let detectedAppr = "---";
 
     flightPlan.forEach((wp, index) => {
         const apt = findAirport(wp.ident);
@@ -256,6 +352,17 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
         const altVal = Number(wp.alt_ft) || 0;
         altitutes.push(altVal > 0 ? altVal : 5000);
 
+        if (wp.proc_type === 'SID' && wp.proc_name && index > 0 && detectedSid === "---") {
+            detectedSid = wp.proc_name;
+        }
+        if (wp.proc_type === 'STAR' && wp.proc_name && detectedStar === "---") {
+            detectedStar = wp.proc_name;
+        }
+        if (index === flightPlan.length - 1) {
+            const rwyStr = wp.rwy || (apt && apt.rwy ? apt.rwy : '');
+            detectedAppr = wp.proc_name || (rwyStr ? `RWY ${rwyStr}` : 'VISUAL / VNAV');
+        }
+
         let legDistNm = "0.0";
         if (index > 0 && flightPlan[index - 1].lat !== null && wp.lat !== null) {
             const prevLatLng = L.latLng(flightPlan[index - 1].lat, flightPlan[index - 1].lon);
@@ -264,19 +371,25 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
             legDistNm = (distMeters / 1852).toFixed(1);
         }
 
+        const procColor = wp.proc_type === 'SID' ? '#34d399'
+                        : wp.proc_type === 'STAR' ? '#fbbf24'
+                        : wp.proc_type === 'APPR' ? '#38bdf8'
+                        : '#e879f9';
+
         if (wp.lat !== undefined && wp.lat !== null && wp.lon !== undefined && wp.lon !== null) {
             coords.push([wp.lat, wp.lon]);
 
             const marker = L.circleMarker([wp.lat, wp.lon], {
-                radius: isEndpoint ? 5 : 4,
-                color: '#38bdf8',
-                fillColor: isEndpoint ? '#34d399' : '#0284c7',
-                fillOpacity: 0.85,
+                radius: isEndpoint ? 5.5 : 4.2,
+                color: showSidStar ? procColor : '#38bdf8',
+                fillColor: isEndpoint ? '#34d399' : (showSidStar ? procColor : '#0284c7'),
+                fillOpacity: 0.9,
                 weight: 1.5
             }).addTo(map);
 
             let popupHtml =
-                '<div style="font-weight:700;font-size:13px;color:#38bdf8;">' + wp.ident + '</div>' +
+                '<div style="font-weight:700;font-size:13px;color:' + procColor + ';">' + wp.ident +
+                (wp.proc_name ? ' <span style="font-size:10px;opacity:0.85;">[' + wp.proc_name + ']</span>' : '') + '</div>' +
                 '<div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Altitudine: <span style="color:#e879f9;cursor:pointer;text-decoration:underline;font-weight:600;" onclick="editWaypointAlt(' + index + ', ' + altVal + ')">' + altVal + ' ft ✏️</span></div>';
 
             if (wx) {
@@ -300,6 +413,16 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
             };
         }
 
+        let procBadgeHtml = '';
+        if (!isEndpoint && wp.proc_type && (wp.proc_type === 'SID' || wp.proc_type === 'STAR' || wp.proc_type === 'APPR')) {
+            const badgeBg = wp.proc_type === 'SID' ? 'rgba(52,211,153,0.18)' : (wp.proc_type === 'STAR' ? 'rgba(251,191,36,0.18)' : 'rgba(56,189,248,0.18)');
+            const badgeCol = wp.proc_type === 'SID' ? 'var(--emerald)' : (wp.proc_type === 'STAR' ? 'var(--amber)' : 'var(--cyan)');
+            const badgeLabel = wp.proc_name && wp.proc_name !== wp.proc_type ? `${wp.proc_type}: ${wp.proc_name}` : wp.proc_type;
+            procBadgeHtml = `<span style="font-size:9px;background:${badgeBg};color:${badgeCol};padding:1px 5px;border-radius:3px;font-weight:700;">${badgeLabel}</span>`;
+        } else if (!isEndpoint && wp.proc_name && wp.proc_name !== 'ENR') {
+            procBadgeHtml = `<span style="font-size:9px;background:rgba(232,121,249,0.15);color:var(--purple);padding:1px 5px;border-radius:3px;font-weight:700;">${wp.proc_name}</span>`;
+        }
+
         let wxBadgesHtml = '';
         if (wx) {
             wxBadgesHtml =
@@ -315,12 +438,15 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
             deleteBtnHtml = `<button class="btn btn-danger" style="padding:1px 5px; font-size:10px; margin-top:3px; align-self:flex-end;" title="Rimuovi dalla rotta" onclick="event.stopPropagation(); removeWaypointFromRoute(${index})">✕</button>`;
         }
 
+        const rwyLabel = wp.rwy ? ('RWY ' + wp.rwy) : (apt && apt.rwy ? ('RWY ' + apt.rwy) : (wp.type || 'WPT'));
+
         div.innerHTML =
             '<div style="min-width: 0; flex: 1; padding-right: 8px;">' +
-                '<div style="display:flex; align-items:center; gap:6px;">' +
+                '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
                     '<span class="wpt-icao">' + wp.ident + '</span>' +
                     (index === 0 ? '<span style="font-size:9px;background:rgba(56,189,248,0.18);color:var(--cyan);padding:1px 5px;border-radius:3px;font-weight:700;">DEP</span>' : '') +
                     (index === flightPlan.length - 1 && flightPlan.length > 1 ? '<span style="font-size:9px;background:rgba(52,211,153,0.18);color:var(--emerald);padding:1px 5px;border-radius:3px;font-weight:700;">ARR</span>' : '') +
+                    procBadgeHtml +
                 '</div>' +
                 '<div class="wpt-name" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + (wp.name || (apt ? apt.name : 'Waypoint Navlog')) + '</div>' +
                 wxBadgesHtml +
@@ -328,19 +454,81 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
             '<div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px; flex-shrink:0;">' +
                 '<span class="wpt-alt" onclick="event.stopPropagation(); editWaypointAlt(' + index + ', ' + altVal + ')">' + altVal + ' ft</span>' +
                 '<span class="wpt-dist" id="wptDist_' + index + '">' + (index === 0 ? '0.0 NM' : `+${legDistNm} NM`) + '</span>' +
-                '<span style="font-size:10px;color:var(--text-muted);">' + (apt && apt.rwy ? ('RWY ' + apt.rwy) : (wp.type || 'WPT')) + '</span>' +
+                '<span style="font-size:10px;color:var(--text-muted);">' + rwyLabel + '</span>' +
                 deleteBtnHtml + 
             '</div>';
         container.appendChild(div);
     });
 
+    // Aggiorna il riepilogo nel menu Filtri & SID/STAR
+    const sumSidEl = document.getElementById('sumSid');
+    const sumStarEl = document.getElementById('sumStar');
+    const sumApprEl = document.getElementById('sumAppr');
+    if (sumSidEl) sumSidEl.innerText = detectedSid;
+    if (sumStarEl) sumStarEl.innerText = detectedStar;
+    if (sumApprEl) sumApprEl.innerText = detectedAppr;
+
     if (coords.length > 1) {
-        routeLine = L.polyline(coords, { color: '#e879f9', weight: 2.5, dashArray: '6, 4' }).addTo(map);
+        routeLine = L.polyline(coords, {
+            color: '#e879f9',
+            weight: showSidStar ? 1.5 : 2.5,
+            opacity: showSidStar ? 0.35 : 0.95,
+            dashArray: '6, 4'
+        }).addTo(map);
+
+        if (showSidStar) {
+            for (let i = 0; i < flightPlan.length - 1; i++) {
+                const p1 = flightPlan[i];
+                const p2 = flightPlan[i + 1];
+                if (p1.lat === null || p2.lat === null) continue;
+
+                let segType = p2.proc_type || 'ENR';
+                if (i === flightPlan.length - 2) segType = 'APPR';
+
+                const segColor = segType === 'SID' ? '#34d399'
+                               : segType === 'STAR' ? '#fbbf24'
+                               : segType === 'APPR' ? '#38bdf8'
+                               : '#e879f9';
+
+                const segDash = (segType === 'SID' || segType === 'STAR') ? '5, 5' : null;
+                const segLine = L.polyline([[p1.lat, p1.lon], [p2.lat, p2.lon]], {
+                    color: segColor,
+                    weight: 3.2,
+                    opacity: 0.92,
+                    dashArray: segDash
+                }).addTo(map);
+
+                const segLabel = p2.proc_name || segType;
+                segLine.bindTooltip(`${p1.ident} ➔ ${p2.ident} (${segLabel})`, { sticky: true, className: 'vnav-route-tooltip' });
+                routeSegmentLines.push(segLine);
+            }
+        }
+
+        drawApproachFeather(flightPlan);
+
         if (fitMap) {
             setFollowState(0);
-            // Padding sicuro e fisso per evitare crash del vettoriale Leaflet su schermi piccoli
+            // Compensa l'oversize 170vw x 170vh (-35vw, -35vh) di #map e centra la rotta nell'85% dell'area libera visibile
+            const vw = window.innerWidth || 1280;
+            const vh = window.innerHeight || 720;
+            const offX = Math.round(vw * 0.35);
+            const offY = Math.round(vh * 0.35);
+
+            const sidebarEl = document.getElementById('sidebarPanel');
+            const leftUi = (sidebarOpen && sidebarEl) ? (sidebarEl.offsetWidth + 28) : 28;
+            const rightUi = 28;
+            const topUi = 64;
+            const bottomUi = drawerOpen ? 142 : 52;
+
+            const freeW = Math.max(200, vw - leftUi - rightUi);
+            const freeH = Math.max(200, vh - topUi - bottomUi);
+            const marginX = Math.round(freeW * 0.08);
+            const marginY = Math.round(freeH * 0.08);
+
             map.fitBounds(routeLine.getBounds(), {
-                padding: [50, 50]
+                paddingTopLeft: [offX + leftUi + marginX, offY + topUi + marginY],
+                paddingBottomRight: [offX + rightUi + marginX, offY + bottomUi + marginY],
+                maxZoom: 12
             });
         }
     }
@@ -631,6 +819,36 @@ function parsePlnXmlString(xmlText) {
 
         if (!altFt || isNaN(altFt)) altFt = cruiseAlt;
 
+        // Estrazione procedure SID / STAR / Approach e Piste dal formato .PLN (Little Navmap / MSFS)
+        let procType = "ENR";
+        let procName = "";
+        const depFp = wp.getElementsByTagName("DepartureFP")[0]?.textContent?.trim();
+        const arrFp = wp.getElementsByTagName("ArrivalFP")[0]?.textContent?.trim();
+        const apprFp = wp.getElementsByTagName("ApproachTypeFP")[0]?.textContent?.trim();
+        const airwayFp = wp.getElementsByTagName("Airway")[0]?.textContent?.trim();
+        const rwyNumFp = wp.getElementsByTagName("RunwayNumberFP")[0]?.textContent?.trim();
+        const rwyDesFp = wp.getElementsByTagName("RunwayDesignatorFP")[0]?.textContent?.trim();
+
+        let wpRwy = "";
+        if (rwyNumFp) {
+            const desMap = { "LEFT": "L", "RIGHT": "R", "CENTER": "C" };
+            wpRwy = rwyNumFp + (desMap[(rwyDesFp || "").toUpperCase()] || "");
+        }
+
+        if (depFp) {
+            procType = "SID";
+            procName = depFp;
+        } else if (apprFp) {
+            procType = "APPR";
+            procName = wpRwy ? `${apprFp} RWY ${wpRwy}` : apprFp;
+        } else if (arrFp) {
+            procType = "STAR";
+            procName = arrFp;
+        } else if (airwayFp) {
+            procType = "ENR";
+            procName = airwayFp;
+        }
+
         if (parsedWaypoints.length === 0 || parsedWaypoints[parsedWaypoints.length - 1].ident !== code) {
             parsedWaypoints.push({
                 ident: code,
@@ -638,7 +856,10 @@ function parsePlnXmlString(xmlText) {
                 lat: wpLat,
                 lon: wpLon,
                 alt_ft: altFt,
-                type: "WPT"
+                type: "WPT",
+                rwy: wpRwy,
+                proc_type: procType,
+                proc_name: procName || procType
             });
         } else if (parsedWaypoints.length === 1 && parsedWaypoints[0].ident === code && parsedWaypoints[0].lat === null) {
             parsedWaypoints[0].lat = wpLat;

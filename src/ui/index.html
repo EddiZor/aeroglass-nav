@@ -56,15 +56,26 @@
         </div>
     </div>
 
-    <!-- Pannello Filtri a scomparsa (inclusi Spazi Aerei Avanzati) -->
+    <!-- Pannello Filtri a scomparsa (inclusi SID/STAR e Spazi Aerei Avanzati) -->
     <div id="proceduresPanel" class="procedures-dropdown glass-panel" style="display: none;">
-        <div style="font-size: 11px; font-weight: 700; color: var(--cyan); margin-bottom: 6px;">LIVELLI MAPPA</div>
+        <div style="font-size: 11px; font-weight: 700; color: var(--cyan); margin-bottom: 6px;">LIVELLI MAPPA & PROCEDURE</div>
         <label class="filter-check">
             <input type="checkbox" checked onchange="toggleFixesLayer(this.checked)"> Mostra Waypoint Rotta
         </label>
         <label class="filter-check">
             <input type="checkbox" checked onchange="toggleNavaidsLayer()"> Mostra Radioassistenze (VOR/ILS)
         </label>
+        <label class="filter-check">
+            <input type="checkbox" id="chkShowSidStar" checked onchange="toggleSidStarLayer(this.checked)"> Evidenzia Transizioni SID / STAR
+        </label>
+        <label class="filter-check">
+            <input type="checkbox" id="chkShowApprCone" checked onchange="toggleApproachConeLayer(this.checked)"> Cono Avvicinamento (ILS / RNAV)
+        </label>
+        <div id="activeProceduresSummary" style="font-size: 10.5px; font-family: Consolas, monospace; color: var(--text-muted); background: rgba(9,13,22,0.55); border: 1px solid rgba(56,189,248,0.2); border-radius: 6px; padding: 6px 8px; margin-top: 4px; line-height: 1.45;">
+            SID: <strong id="sumSid" style="color: var(--emerald);">---</strong><br>
+            STAR: <strong id="sumStar" style="color: var(--amber);">---</strong><br>
+            APPR: <strong id="sumAppr" style="color: var(--cyan);">---</strong>
+        </div>
         <div style="font-size: 11px; font-weight: 700; color: var(--cyan); margin-top: 8px; margin-bottom: 4px; border-top: 1px solid rgba(148,163,184,0.2); padding-top: 6px;">SPAZI AEREI AVANZATI</div>
         <label class="filter-check">
             <input type="checkbox" id="chkAirspaceTma" onchange="toggleAirspaceLayer('tma', this.checked)"> Mostra TMA (Terminal Control)

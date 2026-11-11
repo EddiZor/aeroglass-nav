@@ -263,17 +263,32 @@ body, html {
 
 .fpl-list {
     flex: 1;
-    min-height: 0; /* Fondamentale per attivare correttamente lo scroll nei flexbox */
+    min-height: 0;
     overflow-y: auto;
+    overflow-x: hidden;
     display: flex;
     flex-direction: column;
     gap: 6px;
-    padding-right: 4px;
+    padding-right: 6px;
 }
-.fpl-list::-webkit-scrollbar { width: 5px; }
-.fpl-list::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.3); border-radius: 4px; }
+.fpl-list::-webkit-scrollbar {
+    width: 9px;
+}
+.fpl-list::-webkit-scrollbar-track {
+    background: rgba(9, 13, 22, 0.55);
+    border-radius: 6px;
+}
+.fpl-list::-webkit-scrollbar-thumb {
+    background: rgba(56, 189, 248, 0.45);
+    border-radius: 6px;
+    border: 1px solid rgba(56, 189, 248, 0.25);
+}
+.fpl-list::-webkit-scrollbar-thumb:hover {
+    background: var(--cyan);
+}
 
 .wpt-card {
+    flex-shrink: 0;
     background: rgba(30, 41, 59, 0.55);
     border: 1px solid rgba(148, 163, 184, 0.16);
     border-radius: 8px;
