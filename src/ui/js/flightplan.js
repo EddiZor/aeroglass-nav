@@ -27,8 +27,7 @@ async function loadUserWaypoints() {
         } catch (e) {}
     }
 
-    renderUserWaypointsUI();
-    renderUserWaypointsOnMap();
+renderUserWaypointsUI();
 }
 
 async function persistUserWaypoints() {
@@ -79,70 +78,74 @@ async function addUserWaypoint() {
 
     await persistUserWaypoints();
     renderUserWaypointsUI();
-    renderUserWaypointsOnMap();
 
     if (idEl) idEl.value = '';
     if (latEl) latEl.value = '';
     if (lonEl) lonEl.value = '';
 
-    if (isPickingUserWp) toggleMapPickMode();
+    if (tempPickMarker) {
+        map.removeLayer(tempPickMarker);
+        tempPickMarker = null;
+    }
+    if (isPickingUserWp) toggleMapPickMode(false);
 }
 
 async function saveAndRefreshUserWaypoints() {
-    if (window.pywebview && window.pywebview.api && window.pywebview.api.save_user_waypoints) {
-        await window.pywebview.api.save_user_waypoints(userWaypoints);
-    }
-    renderUserWaypointsUI();
-}
-
-async function deleteUserWaypoint(ident) {
-    userWaypoints = userWaypoints.filter(w => w.ident !== ident);
     await persistUserWaypoints();
     renderUserWaypointsUI();
-    renderUserWaypointsOnMap();
 }
 
-function renderUserWaypointsUI() {
-    const container = document.getElementById('userWpContainer');
-    if (!container) return;
-    container.innerHTML = '';
-
-    if (userWpMarkers.length > 0) {
-        userWpMarkers.forEach(m => map.removeLayer(m));
+async function deleteUserWaypoint(identOrIdx) {
+    if (typeof identOrIdx === 'number') {
+        userWaypoints.splice(identOrIdx, 1);
+    } else {
+        userWaypoints = userWaypoints.filter(w => w.ident !== identOrIdx);
     }
-    userWpMarkers = [];
+    await persistUserWaypoints();
+    renderUserWaypointsUI();
+}
 
-    userWaypoints.forEach((wp, idx) => {
-        const marker = L.circleMarker([wp.lat, wp.lon], {
-            radius: 5,
-            color: '#fbbf24',
-            fillColor: '#fbbf24',
-            fillOpacity: 0.9,
-            weight: 2
-        }).addTo(map);
+    function renderUserWaypointsUI() {
+        const container = document.getElementById('userWpContainer');
+        if (!container) return;
+        container.innerHTML = '';
 
-        marker.bindPopup(`<b>User WP: ${wp.ident}</b><br>Alt: ${wp.alt_ft} ft<br>Lat: ${wp.lat}, Lon: ${wp.lon}<br><button class="btn btn-cyan" style="margin-top:4px; padding:2px 6px; font-size:10px;" onclick="addWpToRoute('${wp.ident}')">➕ Aggiungi a Rotta</button>`);
-        userWpMarkers.push(marker);
+        if (userWpMarkers.length > 0) {
+            userWpMarkers.forEach(m => map.removeLayer(m));
+        }
+        userWpMarkers = [];
 
-        const div = document.createElement('div');
-        div.className = 'wpt-card';
-        div.onclick = () => {
-            setFollowState(false);
-            map.flyTo([wp.lat, wp.lon], 11);
-            marker.openPopup();
-        };
-        div.innerHTML = `
-            <div style="min-width:0; flex:1;">
-                <span class="wpt-icao" style="color:var(--amber);">${wp.ident}</span>
-                <div class="wpt-name">${wp.lat.toFixed(4)}, ${wp.lon.toFixed(4)}</div>
-            </div>
-            <div style="display:flex; align-items:center; gap:5px;">
-                <button class="btn btn-cyan" style="padding:2px 6px; font-size:10px;" title="Aggiungi al piano di volo attivo" onclick="event.stopPropagation(); addWpToRoute('${wp.ident}')">➕</button>
-                <span class="wpt-alt">${wp.alt_ft} ft</span>
-                <button class="btn btn-danger" style="padding:2px 6px; font-size:10px; flex:0 0 auto;" title="Elimina" onclick="event.stopPropagation(); deleteUserWaypoint(${idx})">✕</button>
-            </div>
-        `;
-        container.appendChild(div);
+        userWaypoints.forEach((wp) => {
+            const marker = L.circleMarker([wp.lat, wp.lon], {
+                radius: 5,
+                color: '#fbbf24',
+                fillColor: '#fbbf24',
+                fillOpacity: 0.9,
+                weight: 2
+            }).addTo(map);
+
+            marker.bindPopup(`<b>User WP: ${wp.ident}</b><br>Alt: ${wp.alt_ft} ft<br>Lat: ${wp.lat}, Lon: ${wp.lon}<br><button class="btn btn-cyan" style="margin-top:4px; padding:2px 6px; font-size:10px;" onclick="addWpToRoute('${wp.ident}')">➕ Aggiungi a Rotta</button>`);
+            userWpMarkers.push(marker);
+
+            const div = document.createElement('div');
+            div.className = 'wpt-card';
+            div.onclick = () => {
+                setFollowState(false);
+                map.flyTo([wp.lat, wp.lon], 11);
+                marker.openPopup();
+            };
+            div.innerHTML = `
+                <div style="min-width:0; flex:1;">
+                    <span class="wpt-icao" style="color:var(--amber);">${wp.ident}</span>
+                    <div class="wpt-name">${Number(wp.lat).toFixed(4)}, ${Number(wp.lon).toFixed(4)}</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:5px;">
+                    <button class="btn btn-cyan" style="padding:2px 6px; font-size:10px;" title="Aggiungi al piano di volo attivo" onclick="event.stopPropagation(); addWpToRoute('${wp.ident}')">➕</button>
+                    <span class="wpt-alt">${wp.alt_ft} ft</span>
+                    <button class="btn btn-danger" style="padding:2px 6px; font-size:10px; flex:0 0 auto;" title="Elimina" onclick="event.stopPropagation(); deleteUserWaypoint('${wp.ident}')">✕</button>
+                </div>
+            `;
+            container.appendChild(div);
     });
 }
 
@@ -352,6 +355,10 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
     }
 
     renderVnavChart(altitutes);
+
+        if (window.pywebview && window.pywebview.api && window.pywebview.api.save_active_flight_plan) {
+            window.pywebview.api.save_active_flight_plan(flightPlan, currentAlternate).catch(() => {});
+        }
 }
 
 function removeWaypointFromRoute(index) {

@@ -60,28 +60,21 @@ class TelemetryManager:
         return clean.strip()[:max_len]
 
     def _try_connect(self):
-        if not SIMCONNECT_AVAILABLE:
-            return False
-        self._safe_disconnect()
-        try:
-            # Tentativo di connessione pulita a SimConnect
-            new_sm = SimConnect()
-            new_aq = AircraftRequests(new_sm, _time=500)
-            
-            # Test rapido di lettura
-            test_lat = new_aq.get("PLANE_LATITUDE")
-            if test_lat is not None:
+            if not SIMCONNECT_AVAILABLE:
+                return False
+            self._safe_disconnect()
+            try:
+                new_sm = SimConnect()
+                new_aq = AircraftRequests(new_sm, _time=200)
                 with self._lock:
                     self.sm = new_sm
                     self.aq = new_aq
                     self.connected = True
                     self._fail_count = 0
                 return True
-        except Exception as e:
-            print(DebugSimConnect := f"Errore connessione SimConnect: {e}")
-        
-        self._safe_disconnect()
-        return False
+            except Exception:
+                self._safe_disconnect()
+                return False
 
     def _poll_loop(self):
         while self._running:

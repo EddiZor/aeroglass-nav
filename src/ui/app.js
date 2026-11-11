@@ -147,15 +147,19 @@ async function initAeroGlassApp() {
                     if (initData.ils && initData.ils.length > 0) {
                         ilsData = initData.ils;
                     }
-                    if (initData.simbrief_id) {
-                        const sbInput = document.getElementById('simbriefIdInput');
-                        if (sbInput) sbInput.value = initData.simbrief_id;
-                        setSimbriefCompactMode(true);
+    if (initData.simbrief_id) {
+                    const sbInput = document.getElementById('simbriefIdInput');
+                    if (sbInput) sbInput.value = initData.simbrief_id;
+                    setSimbriefCompactMode(true);
+                    }
+                    if (initData.flight_plan && Array.isArray(initData.flight_plan) && initData.flight_plan.length > 0) {
+                        flightPlan = initData.flight_plan;
+                        updateFlightPlanUI(initData.alternate || null, true);
                     }
                     renderNavAids(vorsData, ilsData);
                 }
             }
-            await loadUserWaypoints();
+            await loadUserWaypoints(); 
         } catch (e) {}
     }
 
