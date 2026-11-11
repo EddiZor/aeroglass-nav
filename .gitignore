@@ -1,24 +1,8 @@
-﻿# Python / PyInstaller
+﻿.venv/
 __pycache__/
-*.py[cod]
+*.pyc
 build/
 dist/
-*.spec
-.venv/
-venv/
-
-# Node / Web UI
-node_modules/
-
-# Database e cache locali
-*.sqlite
-*.db
-cache/
-
-# IDE e Sistema Operativo
-.vscode/
-.idea/
-Thumbs.db
-.DS_Store
-
 config.json
+user_waypoints.json
+nav_cache.json
