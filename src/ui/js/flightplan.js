@@ -281,7 +281,7 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
 
             if (wx) {
                 popupHtml +=
-                    '<div style="font-size:10px;color:#34d399;font-family:monospace;border-top:1px solid rgba(148,163,184,0.2);padding-top:4px;margin-top:4px;">' +
+                    '<div style="font-size:13px;font-weight:600;color:#34d399;font-family:monospace;border-top:1px solid rgba(148,163,184,0.2);padding-top:4px;margin-top:4px;">' +
                     '💨 ' + wx.wind + ' &nbsp;|&nbsp; 🌡️ ' + wx.temp + ' &nbsp;|&nbsp; 📊 ' + wx.qnh +
                     '</div>';
             }
@@ -408,6 +408,38 @@ async function exportCurrentFlightPlan() {
     }
 }
 
+async function resolveKnownOrOnlineCoords(ident) {
+    let res = resolveKnownCoords(ident);
+    if (res && res.lat !== null && res.lon !== null) return res;
+
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.resolve_icao) {
+        try {
+            const apiRes = await window.pywebview.api.resolve_icao(ident);
+            if (apiRes && apiRes.success && apiRes.lat !== null && apiRes.lon !== null) {
+                if (apiRes.is_airport && !findAirport(ident)) {
+                    airportsData.push({
+                        icao: ident,
+                        name: apiRes.name || ident,
+                        lat: apiRes.lat,
+                        lon: apiRes.lon,
+                        elev: apiRes.elev || 0,
+                        rwy: "",
+                        metar: apiRes.metar || ""
+                    });
+                }
+                return {
+                    lat: apiRes.lat,
+                    lon: apiRes.lon,
+                    name: apiRes.name || ident,
+                    elev: apiRes.elev || 0,
+                    metar: apiRes.metar || ""
+                };
+            }
+        } catch (e) {}
+    }
+    return null;
+}
+
 async function buildAndExportManualFlightPlan(doExport = true) {
     const depInput = document.getElementById('manualDep').value.trim().toUpperCase();
     const wptsInput = document.getElementById('manualWpts').value.trim().toUpperCase();
@@ -420,41 +452,42 @@ async function buildAndExportManualFlightPlan(doExport = true) {
     }
 
     let generatedPlan = [];
-    const depRes = resolveKnownCoords(depInput);
+    const depRes = await resolveKnownOrOnlineCoords(depInput);
     const depApt = findAirport(depInput);
     generatedPlan.push({
         ident: depInput,
         name: depRes ? depRes.name : "Aeroporto di Partenza",
         lat: depRes ? depRes.lat : null,
         lon: depRes ? depRes.lon : null,
-        alt_ft: depApt ? (depApt.elev || 0) : 0,
+        alt_ft: depApt ? (depApt.elev || 0) : (depRes?.elev || 0),
         type: "DEP",
         metar: depRes ? depRes.metar : ""
     });
 
     if (wptsInput) {
-        wptsInput.split(/[\s,]+/).forEach(token => {
-            if (!token) return;
-            const wptRes = resolveKnownCoords(token);
+        const tokens = wptsInput.split(/[\s,]+/).filter(Boolean);
+        for (const token of tokens) {
+            const wptRes = await resolveKnownOrOnlineCoords(token);
+            const userWp = userWaypoints.find(w => w.ident === token);
             generatedPlan.push({
                 ident: token,
                 name: wptRes ? wptRes.name : "Waypoint Rotta",
                 lat: wptRes ? wptRes.lat : null,
                 lon: wptRes ? wptRes.lon : null,
-                alt_ft: cruiseAlt,
+                alt_ft: userWp ? userWp.alt_ft : cruiseAlt,
                 type: "WPT"
             });
-        });
+        }
     }
 
-    const destRes = resolveKnownCoords(destInput);
+    const destRes = await resolveKnownOrOnlineCoords(destInput);
     const destApt = findAirport(destInput);
     generatedPlan.push({
         ident: destInput,
         name: destRes ? destRes.name : "Aeroporto di Arrivo",
         lat: destRes ? destRes.lat : null,
         lon: destRes ? destRes.lon : null,
-        alt_ft: destApt ? (destApt.elev || 0) : 0,
+        alt_ft: destApt ? (destApt.elev || 0) : (destRes?.elev || 0),
         type: "DEST",
         metar: destRes ? destRes.metar : ""
     });

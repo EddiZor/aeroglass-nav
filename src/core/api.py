@@ -49,7 +49,7 @@ class AeroGlassAPI:
 
 # --- DATI INIZIALI E IMPOSTAZIONI (SQLITE) ---
     def get_initial_data(self):
-        """Restituisce i dati iniziali all'avvio della UI, inclusi SimBrief ID e ultimo piano di volo."""
+        """Restituisce i dati iniziali all'avvio della UI, inclusi nav_cache.json, SimBrief ID e ultimo piano di volo."""
         simbrief_res = self.get_setting("simbrief_id")
         simbrief_id = simbrief_res.get("value") if simbrief_res.get("success") else ""
 
@@ -69,16 +69,134 @@ class AeroGlassAPI:
             except Exception:
                 saved_alt = None
 
+        airports, vors, ils = [], [], []
+        cache_path = os.path.join(os.path.abspath("."), "nav_cache.json")
+        if os.path.exists(cache_path):
+            try:
+                with open(cache_path, "r", encoding="utf-8") as f:
+                    cache_data = json.load(f)
+                if isinstance(cache_data, dict):
+                    airports = cache_data.get("airports", [])
+                    vors = cache_data.get("vors", [])
+                    ils = cache_data.get("ils", [])
+                elif isinstance(cache_data, list):
+                    airports = cache_data
+            except Exception:
+                pass
+
         self.flight_plan = saved_fpl
 
         return {
-            "airports": [],
-            "vors": [],
-            "ils": [],
+            "airports": airports,
+            "vors": vors,
+            "ils": ils,
             "simbrief_id": simbrief_id or "",
             "flight_plan": saved_fpl,
             "alternate": saved_alt
         }
+
+    def resolve_icao(self, ident):
+        """Risolve coordinate, quota e METAR di qualsiasi aeroporto ICAO (locale o via API AviationWeather)."""
+        code = str(ident or "").strip().upper()
+        if not code:
+            return {"success": False}
+
+        # 1. Hub principali europei di fallback immediato
+        hub_airports = {
+            "EDDF": {"name": "Frankfurt Main", "lat": 50.0333, "lon": 8.5706, "elev": 364},
+            "EDDM": {"name": "Munich Franz Josef Strauss", "lat": 48.3538, "lon": 11.7861, "elev": 1487},
+            "EDDB": {"name": "Berlin Brandenburg", "lat": 52.3622, "lon": 13.5007, "elev": 157},
+            "EDDL": {"name": "Dusseldorf", "lat": 51.2895, "lon": 6.7668, "elev": 147},
+            "EDDH": {"name": "Hamburg", "lat": 53.6304, "lon": 9.9882, "elev": 53},
+            "EDDS": {"name": "Stuttgart", "lat": 48.6899, "lon": 9.2220, "elev": 1276},
+            "LOWW": {"name": "Wien Schwechat", "lat": 48.1103, "lon": 16.5697, "elev": 600},
+            "LOWI": {"name": "Innsbruck Kranebitten", "lat": 47.2602, "lon": 11.3439, "elev": 1906},
+            "LOWS": {"name": "Salzburg", "lat": 47.7933, "lon": 13.0043, "elev": 1411},
+            "LSZH": {"name": "Zurich Kloten", "lat": 47.4581, "lon": 8.5481, "elev": 1417},
+            "LSGG": {"name": "Geneve Cointrin", "lat": 46.2381, "lon": 6.1089, "elev": 1411},
+            "LSZA": {"name": "Lugano Agno", "lat": 46.0043, "lon": 8.9106, "elev": 915},
+            "LFPG": {"name": "Paris Charles de Gaulle", "lat": 49.0097, "lon": 2.5478, "elev": 392},
+            "LFPO": {"name": "Paris Orly", "lat": 48.7233, "lon": 2.3794, "elev": 291},
+            "LFMN": {"name": "Nice Cote d'Azur", "lat": 43.6584, "lon": 7.2159, "elev": 12},
+            "EGLL": {"name": "London Heathrow", "lat": 51.4700, "lon": -0.4543, "elev": 83},
+            "EGKK": {"name": "London Gatwick", "lat": 51.1481, "lon": -0.1903, "elev": 202},
+            "EHAM": {"name": "Amsterdam Schiphol", "lat": 52.3086, "lon": 4.7639, "elev": -11},
+            "LEMD": {"name": "Madrid Barajas", "lat": 40.4719, "lon": -3.5626, "elev": 1998},
+            "LEBL": {"name": "Barcelona El Prat", "lat": 41.2971, "lon": 2.0785, "elev": 12},
+            "LGAV": {"name": "Athens Eleftherios Venizelos", "lat": 37.9364, "lon": 23.9445, "elev": 308},
+            "LDSP": {"name": "Split Resnik", "lat": 43.5389, "lon": 16.2980, "elev": 79},
+            "LDDU": {"name": "Dubrovnik Cilipi", "lat": 42.5614, "lon": 18.2682, "elev": 525},
+            "LMML": {"name": "Malta Luqa", "lat": 35.8575, "lon": 14.4775, "elev": 300}
+        }
+
+        result = None
+        if code in hub_airports:
+            h = hub_airports[code]
+            result = {
+                "success": True,
+                "icao": code,
+                "name": h["name"],
+                "lat": h["lat"],
+                "lon": h["lon"],
+                "elev": h["elev"],
+                "metar": "",
+                "is_airport": True
+            }
+
+        # 2. Ricerca live tramite API AviationWeather (coordinate + METAR aggiornato per qualsiasi ICAO mondiale)
+        try:
+            url = f"https://aviationweather.gov/api/data/metar?ids={code}&format=json"
+            req = urllib.request.Request(url, headers={"User-Agent": "AeroGlassNav/1.0"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            if isinstance(data, list) and len(data) > 0:
+                item = data[0]
+                lat = item.get("lat")
+                lon = item.get("lon")
+                if lat is not None and lon is not None:
+                    elev_m = item.get("elev") or 0
+                    result = {
+                        "success": True,
+                        "icao": code,
+                        "name": item.get("name", result["name"] if result else code),
+                        "lat": float(lat),
+                        "lon": float(lon),
+                        "elev": int(round(float(elev_m) * 3.28084)),
+                        "metar": item.get("rawOb", ""),
+                        "is_airport": True
+                    }
+        except Exception:
+            pass
+
+        # 3. Fallback su endpoint anagrafica aeroporti AviationWeather se non ha METAR attivo
+        if not result:
+            try:
+                url_apt = f"https://aviationweather.gov/api/data/airport?ids={code}&format=json"
+                req_apt = urllib.request.Request(url_apt, headers={"User-Agent": "AeroGlassNav/1.0"})
+                with urllib.request.urlopen(req_apt, timeout=5) as resp:
+                    apt_data = json.loads(resp.read().decode("utf-8"))
+                if isinstance(apt_data, list) and len(apt_data) > 0:
+                    item = apt_data[0]
+                    lat = item.get("lat")
+                    lon = item.get("lon")
+                    if lat is not None and lon is not None:
+                        elev_m = item.get("elev") or 0
+                        result = {
+                            "success": True,
+                            "icao": code,
+                            "name": item.get("name", code),
+                            "lat": float(lat),
+                            "lon": float(lon),
+                            "elev": int(round(float(elev_m) * 3.28084)),
+                            "metar": "",
+                            "is_airport": True
+                        }
+            except Exception:
+                pass
+
+        if result:
+            return result
+        return {"success": False}
 
     def get_setting(self, key):
         """Recupera un'impostazione dalla tabella settings di SQLite."""
