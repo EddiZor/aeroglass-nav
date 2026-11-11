@@ -167,12 +167,29 @@ def show_already_running_warning():
     api._window = warning_window
     webview.start()
 
+def apply_aeroglass_titlebar(hwnd):
+    """Applica i colori AeroGlass (#0f172a e #38bdf8) alla barra del titolo nativa di Windows 11."""
+    try:
+        dwmapi = ctypes.windll.dwmapi
+        dark_mode = ctypes.c_int(1)
+        dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(dark_mode), ctypes.sizeof(dark_mode))
+
+        caption_color = ctypes.c_int(0x002A170F)
+        dwmapi.DwmSetWindowAttribute(hwnd, 35, ctypes.byref(caption_color), ctypes.sizeof(caption_color))
+
+        text_color = ctypes.c_int(0x00F8BD38)
+        dwmapi.DwmSetWindowAttribute(hwnd, 36, ctypes.byref(text_color), ctypes.sizeof(text_color))
+
+        border_color = ctypes.c_int(0x005F3A1E)
+        dwmapi.DwmSetWindowAttribute(hwnd, 34, ctypes.byref(border_color), ctypes.sizeof(border_color))
+    except Exception:
+        pass
+
 
 def main():
     # 1. Controlla se l'app è già in esecuzione
     if not check_single_instance():
         focus_existing_instance()
-        # Attende 200ms per permettere all'animazione di ripristino di Windows di finire prima di calcolare il centro
         time.sleep(0.2)
         show_already_running_warning()
         sys.exit(0)
@@ -207,8 +224,10 @@ def main():
         user32 = ctypes.windll.user32
         hwnd = None
         while not hwnd:
-            time.sleep(0.5)
+            time.sleep(0.1)
             hwnd = user32.FindWindowW(None, "AeroGlass Nav - Flight Planner & Moving Map")
+
+        apply_aeroglass_titlebar(hwnd)
 
         while True:
             time.sleep(0.4)
@@ -224,7 +243,7 @@ def main():
                 rect = wintypes.RECT()
                 if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
                     continue
-                
+
                 cur_w = rect.right - rect.left
                 cur_h = rect.bottom - rect.top
 
@@ -234,7 +253,7 @@ def main():
                 if user32.GetMonitorInfoW(hmon, ctypes.byref(mi)):
                     mw = mi.rcMonitor.right - mi.rcMonitor.left
                     mh = mi.rcMonitor.bottom - mi.rcMonitor.top
-                    
+
                     target_w = int(mw * 0.8)
                     target_h = int(mh * 0.8)
 
