@@ -41,11 +41,9 @@ class TelemetryManager:
     def _safe_disconnect(self):
         with self._lock:
             self.connected = False
-            self._last_meta_time = 0.0
             self.aq = None
             if self.sm is not None:
                 try:
-                    self.sm.quit = 1
                     self.sm.exit()
                 except Exception:
                     pass
@@ -65,32 +63,38 @@ class TelemetryManager:
         if not SIMCONNECT_AVAILABLE:
             return False
         self._safe_disconnect()
-        with self._lock:
-            try:
-                self.sm = SimConnect()
-                self.aq = AircraftRequests(self.sm, _time=1000)
-                self.connected = True
-                self._fail_count = 0
+        try:
+            # Tentativo di connessione pulita a SimConnect
+            new_sm = SimConnect()
+            new_aq = AircraftRequests(new_sm, _time=500)
+            
+            # Test rapido di lettura
+            test_lat = new_aq.get("PLANE_LATITUDE")
+            if test_lat is not None:
+                with self._lock:
+                    self.sm = new_sm
+                    self.aq = new_aq
+                    self.connected = True
+                    self._fail_count = 0
                 return True
-            except Exception:
-                self.sm = None
-                self.aq = None
-                self.connected = False
-                return False
+        except Exception as e:
+            print(DebugSimConnect := f"Errore connessione SimConnect: {e}")
+        
+        self._safe_disconnect()
+        return False
 
     def _poll_loop(self):
         while self._running:
             if not self.connected:
                 if not self._try_connect():
                     self._set_demo_state()
-                    time.sleep(5.0)
+                    time.sleep(3.0)
                     continue
 
             try:
                 with self._lock:
                     if not self.aq:
-                        raise RuntimeError("SimConnect non attivo")
-
+                        raise RuntimeError("AircraftRequests non disponibile")
                     lat = self.aq.get("PLANE_LATITUDE")
                     lon = self.aq.get("PLANE_LONGITUDE")
 
@@ -99,13 +103,7 @@ class TelemetryManager:
                     if self._fail_count >= 10:
                         self._safe_disconnect()
                         self._set_demo_state()
-                    time.sleep(1.5)
-                    continue
-
-                if (abs(float(lat)) < 0.01 and abs(float(lon)) < 0.01) or (abs(float(lat)) < 0.01 and abs(float(lon) - 90.0) < 0.05):
-                    self._last_meta_time = 0.0
-                    self._set_demo_state()
-                    time.sleep(2.5)
+                    time.sleep(1.0)
                     continue
 
                 self._fail_count = 0
@@ -117,9 +115,10 @@ class TelemetryManager:
                     hdg_true = self.aq.get("PLANE_HEADING_DEGREES_TRUE")
 
                     now = time.time()
-                    if (now - self._last_meta_time) >= 12.0 or self._cached_title == "MSFS 2024":
+                    if (now - self._last_meta_time) >= 10.0:
                         self._last_meta_time = now
-                        title_str = self._clean_sim_string(self.aq.get("TITLE"), max_len=42)
+                        title_raw = self.aq.get("TITLE")
+                        title_str = self._clean_sim_string(title_raw, max_len=42)
                         if title_str:
                             self._cached_title = title_str
 
@@ -137,7 +136,7 @@ class TelemetryManager:
                 self._data = {
                     "connected": True,
                     "mode": "LIVE",
-                    "aircraft": self._cached_title,
+                    "aircraft": self._cached_title or "MSFS 2024",
                     "lat": round(float(lat), 6),
                     "lon": round(float(lon), 6),
                     "alt_ft": f"{alt_val} ft",
@@ -146,22 +145,25 @@ class TelemetryManager:
                     "hdg_true": hdg_true_deg
                 }
 
-                time.sleep(1.2)
+                time.sleep(1.0)
 
-            except Exception:
+            except Exception as ex:
+                print(f"Errore nel polling telemetria: {ex}")
                 self._fail_count += 1
                 if self._fail_count >= 5:
                     self._safe_disconnect()
                     self._set_demo_state()
-                time.sleep(2.5)
+                time.sleep(2.0)
 
     def _set_demo_state(self):
-        self._data["connected"] = False
-        self._data["mode"] = "DEMO"
-        self._data["aircraft"] = "MSFS 2024 (DEMO)"
+        with self._lock:
+            self._data["connected"] = False
+            self._data["mode"] = "DEMO"
+            self._data["aircraft"] = "MSFS 2024 (DEMO)"
 
     def get_data(self):
-        return dict(self._data)
+        with self._lock:
+            return dict(self._data)
 
     def shutdown(self):
         self._running = False
