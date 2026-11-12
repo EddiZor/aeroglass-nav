@@ -18,6 +18,176 @@ if (!window.pywebview && window.location.protocol.startsWith('http')) {
     window.pywebview = { api: efbApiProxy, isNetworkEfb: true };
 }
 
+// --- MODALITÀ NOTTURNA DEDICATA & SWITCH RAPIDO (☀️ GIORNO / 🌙 DARK / 🌑 NOTTE) ---
+let currentThemeMode = localStorage.getItem('aeroglass_theme_mode') || 'dark';
+
+function injectThemeModeStyles() {
+    if (document.getElementById('aeroglassThemeStyles')) return;
+    const style = document.createElement('style');
+    style.id = 'aeroglassThemeStyles';
+    style.textContent = `
+        /* 🌑 MODALITÀ NOTTE PROFONDA (ANTI-ABBAGLIAMENTO COCKPIT / STANZA BUIA) */
+        body.theme-night {
+            --bg-dark: #02050b;
+            --glass-bg: rgba(4, 8, 16, 0.94);
+            --glass-border: rgba(56, 189, 248, 0.16);
+            --text-main: #cbd5e1;
+            --text-muted: #64748b;
+        }
+        body.theme-night .glass-panel,
+        body.theme-night #sidebarPanel,
+        body.theme-night #elevationDrawer,
+        body.theme-night .top-btn,
+        body.theme-night .telemetry-bar,
+        body.theme-night #bottomInfoBar {
+            background: rgba(4, 8, 16, 0.94) !important;
+            border-color: rgba(56, 189, 248, 0.16) !important;
+            color: #cbd5e1 !important;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.85) !important;
+        }
+        body.theme-night .fpl-card,
+        body.theme-night .glass-input {
+            background: rgba(9, 14, 26, 0.92) !important;
+            color: #cbd5e1 !important;
+            border-color: rgba(71, 85, 105, 0.3) !important;
+        }
+        /* Oscura automaticamente anche le mappe chiare (VFR Topo, High IFR) lasciando nitide rotte e icone */
+        body.theme-night .leaflet-tile-pane {
+            filter: brightness(0.60) contrast(1.12) saturate(0.82) !important;
+            transition: filter 0.25s ease;
+        }
+        body.theme-night .leaflet-marker-pane,
+        body.theme-night .leaflet-overlay-pane {
+            filter: brightness(0.90);
+        }
+
+        /* ☀️ MODALITÀ GIORNO (DAY MODE AD ALTO CONTRASTO STILE NAVIGRAPH DAY) */
+        body.theme-day {
+            --bg-dark: #e2e8f0;
+            --glass-bg: rgba(248, 250, 252, 0.94);
+            --glass-border: rgba(15, 23, 42, 0.18);
+            --text-main: #0f172a;
+            --text-muted: #475569;
+        }
+        body.theme-day .glass-panel,
+        body.theme-day #sidebarPanel,
+        body.theme-day #elevationDrawer,
+        body.theme-day .top-btn,
+        body.theme-day .telemetry-bar,
+        body.theme-day #bottomInfoBar,
+        body.theme-day #sidebarToggleTab,
+        body.theme-day #drawerToggleTab {
+            background: rgba(248, 250, 252, 0.94) !important;
+            border-color: rgba(15, 23, 42, 0.18) !important;
+            color: #0f172a !important;
+            box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12) !important;
+        }
+        body.theme-day .sidebar-section-title,
+        body.theme-day .telemetry-label,
+        body.theme-day #vnavText {
+            color: #334155 !important;
+        }
+        body.theme-day .telemetry-val {
+            color: #0284c7 !important;
+        }
+        body.theme-day .fpl-card {
+            background: rgba(255, 255, 255, 0.96) !important;
+            border-color: rgba(15, 23, 42, 0.15) !important;
+            color: #0f172a !important;
+        }
+        body.theme-day .glass-input,
+        body.theme-day select.top-btn {
+            background: #ffffff !important;
+            color: #0f172a !important;
+            border-color: rgba(15, 23, 42, 0.22) !important;
+        }
+        body.theme-day .leaflet-tile-pane {
+            filter: brightness(1.04) contrast(1.02) !important;
+            transition: filter 0.25s ease;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+function ensureThemeToggleButton() {
+    if (document.getElementById('btnThemeMode')) return;
+    const pillsGroup = document.querySelector('.top-pills-group');
+    if (!pillsGroup) return;
+
+    const btn = document.createElement('button');
+    btn.id = 'btnThemeMode';
+    btn.className = 'top-btn';
+    btn.onclick = toggleThemeMode;
+    btn.style.minWidth = '88px';
+    btn.style.justifyContent = 'center';
+
+    // Inserisce lo switch nell'angolo destro dei controlli barra strumenti (accanto allo stile mappa)
+    const mapSelect = document.getElementById('mapStyleSelect');
+    if (mapSelect && mapSelect.parentNode === pillsGroup) {
+        pillsGroup.insertBefore(btn, mapSelect);
+    } else {
+        pillsGroup.appendChild(btn);
+    }
+    updateThemeButtonUI();
+}
+
+function updateThemeButtonUI() {
+    const btn = document.getElementById('btnThemeMode');
+    if (!btn) return;
+    const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+
+    if (currentThemeMode === 'night') {
+        btn.innerHTML = isEn ? '🌑 <span>Night</span>' : '🌑 <span>Notte</span>';
+        btn.style.borderColor = 'rgba(251, 191, 36, 0.55)';
+        btn.style.color = '#fbbf24';
+        btn.title = isEn
+            ? 'Dedicated Night Mode active (Anti-Glare) - Click for Day Mode'
+            : 'Modalità Notte Profonda attiva (Anti-Abbagliamento) - Clicca per Giorno';
+    } else if (currentThemeMode === 'day') {
+        btn.innerHTML = isEn ? '☀️ <span>Day</span>' : '☀️ <span>Giorno</span>';
+        btn.style.borderColor = 'rgba(2, 132, 199, 0.55)';
+        btn.style.color = '#0284c7';
+        btn.title = isEn
+            ? 'Day Mode active - Click for Dark Cockpit'
+            : 'Modalità Giorno attiva - Clicca per Dark Cockpit';
+    } else {
+        btn.innerHTML = isEn ? '🌙 <span>Dark</span>' : '🌙 <span>Dark</span>';
+        btn.style.borderColor = 'rgba(56, 189, 248, 0.45)';
+        btn.style.color = '#38bdf8';
+        btn.title = isEn
+            ? 'Standard Dark Cockpit - Click for Dedicated Night Dimmer'
+            : 'Dark Cockpit standard - Clicca per Modalità Notte Profonda';
+    }
+}
+
+async function applyThemeMode(mode, persist = true) {
+    if (!['dark', 'night', 'day'].includes(mode)) mode = 'dark';
+    currentThemeMode = mode;
+
+    injectThemeModeStyles();
+    ensureThemeToggleButton();
+
+    document.body.classList.remove('theme-dark', 'theme-night', 'theme-day');
+    document.body.classList.add(`theme-${mode}`);
+    updateThemeButtonUI();
+
+    try {
+        localStorage.setItem('aeroglass_theme_mode', mode);
+    } catch (e) {}
+
+    if (persist && window.pywebview && window.pywebview.api && window.pywebview.api.save_setting) {
+        try {
+            await window.pywebview.api.save_setting('theme_mode', mode);
+        } catch (e) {}
+    }
+}
+
+function toggleThemeMode() {
+    const order = ['dark', 'night', 'day'];
+    const nextIdx = (order.indexOf(currentThemeMode) + 1) % order.length;
+    applyThemeMode(order[nextIdx], true);
+}
+
 // --- GESTIONE MODALITÀ EFB DI RETE (QR CODE & SYNC PC <-> TABLET) ---
 function updateEfbTopBarBadge(efbInfo) {
     if (!efbInfo || !efbInfo.ip || !efbInfo.port) return;
@@ -435,7 +605,6 @@ function initTouchRubberBanding() {
             const p1 = map.latLngToContainerPoint([Number(flightPlan[i].lat), Number(flightPlan[i].lon)]);
             const p2 = map.latLngToContainerPoint([Number(flightPlan[i + 1].lat), Number(flightPlan[i + 1].lon)]);
 
-            // Lascia liberi i tocchi diretti sugli aeroporti di partenza e arrivo
             if (i === 0 && pt.distanceTo(p1) < 22) continue;
             if (i === flightPlan.length - 2 && pt.distanceTo(p2) < 22) continue;
 
@@ -524,7 +693,6 @@ function initTouchRubberBanding() {
 
         if (!state.hasDragged || !state.currentLatLng) return;
 
-        // Salva lo stato corrente nello stack Undo (Ctrl+Z / pulsante Ripristina)
         if (typeof pushFlightPlanUndoState === 'function') {
             pushFlightPlanUndoState();
         } else if (typeof fplUndoStack !== 'undefined' && Array.isArray(fplUndoStack)) {
@@ -705,6 +873,7 @@ function applyTranslations() {
     if (btnNavaids) btnNavaids.innerText = showNavaids ? t.btnNavaids : t.btnNavaidsOff;
 
     setFollowState(followState);
+    updateThemeButtonUI();
 
     const vnavText = document.getElementById('vnavText');
     if (vnavText && (!flightPlan || flightPlan.length === 0)) {
@@ -780,6 +949,7 @@ function initDragAndDropPln() {
 // --- INIZIALIZZAZIONE APPLICAZIONE E DATI PYWEBVIEW / EFB ---
 async function initAeroGlassApp() {
     installTodAndTouchHooks();
+    applyThemeMode(currentThemeMode, false);
 
     if (!window.pywebview || !window.pywebview.api || typeof window.pywebview.api.get_initial_data !== 'function') {
         return;
@@ -793,6 +963,13 @@ async function initAeroGlassApp() {
     updateMapScale();
 
     try {
+        if (window.pywebview.api.get_setting) {
+            const themeRes = await window.pywebview.api.get_setting('theme_mode');
+            if (themeRes && themeRes.success && themeRes.value) {
+                await applyThemeMode(themeRes.value, false);
+            }
+        }
+
         const initData = await window.pywebview.api.get_initial_data();
         if (initData) {
             if (initData.fpl_ts) {
@@ -846,12 +1023,12 @@ document.addEventListener('DOMContentLoaded', () => {
     initSidebarResizer();
     initDragAndDropPln();
     installTodAndTouchHooks();
+    applyThemeMode(currentThemeMode, false);
     updateFlightInfoBar(43.5, 12.0);
     setFollowState(followState);
     renderNavAids(vorsData, ilsData);
     updateMapScale();
 
-    // Aggiorna le coordinate al passaggio del mouse quando non connesso a MSFS
     if (typeof map !== 'undefined' && map) {
         map.on('mousemove', (e) => {
             const coordsEl = document.getElementById('infoCoords');
