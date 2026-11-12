@@ -3,6 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta id="aeroPwaMeta" name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#090d16">
     <title>AeroGlass Nav - Flight Planner & Moving Map</title>
     <link rel="icon" type="image/x-icon" href="AeroGlass-icon.ico">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -269,13 +273,11 @@
 
     <!-- Contenitore in basso a destra per Info Bar e Barra di Scala -->
     <div id="bottomInfoBar" style="position: absolute; right: 16px; bottom: 134px; z-index: 500; display: flex; align-items: center; gap: 8px; white-space: nowrap; transition: bottom 0.25s ease;">
-        <!-- Barra di Scala in Miglia Nautiche (NM) -->
         <div class="glass-panel" id="scaleBarBox" style="padding: 5px 10px; border-radius: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;">
             <span id="scaleText" style="font-size: 10px; font-family: Consolas, monospace; font-weight: 700; color: var(--cyan);">-- NM</span>
             <div style="width: 80px; height: 5px; border-left: 1px solid var(--cyan); border-right: 1px solid var(--cyan); border-bottom: 1px solid var(--cyan);"></div>
         </div>
 
-        <!-- Barra Info Data/UTC/Coordinate -->
         <div class="flight-info-bar glass-panel" style="position: static; padding: 5px 12px; border-radius: 6px; font-size: 11px; font-family: Consolas, monospace; color: var(--cyan); display: flex; align-items: center; gap: 8px; white-space: nowrap;">
             <span id="infoDate"></span>
             <span class="info-sep">|</span>
@@ -287,11 +289,9 @@
         </div>
     </div>
 
-    </div>
-
     <!-- Cassetto Altimetrico VNAV -->
     <div id="elevationDrawer" class="elevation-drawer glass-panel">
-            <div class="elevation-header" onclick="toggleDrawer()">
+        <div class="elevation-header" onclick="toggleDrawer()">
             <span id="vnavText" class="vnav-title-text">NESSUN PIANO DI VOLO ATTIVO</span>
             <div class="elevation-toggle">
                 <span id="drawerArrow">▼</span>
@@ -315,14 +315,16 @@
             </svg>
         </div>
     </div>
-      
-        <!-- APP MODULES -->
-        <script src="js/state.js"></script>
-        <script src="js/map.js"></script>
-        <script src="js/vnav.js"></script>
-        <script src="js/flightplan.js"></script>
-        <script src="js/telemetry.js"></script>
-        <script src="app.js"></script>
 
+    <!-- APP MODULES -->
+    <script src="js/state.js"></script>
+    <script src="js/map.js"></script>
+    <script src="js/vnav.js"></script>
+    <script src="js/flightplan.js"></script>
+    <script src="js/logbook_efb.js"></script>
+    <script src="js/perf.js"></script>
+    <script src="js/demo.js"></script>
+    <script src="js/telemetry.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>
