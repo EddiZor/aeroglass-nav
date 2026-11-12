@@ -88,6 +88,67 @@ function injectThemeModeStyles() {
             transform: translateY(0);
         }
 
+        /* --- STILI MODALITÀ DIMOSTRATIVA GUIDATA (FUMETTI & SPOTLIGHT) --- */
+        #aeroDemoSpotlight {
+            position: fixed;
+            z-index: 100004;
+            pointer-events: none;
+            border: 2.5px solid #38bdf8;
+            border-radius: 10px;
+            box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.22), 0 0 28px rgba(56, 189, 248, 0.85);
+            transition: all 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+            animation: aeroPulseSpot 1.6s infinite alternate;
+            display: none;
+        }
+        @keyframes aeroPulseSpot {
+            0% { box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2), 0 0 18px rgba(56, 189, 248, 0.65); }
+            100% { box-shadow: 0 0 0 8px rgba(52, 211, 153, 0.32), 0 0 34px rgba(56, 189, 248, 0.95); }
+        }
+        #aeroDemoBubble {
+            position: fixed;
+            z-index: 100005;
+            width: 365px;
+            max-width: calc(100vw - 24px);
+            background: linear-gradient(145deg, rgba(11, 18, 32, 0.98), rgba(19, 30, 52, 0.97));
+            border: 1.5px solid #38bdf8;
+            border-radius: 14px;
+            padding: 13px 15px;
+            color: #f8fafc;
+            box-shadow: 0 14px 38px rgba(0, 0, 0, 0.85), 0 0 22px rgba(56, 189, 248, 0.3);
+            backdrop-filter: blur(12px);
+            transition: top 0.32s cubic-bezier(0.22, 1, 0.36, 1), left 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+            display: none;
+        }
+        #aeroDemoBubbleArrow {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background: #0f192d;
+            border-left: 1.5px solid #38bdf8;
+            border-top: 1.5px solid #38bdf8;
+            transform: rotate(45deg);
+        }
+        .demo-ctrl-btn {
+            background: rgba(30, 41, 59, 0.85);
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            color: #f8fafc;
+            border-radius: 6px;
+            padding: 4px 9px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .demo-ctrl-btn:hover {
+            border-color: #38bdf8;
+            background: rgba(56, 189, 248, 0.18);
+        }
+        .demo-ctrl-btn.primary {
+            background: rgba(56, 189, 248, 0.22);
+            border-color: #38bdf8;
+            color: #38bdf8;
+        }
+
         /* 🌑 MODALITÀ NOTTE PROFONDA (ANTI-ABBAGLIAMENTO COCKPIT / STANZA BUIA) */
         body.theme-night {
             --bg-dark: #02050b;
@@ -250,8 +311,8 @@ const SYNTHETIC_TOOLTIPS = {
         en: "🌙 Theme Mode: Switch between Dark Cockpit, Night Dimmer and Day Mode"
     },
     btnToggleTooltips: {
-        it: "💬 Tooltip: Attiva o disattiva i suggerimenti rapidi sui pulsanti",
-        en: "💬 Tooltips: Enable or disable quick hover descriptions on buttons"
+        it: "💬 Tooltip: Attiva o disattiva i suggerimenti rapidi sui pulsanti (F1 = Tour Demo)",
+        en: "💬 Tooltips: Enable or disable quick hover descriptions (F1 = Demo Tour)"
     },
     mapStyleSelect: {
         it: "🗺️ Cartografia: Cambia lo sfondo mappa (IFR Dark, VFR Topo, Satellite, High IFR)",
@@ -369,7 +430,6 @@ async function applyTooltipsMode(enabled, persist = true) {
         tipBox.classList.remove('visible');
     }
 
-    // Rimuove gli attributi title nativi per evitare doppi tooltip o comparsa quando OFF
     document.querySelectorAll('[title]').forEach(el => {
         const t = el.getAttribute('title');
         if (t) el.dataset.origTitle = t;
@@ -422,7 +482,7 @@ function initSyntheticTooltipsEngine() {
     };
 
     document.addEventListener('mouseover', (e) => {
-        if (!tooltipsEnabled) {
+        if (!tooltipsEnabled || demoTourState.active) {
             tipBox.classList.remove('visible');
             return;
         }
@@ -445,7 +505,7 @@ function initSyntheticTooltipsEngine() {
     });
 
     document.addEventListener('mousemove', (e) => {
-        if (activeEl && tooltipsEnabled) {
+        if (activeEl && tooltipsEnabled && !demoTourState.active) {
             positionTooltip(e);
         }
     });
@@ -459,6 +519,493 @@ function initSyntheticTooltipsEngine() {
 
     document.addEventListener('mousedown', () => tipBox.classList.remove('visible'));
     document.addEventListener('touchstart', () => tipBox.classList.remove('visible'), { passive: true });
+}
+
+// --- MODALITÀ DIMOSTRATIVA INTERATTIVA (TASTO F1 / ALT+D: LIRF -> EGLL + FUMETTI) ---
+const DEMO_LIRF_EGLL_FPL = [
+    {
+        ident: "LIRF",
+        name: "Roma Fiumicino Leonardo da Vinci",
+        lat: 41.8003,
+        lon: 12.2389,
+        alt_ft: 15,
+        type: "DEP",
+        rwy: "25",
+        proc_type: "SID",
+        proc_name: "GITOD 1A (RWY 25)",
+        metar: "LIRF 121250Z 24010KT 9999 FEW030 19/11 Q1018"
+    },
+    {
+        ident: "GITOD",
+        name: "GITOD SID Exit",
+        lat: 42.2500,
+        lon: 11.7500,
+        alt_ft: 14000,
+        type: "WPT",
+        proc_type: "SID",
+        proc_name: "GITOD 1A"
+    },
+    {
+        ident: "ELB",
+        name: "Elba VOR/DME",
+        lat: 42.7306,
+        lon: 10.3956,
+        alt_ft: 26000,
+        type: "VOR",
+        proc_type: "ENR",
+        proc_name: "UM729"
+    },
+    {
+        ident: "GEN",
+        name: "Genova VOR/DME",
+        lat: 44.4144,
+        lon: 8.8475,
+        alt_ft: 34000,
+        type: "VOR",
+        proc_type: "ENR",
+        proc_name: "UM729"
+    },
+    {
+        ident: "TOR",
+        name: "Torino Caselle VOR (Alpi Crossing)",
+        lat: 45.2211,
+        lon: 7.6492,
+        alt_ft: 36000,
+        type: "VOR",
+        proc_type: "ENR",
+        proc_name: "UL613"
+    },
+    {
+        ident: "PAS",
+        name: "Passeiry VOR (Geneva)",
+        lat: 46.1636,
+        lon: 6.0022,
+        alt_ft: 36000,
+        type: "VOR",
+        proc_type: "ENR",
+        proc_name: "UL613"
+    },
+    {
+        ident: "DIDOR",
+        name: "DIDOR Airway Intersection",
+        lat: 48.7533,
+        lon: 2.8011,
+        alt_ft: 36000,
+        type: "WPT",
+        proc_type: "ENR",
+        proc_name: "UT421"
+    },
+    {
+        ident: "ABBEV",
+        name: "Abbeville STAR Entry",
+        lat: 50.1356,
+        lon: 1.8547,
+        alt_ft: 26000,
+        type: "WPT",
+        proc_type: "STAR",
+        proc_name: "BIG 4B"
+    },
+    {
+        ident: "BIG",
+        name: "Biggin Hill VOR (IAF)",
+        lat: 51.3308,
+        lon: 0.0347,
+        alt_ft: 9000,
+        type: "VOR",
+        proc_type: "STAR",
+        proc_name: "BIG 4B"
+    },
+    {
+        ident: "EGLL",
+        name: "London Heathrow Intl",
+        lat: 51.4700,
+        lon: -0.4543,
+        alt_ft: 83,
+        type: "DEST",
+        rwy: "27L",
+        proc_type: "APPR",
+        proc_name: "ILS RWY 27L",
+        metar: "EGLL 121250Z 26014KT 9999 SCT035 12/06 Q1014"
+    }
+];
+
+const DEMO_LIRF_EGLL_ALT = {
+    ident: "EGKK",
+    name: "London Gatwick (Alternato)",
+    lat: 51.1481,
+    lon: -0.1903
+};
+
+let demoTourState = {
+    active: false,
+    stepIndex: 0,
+    autoPlay: true,
+    timerId: null,
+    backupFpl: null,
+    backupAlt: null,
+    backupPreset: null
+};
+
+const DEMO_TOUR_STEPS = [
+    {
+        title: "🎬 1/9 • Tour Dimostrativo: LIRF ➔ EGLL",
+        text: "È stato caricato il piano di volo IFR dimostrativo da <strong>Roma Fiumicino (LIRF)</strong> a <strong>Londra Heathrow (EGLL)</strong> con alternato <strong>Gatwick (EGKK)</strong>: nota i colori dedicati per <strong>SID (verde)</strong>, <strong>Crociera (magenta)</strong>, <strong>STAR (ambra)</strong> e il <strong>Cono ILS RWY 27L (ciano)</strong>.",
+        targetSelector: "#map",
+        centerBubble: true,
+        onEnter: () => {
+            closeAllModalsForDemo();
+            if (typeof map !== 'undefined' && map) {
+                map.flyToBounds([[41.5, -1.0], [51.8, 12.8]], { padding: [50, 50], duration: 1.0 });
+            }
+        }
+    },
+    {
+        title: "📋 2/9 • Gestione Piano di Volo, .PLN & SimBrief",
+        text: "Dal pannello laterale puoi creare una rotta da zero (<strong>➕ Crea</strong>), importare/esportare file <strong>.pln</strong> per MSFS 2024 (anche in Drag & Drop), scaricare l'ultimo OFP da <strong>SimBrief</strong> e modificare le quote di ogni Waypoint.",
+        targetSelector: "#sidebarPanel",
+        preferredPos: "right",
+        onEnter: () => {
+            closeAllModalsForDemo();
+            if (typeof sidebarOpen !== 'undefined' && !sidebarOpen) toggleSidebar();
+        }
+    },
+    {
+        title: "🧲 3/9 • Rubber Banding Elastico & Ripristina (Ctrl+Z)",
+        text: "Trascinando con il mouse (o con il dito sul tablet) qualsiasi segmento della rotta sulla mappa, crei o sposti Waypoint in tempo reale con <strong>aggancio magnetico (SNAP)</strong> su aeroporti e VOR. Con <strong>Ctrl+Z</strong> annulli ogni modifica.",
+        targetSelector: "#fplSectionTitle",
+        preferredPos: "right",
+        onEnter: () => {
+            closeAllModalsForDemo();
+            if (typeof map !== 'undefined' && map) {
+                map.flyTo([45.2211, 7.6492], 7, { duration: 0.9 });
+            }
+        }
+    },
+    {
+        title: "📉 4/9 • Profilo Altimetrico VNAV & Top of Descent (3°)",
+        text: "Il cassetto altimetrico mostra l'orografia reale lungo la rotta (qui vedi i rilievi delle <strong>Alpi</strong> sotto FL360) e calcola automaticamente il <strong>Top of Descent (ToD -108NM)</strong> su sentiero standard di 3° con la velocità verticale richiesta.",
+        targetSelector: "#elevationDrawer",
+        preferredPos: "top",
+        onEnter: () => {
+            closeAllModalsForDemo();
+            if (typeof drawerOpen !== 'undefined' && !drawerOpen) toggleDrawer();
+            if (typeof map !== 'undefined' && map) {
+                map.flyTo([50.1356, 1.8547], 7, { duration: 0.9 });
+            }
+        }
+    },
+    {
+        title: "📊 5/9 • Tabella NavLog Operativa",
+        text: "Il modulo <strong>NavLog</strong> riepiloga tutte le tratte da LIRF a EGLL con procedure, quote, prue, distanze parziali/residue, tempi ETE/ETA UTC e consumo progressivo, esportabili in <strong>CSV</strong> o negli appunti.",
+        targetSelector: "#btnNavlogTop",
+        preferredPos: "bottom",
+        onEnter: () => {
+            closeAllModalsForDemo();
+            openNavlogModal();
+        }
+    },
+    {
+        title: "⛽ 6/9 • Calcolatore Carburante & Performance",
+        text: "Il calcolatore pre-volo (impostato qui su <strong>Airbus A320neo</strong> per la LIRF-EGLL) stima <strong>Taxi, Trip Fuel, Riserva, Block Fuel</strong> in Gal/Kg/Litri e verifica con semaforo se il carburante a bordo è sufficiente.",
+        targetSelector: "#btnFuelPerfTop",
+        preferredPos: "bottom",
+        onEnter: () => {
+            closeAllModalsForDemo();
+            onFuelPresetChange('a320');
+            openFuelPerfModal();
+        }
+    },
+    {
+        title: "📒 7/9 • Logbook Automatico SQLite",
+        text: "Quando atterri in MSFS 2024, AeroGlass Nav rileva il touchdown e registra automaticamente nel database <strong>SQLite</strong> data, aeromobile, partenza, destinazione, miglia volate e carburante consumato.",
+        targetSelector: "#btnLogbook",
+        preferredPos: "bottom",
+        onEnter: () => {
+            closeAllModalsForDemo();
+            if (typeof openFlightHistoryModal === 'function') openFlightHistoryModal();
+        }
+    },
+    {
+        title: "📱 8/9 • Modalità EFB di Rete Wi-Fi (PC ⇄ Tablet)",
+        text: "Inquadrando questo <strong>QR Code</strong> col tablet, apri l'EFB via Wi-Fi sulla porta dedicata <strong>8339</strong>: sia il PC che il tablet restano operativi e sincronizzano rotta, modifiche touch e telemetria in tempo reale.",
+        targetSelector: "#btnEfbNet",
+        preferredPos: "bottom",
+        onEnter: () => {
+            closeAllModalsForDemo();
+            openEfbNetworkModal();
+        }
+    },
+    {
+        title: "🌙 9/9 • Telemetria SimConnect, Temi Notte/Giorno & Info",
+        text: "In alto a destra trovi la <strong>Telemetria SimConnect</strong>, il selettore <strong>Mappa Libera / Track Up</strong>, il filtro <strong>Notte Anti-Abbagliamento / Giorno</strong> e i <strong>Tooltip (Info ON/OFF)</strong>. Premi <em>Termina Demo</em> per concludere!",
+        targetSelector: "#btnThemeMode",
+        preferredPos: "bottom",
+        onEnter: () => {
+            closeAllModalsForDemo();
+            if (typeof map !== 'undefined' && map) {
+                map.flyToBounds([[41.5, -1.0], [51.8, 12.8]], { padding: [50, 50], duration: 0.9 });
+            }
+        }
+    }
+];
+
+function closeAllModalsForDemo() {
+    ['navlogModal', 'fuelPerfModal', 'efbNetworkModal', 'flightHistoryModal', 'createFplModal'].forEach(id => {
+        const m = document.getElementById(id);
+        if (m) m.style.display = 'none';
+    });
+}
+
+function ensureDemoTourElements() {
+    if (!document.getElementById('aeroDemoSpotlight')) {
+        const spot = document.createElement('div');
+        spot.id = 'aeroDemoSpotlight';
+        document.body.appendChild(spot);
+    }
+    if (!document.getElementById('aeroDemoBubble')) {
+        const bub = document.createElement('div');
+        bub.id = 'aeroDemoBubble';
+        bub.innerHTML = `
+            <div id="aeroDemoBubbleArrow"></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                <span id="demoBubbleTitle" style="font-weight:800;font-size:12.5px;color:#38bdf8;"></span>
+                <span style="cursor:pointer;color:#94a3b8;font-size:14px;" onclick="stopInteractiveDemoTour(true)" title="Chiudi Demo (Esc)">✕</span>
+            </div>
+            <div id="demoBubbleBody" style="font-size:11.5px;line-height:1.5;color:#e2e8f0;margin-bottom:10px;"></div>
+            <div style="height:3px;background:rgba(148,163,184,0.2);border-radius:3px;overflow:hidden;margin-bottom:9px;">
+                <div id="demoProgressBar" style="height:100%;width:11%;background:linear-gradient(90deg,#38bdf8,#34d399);transition:width 0.3s ease;"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+                <div style="display:flex;gap:5px;">
+                    <button class="demo-ctrl-btn" onclick="prevDemoTourStep()">◀ Prec</button>
+                    <button id="btnDemoPause" class="demo-ctrl-btn" onclick="toggleDemoAutoPlay()">⏸️ Pausa</button>
+                    <button id="btnDemoNext" class="demo-ctrl-btn primary" onclick="nextDemoTourStep()">Succ ▶</button>
+                </div>
+                <div style="display:flex;gap:5px;">
+                    <button class="demo-ctrl-btn" style="color:#fbbf24;border-color:rgba(251,191,36,0.4);" onclick="stopInteractiveDemoTour(false)" title="Chiudi il tour e mantieni il piano LIRF-EGLL">Tenere LIRF-EGLL</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(bub);
+    }
+}
+
+function positionDemoCallout(step) {
+    const spot = document.getElementById('aeroDemoSpotlight');
+    const bub = document.getElementById('aeroDemoBubble');
+    const arrow = document.getElementById('aeroDemoBubbleArrow');
+    if (!spot || !bub || !arrow) return;
+
+    const target = step.targetSelector ? document.querySelector(step.targetSelector) : null;
+    if (!target || step.centerBubble) {
+        spot.style.display = 'none';
+        arrow.style.display = 'none';
+        bub.style.display = 'block';
+        bub.style.left = '50%';
+        bub.style.top = '92px';
+        bub.style.transform = 'translateX(-50%)';
+        return;
+    }
+
+    bub.style.transform = 'none';
+    const rect = target.getBoundingClientRect();
+    spot.style.display = 'block';
+    spot.style.left = `${Math.max(2, rect.left - 5)}px`;
+    spot.style.top = `${Math.max(2, rect.top - 5)}px`;
+    spot.style.width = `${rect.width + 10}px`;
+    spot.style.height = `${rect.height + 10}px`;
+
+    bub.style.display = 'block';
+    const bRect = bub.getBoundingClientRect();
+    const pad = 16;
+    let top = 80;
+    let left = 80;
+    arrow.style.display = 'block';
+    arrow.style.top = '';
+    arrow.style.bottom = '';
+    arrow.style.left = '';
+    arrow.style.right = '';
+
+    const pos = step.preferredPos || 'bottom';
+    if (pos === 'right') {
+        left = Math.min(window.innerWidth - bRect.width - pad, rect.right + 18);
+        top = Math.max(pad, Math.min(window.innerHeight - bRect.height - pad, rect.top + 40));
+        arrow.style.left = '-7px';
+        arrow.style.top = '28px';
+        arrow.style.transform = 'rotate(-45deg)';
+    } else if (pos === 'top') {
+        left = Math.max(pad, Math.min(window.innerWidth - bRect.width - pad, rect.left + rect.width / 2 - bRect.width / 2));
+        top = Math.max(pad, rect.top - bRect.height - 18);
+        arrow.style.bottom = '-7px';
+        arrow.style.left = `${Math.min(bRect.width - 24, Math.max(18, rect.left + rect.width / 2 - left))}px`;
+        arrow.style.transform = 'rotate(225deg)';
+    } else {
+        left = Math.max(pad, Math.min(window.innerWidth - bRect.width - pad, rect.left + rect.width / 2 - bRect.width / 2));
+        top = Math.min(window.innerHeight - bRect.height - pad, rect.bottom + 16);
+        arrow.style.top = '-7px';
+        arrow.style.left = `${Math.min(bRect.width - 24, Math.max(18, rect.left + rect.width / 2 - left))}px`;
+        arrow.style.transform = 'rotate(45deg)';
+    }
+
+    bub.style.left = `${left}px`;
+    bub.style.top = `${top}px`;
+}
+
+function renderCurrentDemoStep() {
+    if (!demoTourState.active) return;
+    ensureDemoTourElements();
+
+    const idx = demoTourState.stepIndex;
+    const step = DEMO_TOUR_STEPS[idx];
+    if (!step) return;
+
+    if (typeof step.onEnter === 'function') {
+        step.onEnter();
+    }
+
+    const titleEl = document.getElementById('demoBubbleTitle');
+    const bodyEl = document.getElementById('demoBubbleBody');
+    const progEl = document.getElementById('demoProgressBar');
+    const nextBtn = document.getElementById('btnDemoNext');
+    const pauseBtn = document.getElementById('btnDemoPause');
+
+    if (titleEl) titleEl.innerHTML = step.title;
+    if (bodyEl) bodyEl.innerHTML = step.text;
+    if (progEl) progEl.style.width = `${((idx + 1) / DEMO_TOUR_STEPS.length) * 100}%`;
+    if (nextBtn) {
+        nextBtn.innerHTML = (idx === DEMO_TOUR_STEPS.length - 1) ? '✅ Fine' : 'Succ ▶';
+    }
+    if (pauseBtn) {
+        pauseBtn.innerHTML = demoTourState.autoPlay ? '⏸️ Pausa' : '▶️ Auto';
+    }
+
+    setTimeout(() => positionDemoCallout(step), 80);
+
+    if (demoTourState.timerId) clearTimeout(demoTourState.timerId);
+    if (demoTourState.autoPlay) {
+        demoTourState.timerId = setTimeout(() => {
+            if (!demoTourState.active) return;
+            if (demoTourState.stepIndex < DEMO_TOUR_STEPS.length - 1) {
+                nextDemoTourStep();
+            } else {
+                demoTourState.autoPlay = false;
+                if (pauseBtn) pauseBtn.innerHTML = '▶️ Auto';
+            }
+        }, 7000);
+    }
+}
+
+function startInteractiveDemoTour() {
+    ensureDemoTourElements();
+
+    if (!demoTourState.active) {
+        demoTourState.backupFpl = Array.isArray(flightPlan) ? JSON.parse(JSON.stringify(flightPlan)) : [];
+        demoTourState.backupAlt = (typeof currentAlternate !== 'undefined' && currentAlternate)
+            ? JSON.parse(JSON.stringify(currentAlternate))
+            : null;
+        demoTourState.backupPreset = fuelPerfConfig.preset;
+    }
+
+    demoTourState.active = true;
+    demoTourState.stepIndex = 0;
+    demoTourState.autoPlay = true;
+
+    // Carica il piano di volo dimostrativo LIRF -> EGLL
+    flightPlan = JSON.parse(JSON.stringify(DEMO_LIRF_EGLL_FPL));
+    currentAlternate = JSON.parse(JSON.stringify(DEMO_LIRF_EGLL_ALT));
+    onFuelPresetChange('a320');
+
+    if (typeof updateFlightPlanUI === 'function') {
+        updateFlightPlanUI(currentAlternate, true);
+    }
+
+    renderCurrentDemoStep();
+}
+
+function stopInteractiveDemoTour(restorePreviousRoute = true) {
+    demoTourState.active = false;
+    if (demoTourState.timerId) {
+        clearTimeout(demoTourState.timerId);
+        demoTourState.timerId = null;
+    }
+
+    const spot = document.getElementById('aeroDemoSpotlight');
+    const bub = document.getElementById('aeroDemoBubble');
+    if (spot) spot.style.display = 'none';
+    if (bub) bub.style.display = 'none';
+
+    closeAllModalsForDemo();
+
+    if (restorePreviousRoute && Array.isArray(demoTourState.backupFpl)) {
+        flightPlan = demoTourState.backupFpl;
+        currentAlternate = demoTourState.backupAlt;
+        if (demoTourState.backupPreset) onFuelPresetChange(demoTourState.backupPreset);
+        if (typeof updateFlightPlanUI === 'function') {
+            updateFlightPlanUI(currentAlternate, true);
+        }
+    }
+}
+
+function nextDemoTourStep() {
+    if (!demoTourState.active) return;
+    if (demoTourState.stepIndex < DEMO_TOUR_STEPS.length - 1) {
+        demoTourState.stepIndex++;
+        renderCurrentDemoStep();
+    } else {
+        stopInteractiveDemoTour(false);
+    }
+}
+
+function prevDemoTourStep() {
+    if (!demoTourState.active) return;
+    if (demoTourState.stepIndex > 0) {
+        demoTourState.stepIndex--;
+        renderCurrentDemoStep();
+    }
+}
+
+function toggleDemoAutoPlay() {
+    if (!demoTourState.active) return;
+    demoTourState.autoPlay = !demoTourState.autoPlay;
+    renderCurrentDemoStep();
+}
+
+function initDemoKeyboardShortcuts() {
+    if (window._aeroDemoKeysInstalled) return;
+    window._aeroDemoKeysInstalled = true;
+
+    window.addEventListener('keydown', (e) => {
+        // F1 oppure Alt+D avvia/ferma la modalità dimostrativa LIRF -> EGLL
+        if (e.key === 'F1' || (e.altKey && e.key.toLowerCase() === 'd')) {
+            e.preventDefault();
+            if (demoTourState.active) {
+                stopInteractiveDemoTour(true);
+            } else {
+                startInteractiveDemoTour();
+            }
+            return;
+        }
+
+        if (!demoTourState.active) return;
+
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            stopInteractiveDemoTour(true);
+        } else if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            nextDemoTourStep();
+        } else if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            prevDemoTourStep();
+        }
+    });
+
+    window.addEventListener('resize', () => {
+        if (demoTourState.active) {
+            const step = DEMO_TOUR_STEPS[demoTourState.stepIndex];
+            if (step) positionDemoCallout(step);
+        }
+    });
 }
 
 function ensureDrawerToggleTab() {
@@ -526,6 +1073,7 @@ async function applyThemeMode(mode, persist = true) {
     ensureTooltipToggleButton();
     ensureDrawerToggleTab();
     initSyntheticTooltipsEngine();
+    initDemoKeyboardShortcuts();
 
     document.body.classList.remove('theme-dark', 'theme-night', 'theme-day');
     document.body.classList.add(`theme-${mode}`);
@@ -595,7 +1143,6 @@ async function openEfbNetworkModal() {
         }
     }
 
-    // Aggiunge nota pratica per avviso HTTPS-First di Chrome Android se non presente
     if (!document.getElementById('efbChromeHintBox')) {
         const contentBox = modal.querySelector('.modal-content');
         if (contentBox) {
@@ -647,7 +1194,7 @@ async function savePreferredEfbPort() {
 }
 
 async function syncRemoteFlightPlanState() {
-    if (!window.pywebview || !window.pywebview.api || (typeof rubberBandState !== 'undefined' && rubberBandState) || window._touchRbActive) return;
+    if (!window.pywebview || !window.pywebview.api || (typeof rubberBandState !== 'undefined' && rubberBandState) || window._touchRbActive || demoTourState.active) return;
     try {
         const [initData, wpRes] = await Promise.all([
             window.pywebview.api.get_initial_data(),
@@ -1688,452 +2235,4 @@ function initTouchRubberBanding() {
             return;
         }
 
-        const touch = e.touches[0];
-        const pt = map.mouseEventToContainerPoint(touch);
-        if (!touchState.hasDragged && pt.distanceTo(touchState.startPt) < 8) {
-            return;
-        }
-        touchState.hasDragged = true;
-        if (e.cancelable) e.preventDefault();
-
-        const snap = findTouchSnapCandidate(pt);
-        touchState.snapTarget = snap;
-        const targetLatLng = snap ? L.latLng(snap.lat, snap.lon) : map.containerPointToLatLng(pt);
-        touchState.currentLatLng = targetLatLng;
-
-        const prevWp = touchState.mode === 'move'
-            ? flightPlan[touchState.wpIndex - 1]
-            : flightPlan[touchState.legIndex];
-        const nextWp = touchState.mode === 'move'
-            ? flightPlan[touchState.wpIndex + 1]
-            : flightPlan[touchState.legIndex + 1];
-
-        const polyCoords = [
-            [Number(prevWp.lat), Number(prevWp.lon)],
-            [targetLatLng.lat, targetLatLng.lng],
-            [Number(nextWp.lat), Number(nextWp.lon)]
-        ];
-
-        const lineColor = snap ? '#34d399' : '#38bdf8';
-        if (!previewLine) {
-            previewLine = L.polyline(polyCoords, {
-                color: lineColor,
-                weight: 4,
-                dashArray: '8, 6',
-                opacity: 0.95
-            }).addTo(map);
-        } else {
-            previewLine.setLatLngs(polyCoords);
-            previewLine.setStyle({ color: lineColor });
-        }
-
-        const badgeHtml = snap
-            ? `<div style="background:rgba(6,78,59,0.95);border:1.5px solid #34d399;color:#34d399;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;transform:translate(-50%,-145%);box-shadow:0 3px 12px rgba(0,0,0,0.6);">🧲 SNAP: ${snap.ident}</div>`
-            : `<div style="background:rgba(15,23,42,0.92);border:1.5px solid #38bdf8;color:#38bdf8;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;transform:translate(-50%,-145%);box-shadow:0 3px 12px rgba(0,0,0,0.6);">📍 ${targetLatLng.lat.toFixed(3)}, ${targetLatLng.lng.toFixed(3)}</div>`;
-
-        const badgeIcon = L.divIcon({ className: '', html: badgeHtml, iconSize: [120, 24], iconAnchor: [0, 0] });
-        if (!previewBadge) {
-            previewBadge = L.marker(targetLatLng, { icon: badgeIcon, interactive: false, zIndexOffset: 2000 }).addTo(map);
-        } else {
-            previewBadge.setLatLng(targetLatLng);
-            previewBadge.setIcon(badgeIcon);
-        }
-    }, { passive: false });
-
-    const finishTouchRubberBand = () => {
-        if (!touchState) return;
-        const state = touchState;
-        touchState = null;
-        clearTouchPreview();
-
-        if (!state.hasDragged || !state.currentLatLng) return;
-
-        if (typeof pushFlightPlanUndoState === 'function') {
-            pushFlightPlanUndoState();
-        } else if (typeof fplUndoStack !== 'undefined' && Array.isArray(fplUndoStack)) {
-            fplUndoStack.push(JSON.parse(JSON.stringify(flightPlan)));
-            if (fplUndoStack.length > 30) fplUndoStack.shift();
-            if (typeof updateUndoButtonUI === 'function') updateUndoButtonUI();
-        }
-
-        const lat = Number(state.currentLatLng.lat.toFixed(5));
-        const lon = Number(state.currentLatLng.lng.toFixed(5));
-        const snap = state.snapTarget;
-
-        if (state.mode === 'move') {
-            const wp = flightPlan[state.wpIndex];
-            if (snap) {
-                wp.ident = snap.ident;
-                wp.name = snap.name;
-                wp.lat = snap.lat;
-                wp.lon = snap.lon;
-                wp.type = snap.type;
-            } else {
-                wp.lat = lat;
-                wp.lon = lon;
-                if (typeof userWaypoints !== 'undefined' && Array.isArray(userWaypoints)) {
-                    const uwp = userWaypoints.find(u => u.ident === wp.ident);
-                    if (uwp) {
-                        uwp.lat = lat;
-                        uwp.lon = lon;
-                        if (typeof persistUserWaypoints === 'function') persistUserWaypoints();
-                    }
-                }
-            }
-        } else if (state.mode === 'insert') {
-            const prevWp = flightPlan[state.legIndex];
-            const nextWp = flightPlan[state.legIndex + 1];
-            const interpAlt = Math.max(
-                1000,
-                Math.round(((Number(prevWp.alt_ft || 5000) + Number(nextWp.alt_ft || 5000)) / 2) / 100) * 100
-            );
-
-            let newWp = null;
-            if (snap) {
-                newWp = {
-                    ident: snap.ident,
-                    name: snap.name,
-                    lat: snap.lat,
-                    lon: snap.lon,
-                    alt_ft: interpAlt,
-                    type: snap.type,
-                    proc_type: 'ENR',
-                    proc_name: 'DCT'
-                };
-            } else {
-                let idx = 1;
-                const usedIds = new Set([
-                    ...flightPlan.map(w => w.ident),
-                    ...((typeof userWaypoints !== 'undefined' && Array.isArray(userWaypoints)) ? userWaypoints.map(w => w.ident) : [])
-                ]);
-                while (usedIds.has(`WP${idx}`)) idx++;
-                const newIdent = `WP${idx}`;
-
-                newWp = {
-                    ident: newIdent,
-                    name: 'User Waypoint (Touch)',
-                    lat: lat,
-                    lon: lon,
-                    alt_ft: interpAlt,
-                    type: 'USER',
-                    proc_type: 'ENR',
-                    proc_name: 'DCT'
-                };
-
-                if (typeof userWaypoints !== 'undefined' && Array.isArray(userWaypoints)) {
-                    userWaypoints.push({
-                        ident: newIdent,
-                        name: 'User Waypoint (Touch)',
-                        lat: lat,
-                        lon: lon,
-                        alt_ft: interpAlt,
-                        type: 'USER'
-                    });
-                    if (typeof persistUserWaypoints === 'function') persistUserWaypoints();
-                }
-            }
-
-            flightPlan.splice(state.legIndex + 1, 0, newWp);
-        }
-
-        if (typeof updateFlightPlanUI === 'function') {
-            updateFlightPlanUI(typeof currentAlternate !== 'undefined' ? currentAlternate : null, false);
-        }
-        setTimeout(updateTopOfDescentOverlay, 30);
-    };
-
-    mapContainer.addEventListener('touchend', finishTouchRubberBand);
-    mapContainer.addEventListener('touchcancel', () => {
-        touchState = null;
-        clearTouchPreview();
-    });
-}
-
-function installTodAndTouchHooks() {
-    if (window._todHooksInstalled) return;
-    window._todHooksInstalled = true;
-
-    ensureNavlogAndFuelUI();
-    ensureDrawerToggleTab();
-    ensureTooltipToggleButton();
-    initSyntheticTooltipsEngine();
-
-    if (typeof window.updateFlightPlanUI === 'function') {
-        const origUpdateFpl = window.updateFlightPlanUI;
-        window.updateFlightPlanUI = function(...args) {
-            const res = origUpdateFpl.apply(this, args);
-            setTimeout(() => {
-                updateTopOfDescentOverlay();
-                recalculateFuelAndPerfUI();
-                const nlModal = document.getElementById('navlogModal');
-                if (nlModal && nlModal.style.display === 'flex') renderNavlogTable();
-            }, 40);
-            return res;
-        };
-    }
-
-    if (typeof window.renderVnavChart === 'function') {
-        const origRenderVnav = window.renderVnavChart;
-        window.renderVnavChart = function(...args) {
-            const res = origRenderVnav.apply(this, args);
-            setTimeout(updateTopOfDescentOverlay, 40);
-            return res;
-        };
-    }
-
-    initTouchRubberBanding();
-    setTimeout(updateTopOfDescentOverlay, 150);
-}
-
-// --- GESTIONE SIDEBAR FPL E CASSETTO VNAV ---
-function toggleSidebar() {
-    const sidebar = document.getElementById('sidebarPanel');
-    const arrow = document.getElementById('sidebarArrow');
-    const label = document.getElementById('sidebarLabel');
-    if (!sidebar) return;
-
-    sidebarOpen = !sidebarOpen;
-    sidebar.classList.toggle('collapsed', !sidebarOpen);
-
-    if (arrow) arrow.innerText = sidebarOpen ? '◀' : '▶';
-    if (label) label.style.display = sidebarOpen ? 'none' : 'block';
-}
-
-function toggleDrawer() {
-    const drawer = document.getElementById('elevationDrawer');
-    const arrow = document.getElementById('drawerArrow');
-    const infoBar = document.getElementById('bottomInfoBar');
-    if (!drawer) return;
-
-    drawerOpen = !drawerOpen;
-    drawer.classList.toggle('collapsed', !drawerOpen);
-
-    if (arrow) arrow.innerText = drawerOpen ? '▼' : '▲';
-    if (infoBar) {
-        infoBar.style.bottom = drawerOpen ? '134px' : '36px';
-    }
-}
-
-// --- CAMBIO LINGUA IT / EN ---
-function applyTranslations() {
-    const t = translations[currentLang];
-    if (!t) return;
-
-    const langLabel = document.getElementById('langLabel');
-    if (langLabel) langLabel.innerText = currentLang.toUpperCase();
-
-    const omniSearch = document.getElementById('omniSearch');
-    if (omniSearch) omniSearch.placeholder = t.searchPlaceholder;
-
-    const fplTitle = document.getElementById('fplSectionTitle');
-    if (fplTitle) fplTitle.innerText = t.activeFpl.toUpperCase();
-
-    const lblFilters = document.getElementById('lblFilters');
-    if (lblFilters) lblFilters.innerText = t.btnFilters;
-
-    const lblReduce = document.getElementById('lblReduceExpand');
-    if (lblReduce) lblReduce.innerText = t.btnReduce;
-
-    const btnNavaids = document.getElementById('btnToggleNavaids');
-    if (btnNavaids) btnNavaids.innerText = showNavaids ? t.btnNavaids : t.btnNavaidsOff;
-
-    setFollowState(followState);
-    updateThemeButtonUI();
-    updateTooltipButtonUI();
-
-    const vnavText = document.getElementById('vnavText');
-    if (vnavText && (!flightPlan || flightPlan.length === 0)) {
-        vnavText.innerText = t.noFpl.toUpperCase();
-    }
-}
-
-function toggleLanguage() {
-    currentLang = (currentLang === 'it') ? 'en' : 'it';
-    applyTranslations();
-}
-
-// --- RIDIMENSIONAMENTO LARGHEZZA SIDEBAR ---
-function initSidebarResizer() {
-    const sidebar = document.getElementById('sidebarPanel');
-    const resizer = document.getElementById('sidebarResizer');
-    if (!sidebar || !resizer) return;
-
-    let isResizing = false;
-
-    resizer.addEventListener('mousedown', (e) => {
-        if (!sidebarOpen) return;
-        isResizing = true;
-        document.body.style.cursor = 'ew-resize';
-        e.preventDefault();
-    });
-
-    document.addEventListener('mousemove', (e) => {
-        if (!isResizing) return;
-        const newWidth = Math.max(260, Math.min(520, e.clientX - 16));
-        sidebar.style.width = `${newWidth}px`;
-    });
-
-    document.addEventListener('mouseup', () => {
-        if (isResizing) {
-            isResizing = false;
-            document.body.style.cursor = '';
-        }
-    });
-}
-
-// --- DRAG & DROP FILE .PLN SULLA FINESTRA ---
-function initDragAndDropPln() {
-    const overlay = document.getElementById('dropZoneOverlay');
-    if (!overlay) return;
-
-    window.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        overlay.style.display = 'flex';
-    });
-
-    overlay.addEventListener('dragleave', (e) => {
-        e.preventDefault();
-        overlay.style.display = 'none';
-    });
-
-    overlay.addEventListener('drop', (e) => {
-        e.preventDefault();
-        overlay.style.display = 'none';
-        const files = e.dataTransfer?.files;
-        if (files && files.length > 0) {
-            const reader = new FileReader();
-            reader.onload = async (ev) => {
-                if (ev.target?.result) {
-                    await processAndRenderPlnXml(ev.target.result);
-                }
-            };
-            reader.readAsText(files[0]);
-        }
-    });
-}
-
-// --- INIZIALIZZAZIONE APPLICAZIONE E DATI PYWEBVIEW / EFB ---
-async function initAeroGlassApp() {
-    installTodAndTouchHooks();
-    applyThemeMode(currentThemeMode, false);
-    applyTooltipsMode(tooltipsEnabled, false);
-
-    if (!window.pywebview || !window.pywebview.api || typeof window.pywebview.api.get_initial_data !== 'function') {
-        return;
-    }
-    if (initialized) return;
-    initialized = true;
-
-    updateFlightInfoBar(43.5, 12.0);
-    setFollowState(followState);
-    renderNavAids(vorsData, ilsData);
-    updateMapScale();
-
-    try {
-        if (window.pywebview.api.get_setting) {
-            const themeRes = await window.pywebview.api.get_setting('theme_mode');
-            if (themeRes && themeRes.success && themeRes.value) {
-                await applyThemeMode(themeRes.value, false);
-            }
-            const tipRes = await window.pywebview.api.get_setting('show_tooltips');
-            if (tipRes && tipRes.success && tipRes.value !== null && tipRes.value !== undefined) {
-                await applyTooltipsMode(tipRes.value !== 'false', false);
-            }
-            const fpRes = await window.pywebview.api.get_setting('fuel_perf_config');
-            if (fpRes && fpRes.success && fpRes.value) {
-                try {
-                    fuelPerfConfig = { ...fuelPerfConfig, ...JSON.parse(fpRes.value) };
-                } catch (e) {}
-            }
-        }
-
-        const initData = await window.pywebview.api.get_initial_data();
-        if (initData) {
-            if (initData.fpl_ts) {
-                window._lastFplTs = initData.fpl_ts;
-            }
-            if (initData.efb_info) {
-                updateEfbTopBarBadge(initData.efb_info);
-            } else {
-                await refreshEfbBadgeFromBackend();
-            }
-            if (initData.airports && initData.airports.length > 0) {
-                airportsData = [...initData.airports, ...EXTRA_AIRPORTS];
-            }
-            if (initData.vors && initData.vors.length > 0) {
-                vorsData = initData.vors;
-            }
-            if (initData.ils && initData.ils.length > 0) {
-                ilsData = initData.ils;
-            }
-            if (initData.simbrief_id) {
-                const sbInput = document.getElementById('simbriefIdInput');
-                if (sbInput) sbInput.value = initData.simbrief_id;
-                setSimbriefCompactMode(true);
-            }
-            if (initData.flight_plan && Array.isArray(initData.flight_plan) && initData.flight_plan.length > 0) {
-                flightPlan = initData.flight_plan;
-                currentAlternate = initData.alternate || null;
-                updateFlightPlanUI(currentAlternate, true);
-            }
-            renderNavAids(vorsData, ilsData);
-        }
-        await loadUserWaypoints();
-    } catch (e) {}
-
-    setTimeout(updateTopOfDescentOverlay, 250);
-
-    setInterval(() => {
-        pollTelemetry();
-        updateTodHeaderStatus();
-    }, 1000);
-
-    setInterval(() => {
-        const lbl = document.getElementById('lblEfbNet');
-        if (lbl && lbl.innerText.includes('...')) {
-            refreshEfbBadgeFromBackend();
-        }
-    }, 1500);
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-    initSidebarResizer();
-    initDragAndDropPln();
-    installTodAndTouchHooks();
-    applyThemeMode(currentThemeMode, false);
-    applyTooltipsMode(tooltipsEnabled, false);
-    updateFlightInfoBar(43.5, 12.0);
-    setFollowState(followState);
-    renderNavAids(vorsData, ilsData);
-    updateMapScale();
-
-    if (typeof map !== 'undefined' && map) {
-        map.on('mousemove', (e) => {
-            const coordsEl = document.getElementById('infoCoords');
-            if (coordsEl) {
-                coordsEl.innerText = `LAT: ${e.latlng.lat.toFixed(5)} LON: ${e.latlng.lng.toFixed(5)}`;
-            }
-        });
-    }
-
-    window.addEventListener('click', (event) => {
-        const createModal = document.getElementById('createFplModal');
-        if (createModal && event.target === createModal) closeCreateFplModal();
-
-        const histModal = document.getElementById('flightHistoryModal');
-        if (histModal && event.target === histModal) closeFlightHistoryModal();
-
-        const efbModal = document.getElementById('efbNetworkModal');
-        if (efbModal && event.target === efbModal) closeEfbNetworkModal();
-
-        const nlModal = document.getElementById('navlogModal');
-        if (nlModal && event.target === nlModal) closeNavlogModal();
-
-        const fpModal = document.getElementById('fuelPerfModal');
-        if (fpModal && event.target === fpModal) closeFuelPerfModal();
-    });
-
-    setTimeout(initAeroGlassApp, 300);
-});
-
-window.addEventListener('pywebviewready', initAeroGlassApp);
+        const touch =
