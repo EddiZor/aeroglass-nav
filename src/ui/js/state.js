@@ -123,6 +123,33 @@ const AIRSPACES_DATA = {
     ]
 };
 
+// --- PONTE EFB DI RETE (POLYFILL AUTOMATICO PER BROWSER / TABLET WI-FI) ---
+if (!window.pywebview && window.location.protocol.startsWith('http')) {
+    const efbApiProxy = new Proxy({}, {
+        get: function(target, prop) {
+            if (prop === 'then' || typeof prop === 'symbol') return undefined;
+            return async function(...args) {
+                const response = await fetch(`/api/${prop}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ args: args })
+                });
+                if (!response.ok) throw new Error(`EFB HTTP Error ${response.status}`);
+                const data = await response.json();
+                return data.result;
+            };
+        }
+    });
+    window.pywebview = { api: efbApiProxy, isNetworkEfb: true };
+    window.addEventListener('DOMContentLoaded', () => {
+        setTimeout(() => {
+            window.dispatchEvent(new Event('pywebviewready'));
+        }, 60);
+    });
+}
+
+// --- STATO GLOBALE E SORGENTI CARTOGRAFICHE ---
+
 // --- VARIABILI DI STATO GLOBALE ---
 let currentLang = 'it';
 let showNavaids = true;

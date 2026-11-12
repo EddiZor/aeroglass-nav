@@ -194,9 +194,10 @@ def main():
         show_already_running_warning()
         sys.exit(0)
 
-    # 2. Avvio normale dell'applicazione
+    # 2. Avvio normale dell'applicazione (Finestra Desktop + Server HTTP EFB per Tablet)
     api = AeroGlassAPI()
     ui_path = get_resource_path(os.path.join("src", "ui", "index.html"))
+    api.start_efb_server(os.path.dirname(ui_path))
 
     mw, mh, m_left, m_top = get_point_monitor_info(100, 100)
     init_w = int(mw * 0.8)

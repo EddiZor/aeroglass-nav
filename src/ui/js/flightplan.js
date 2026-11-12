@@ -17,11 +17,9 @@ async function persistUserWaypoints() {
     if (window.pywebview && window.pywebview.api && window.pywebview.api.save_user_waypoints) {
         try {
             const res = await window.pywebview.api.save_user_waypoints(userWaypoints);
-            if (!res || !res.success) {
-                console.warn("Il backend ha restituito un errore nel salvataggio waypoint:", res?.error);
-            }
+            if (res && res.fpl_ts) window._lastFplTs = res.fpl_ts;
         } catch (err) {
-            console.warn("Eccezione nella chiamata a save_user_waypoints:", err);
+            console.warn("Errore salvataggio user_waypoints in SQLite:", err);
         }
     }
 }
@@ -663,8 +661,10 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
     renderUserWaypointsUI();
     updateUndoButtonUI();
 
-    if (window.pywebview && window.pywebview.api && window.pywebview.api.save_active_flight_plan) {
-        window.pywebview.api.save_active_flight_plan(flightPlan, currentAlternate).catch(() => {});
+    if (!window._skipRemoteSave && window.pywebview && window.pywebview.api && window.pywebview.api.save_active_flight_plan) {
+        window.pywebview.api.save_active_flight_plan(flightPlan, currentAlternate).then(res => {
+            if (res && res.fpl_ts) window._lastFplTs = res.fpl_ts;
+        }).catch(() => {});
     }
 }
 
@@ -1240,5 +1240,103 @@ async function autoLogCompletedFlight(aircraftName, acftLat, acftLon) {
         await window.pywebview.api.add_flight_record(aircraftName || 'MSFS 2024', dep, destWp.ident, totalNm, fuelUsed);
         window._sessionStartFuelGal = null;
         window._sessionFuelUsedGal = 0.0;
+    }
+}
+
+// --- GESTIONE MODALITÀ EFB DI RETE (QR CODE & SYNC PC <-> TABLET) ---
+function updateEfbTopBarBadge(efbInfo) {
+    if (!efbInfo || !efbInfo.ip || !efbInfo.port) return;
+    window._cachedEfbInfo = efbInfo;
+    const lbl = document.getElementById('lblEfbNet');
+    if (lbl) {
+        lbl.innerText = `EFB: ${efbInfo.ip}:${efbInfo.port}`;
+    }
+}
+
+async function openEfbNetworkModal() {
+    const modal = document.getElementById('efbNetworkModal');
+    if (!modal) return;
+
+    let info = window._cachedEfbInfo;
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.get_efb_info) {
+        try {
+            const res = await window.pywebview.api.get_efb_info();
+            if (res && res.success) {
+                info = res;
+                updateEfbTopBarBadge(info);
+            }
+        } catch (e) {}
+    }
+
+    if (info && info.url) {
+        const urlEl = document.getElementById('efbFullUrlText');
+        const portEl = document.getElementById('efbPortInput');
+        const qrImg = document.getElementById('efbQrImage');
+
+        if (urlEl) urlEl.innerText = info.url;
+        if (portEl) portEl.value = info.port;
+        if (qrImg) {
+            qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=4&data=${encodeURIComponent(info.url)}`;
+        }
+    }
+
+    modal.style.display = 'flex';
+}
+
+function closeEfbNetworkModal() {
+    const modal = document.getElementById('efbNetworkModal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function copyEfbUrlToClipboard() {
+    const urlText = document.getElementById('efbFullUrlText')?.innerText || '';
+    const btn = document.getElementById('btnCopyEfbUrl');
+    if (!urlText) return;
+    try {
+        await navigator.clipboard.writeText(urlText);
+        if (btn) {
+            const orig = btn.innerHTML;
+            btn.innerHTML = '✅ Copiato!';
+            setTimeout(() => { btn.innerHTML = orig; }, 1500);
+        }
+    } catch (e) {}
+}
+
+async function savePreferredEfbPort() {
+    const portEl = document.getElementById('efbPortInput');
+    const newPort = parseInt(portEl?.value || '8339', 10);
+    if (isNaN(newPort) || newPort < 1024 || newPort > 65535 || newPort === 8080) {
+        alert("Inserisci una porta valida tra 1024 e 65535 (diversa da 8080).");
+        return;
+    }
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.set_efb_port) {
+        const res = await window.pywebview.api.set_efb_port(newPort);
+        if (res && res.success) {
+            alert(`Porta EFB ${newPort} salvata in SQLite. Sarà attiva dal prossimo riavvio dell'applicazione.`);
+        } else if (res && res.error) {
+            alert(res.error);
+        }
+    }
+}
+
+async function syncRemoteFlightPlanState() {
+    if (!window.pywebview || !window.pywebview.api || rubberBandState) return;
+    try {
+        const [initData, wpRes] = await Promise.all([
+            window.pywebview.api.get_initial_data(),
+            window.pywebview.api.get_user_waypoints()
+        ]);
+        if (wpRes && wpRes.success && Array.isArray(wpRes.waypoints)) {
+            userWaypoints = wpRes.waypoints;
+        }
+        if (initData && Array.isArray(initData.flight_plan)) {
+            flightPlan = initData.flight_plan;
+            currentAlternate = initData.alternate || null;
+            window._skipRemoteSave = true;
+            updateFlightPlanUI(currentAlternate, false);
+            window._skipRemoteSave = false;
+        }
+    } catch (e) {
+        window._skipRemoteSave = false;
     }
 }

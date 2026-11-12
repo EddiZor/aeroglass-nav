@@ -95,12 +95,26 @@ function updateFlightInfoBar(lat, lon) {
     }
 }
 
-// --- POLLING TELEMETRIA SIMCONNECT ---
+// --- POLLING TELEMETRIA SIMCONNECT & SYNC EFB ---
 async function pollTelemetry() {
     updateFlightInfoBar();
     if (!window.pywebview || !window.pywebview.api) return;
     try {
         const data = await window.pywebview.api.get_telemetry();
+        if (!data) return;
+
+        // Sincronizzazione automatica bidirezionale della rotta tra PC e Tablet EFB
+        if (data.fpl_ts) {
+            if (window._lastFplTs && data.fpl_ts > window._lastFplTs + 0.05) {
+                window._lastFplTs = data.fpl_ts;
+                if (typeof syncRemoteFlightPlanState === 'function') {
+                    syncRemoteFlightPlanState();
+                }
+            } else if (!window._lastFplTs) {
+                window._lastFplTs = data.fpl_ts;
+            }
+        }
+
         document.getElementById('simStatus').innerText = data.mode;
         document.getElementById('simDot').className = 'status-dot' + (data.connected ? ' live' : '');
         document.getElementById('valAlt').innerText = data.alt_ft;
@@ -140,7 +154,7 @@ async function pollTelemetry() {
                     if (svgEl) svgEl.style.transform = `rotate(${mapHeading}deg)`;
                 }
 
-            if (followState !== 0) {
+                if (followState !== 0) {
                     map.panTo(newLatLng, { animate: true, duration: 0.5 });
                 }
 

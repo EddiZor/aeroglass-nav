@@ -1,3 +1,131 @@
+// --- PONTE EFB DI RETE (POLYFILL AUTOMATICO PER BROWSER / TABLET WI-FI) ---
+if (!window.pywebview && window.location.protocol.startsWith('http')) {
+    const efbApiProxy = new Proxy({}, {
+        get: function(target, prop) {
+            if (prop === 'then' || typeof prop === 'symbol') return undefined;
+            return async function(...args) {
+                const response = await fetch(`/api/${prop}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ args: args })
+                });
+                if (!response.ok) throw new Error(`EFB HTTP Error ${response.status}`);
+                const data = await response.json();
+                return data.result;
+            };
+        }
+    });
+    window.pywebview = { api: efbApiProxy, isNetworkEfb: true };
+}
+
+// --- GESTIONE MODALITÀ EFB DI RETE (QR CODE & SYNC PC <-> TABLET) ---
+function updateEfbTopBarBadge(efbInfo) {
+    if (!efbInfo || !efbInfo.ip || !efbInfo.port) return;
+    window._cachedEfbInfo = efbInfo;
+    const lbl = document.getElementById('lblEfbNet');
+    if (lbl) {
+        lbl.innerText = `EFB: ${efbInfo.ip}:${efbInfo.port}`;
+    }
+}
+
+async function refreshEfbBadgeFromBackend() {
+    if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.get_efb_info) return;
+    try {
+        const res = await window.pywebview.api.get_efb_info();
+        if (res && res.success) {
+            updateEfbTopBarBadge(res);
+        }
+    } catch (e) {}
+}
+
+async function openEfbNetworkModal() {
+    const modal = document.getElementById('efbNetworkModal');
+    if (!modal) return;
+
+    let info = window._cachedEfbInfo;
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.get_efb_info) {
+        try {
+            const res = await window.pywebview.api.get_efb_info();
+            if (res && res.success) {
+                info = res;
+                updateEfbTopBarBadge(info);
+            }
+        } catch (e) {}
+    }
+
+    if (info && info.url) {
+        const urlEl = document.getElementById('efbFullUrlText');
+        const portEl = document.getElementById('efbPortInput');
+        const qrImg = document.getElementById('efbQrImage');
+
+        if (urlEl) urlEl.innerText = info.url;
+        if (portEl) portEl.value = info.port;
+        if (qrImg) {
+            qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=4&data=${encodeURIComponent(info.url)}`;
+        }
+    }
+
+    modal.style.display = 'flex';
+}
+
+function closeEfbNetworkModal() {
+    const modal = document.getElementById('efbNetworkModal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function copyEfbUrlToClipboard() {
+    const urlText = document.getElementById('efbFullUrlText')?.innerText || '';
+    const btn = document.getElementById('btnCopyEfbUrl');
+    if (!urlText) return;
+    try {
+        await navigator.clipboard.writeText(urlText);
+        if (btn) {
+            const orig = btn.innerHTML;
+            btn.innerHTML = '✅ Copiato!';
+            setTimeout(() => { btn.innerHTML = orig; }, 1500);
+        }
+    } catch (e) {}
+}
+
+async function savePreferredEfbPort() {
+    const portEl = document.getElementById('efbPortInput');
+    const newPort = parseInt(portEl?.value || '8339', 10);
+    if (isNaN(newPort) || newPort < 1024 || newPort > 65535 || newPort === 8080) {
+        alert("Inserisci una porta valida tra 1024 e 65535 (diversa da 8080).");
+        return;
+    }
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.set_efb_port) {
+        const res = await window.pywebview.api.set_efb_port(newPort);
+        if (res && res.success) {
+            alert(`Porta EFB ${newPort} salvata in SQLite. Sarà attiva dal prossimo riavvio dell'applicazione.`);
+        } else if (res && res.error) {
+            alert(res.error);
+        }
+    }
+}
+
+async function syncRemoteFlightPlanState() {
+    if (!window.pywebview || !window.pywebview.api || (typeof rubberBandState !== 'undefined' && rubberBandState)) return;
+    try {
+        const [initData, wpRes] = await Promise.all([
+            window.pywebview.api.get_initial_data(),
+            window.pywebview.api.get_user_waypoints()
+        ]);
+        if (wpRes && wpRes.success && Array.isArray(wpRes.waypoints)) {
+            userWaypoints = wpRes.waypoints;
+        }
+        if (initData && Array.isArray(initData.flight_plan)) {
+            flightPlan = initData.flight_plan;
+            currentAlternate = initData.alternate || null;
+            window._skipRemoteSave = true;
+            updateFlightPlanUI(currentAlternate, false);
+            window._skipRemoteSave = false;
+        }
+    } catch (e) {
+        window._skipRemoteSave = false;
+    }
+}
+
 // --- GESTIONE SIDEBAR FPL E CASSETTO VNAV ---
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebarPanel');
@@ -123,8 +251,11 @@ function initDragAndDropPln() {
     });
 }
 
-// --- INIZIALIZZAZIONE APPLICAZIONE E DATI PYWEBVIEW ---
+// --- INIZIALIZZAZIONE APPLICAZIONE E DATI PYWEBVIEW / EFB ---
 async function initAeroGlassApp() {
+    if (!window.pywebview || !window.pywebview.api || typeof window.pywebview.api.get_initial_data !== 'function') {
+        return;
+    }
     if (initialized) return;
     initialized = true;
 
@@ -133,43 +264,57 @@ async function initAeroGlassApp() {
     renderNavAids(vorsData, ilsData);
     updateMapScale();
 
-    if (window.pywebview && window.pywebview.api) {
-        try {
-            if (window.pywebview.api.get_initial_data) {
-                const initData = await window.pywebview.api.get_initial_data();
-                if (initData) {
-                    if (initData.airports && initData.airports.length > 0) {
-                        airportsData = [...initData.airports, ...EXTRA_AIRPORTS];
-                    }
-                    if (initData.vors && initData.vors.length > 0) {
-                        vorsData = initData.vors;
-                    }
-                    if (initData.ils && initData.ils.length > 0) {
-                        ilsData = initData.ils;
-                    }
-    if (initData.simbrief_id) {
-                    const sbInput = document.getElementById('simbriefIdInput');
-                    if (sbInput) sbInput.value = initData.simbrief_id;
-                    setSimbriefCompactMode(true);
-                    }
-                    if (initData.flight_plan && Array.isArray(initData.flight_plan) && initData.flight_plan.length > 0) {
-                        flightPlan = initData.flight_plan;
-                        updateFlightPlanUI(initData.alternate || null, true);
-                    }
-                    renderNavAids(vorsData, ilsData);
-                }
+    try {
+        const initData = await window.pywebview.api.get_initial_data();
+        if (initData) {
+            if (initData.fpl_ts) {
+                window._lastFplTs = initData.fpl_ts;
             }
-            await loadUserWaypoints(); 
-        } catch (e) {}
-    }
+            if (initData.efb_info) {
+                updateEfbTopBarBadge(initData.efb_info);
+            } else {
+                await refreshEfbBadgeFromBackend();
+            }
+            if (initData.airports && initData.airports.length > 0) {
+                airportsData = [...initData.airports, ...EXTRA_AIRPORTS];
+            }
+            if (initData.vors && initData.vors.length > 0) {
+                vorsData = initData.vors;
+            }
+            if (initData.ils && initData.ils.length > 0) {
+                ilsData = initData.ils;
+            }
+            if (initData.simbrief_id) {
+                const sbInput = document.getElementById('simbriefIdInput');
+                if (sbInput) sbInput.value = initData.simbrief_id;
+                setSimbriefCompactMode(true);
+            }
+            if (initData.flight_plan && Array.isArray(initData.flight_plan) && initData.flight_plan.length > 0) {
+                flightPlan = initData.flight_plan;
+                currentAlternate = initData.alternate || null;
+                updateFlightPlanUI(currentAlternate, true);
+            }
+            renderNavAids(vorsData, ilsData);
+        }
+        await loadUserWaypoints();
+    } catch (e) {}
 
     setInterval(pollTelemetry, 1000);
+    setInterval(() => {
+        const lbl = document.getElementById('lblEfbNet');
+        if (lbl && lbl.innerText.includes('...')) {
+            refreshEfbBadgeFromBackend();
+        }
+    }, 1500);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
     initSidebarResizer();
     initDragAndDropPln();
     updateFlightInfoBar(43.5, 12.0);
+    setFollowState(followState);
+    renderNavAids(vorsData, ilsData);
+    updateMapScale();
 
     // Aggiorna le coordinate al passaggio del mouse quando non connesso a MSFS
     if (typeof map !== 'undefined' && map) {
@@ -189,6 +334,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const histModal = document.getElementById('flightHistoryModal');
         if (histModal && event.target === histModal) {
             closeFlightHistoryModal();
+        }
+        const efbModal = document.getElementById('efbNetworkModal');
+        if (efbModal && event.target === efbModal) {
+            closeEfbNetworkModal();
         }
     });
 
