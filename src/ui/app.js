@@ -105,7 +105,7 @@ async function savePreferredEfbPort() {
 }
 
 async function syncRemoteFlightPlanState() {
-    if (!window.pywebview || !window.pywebview.api || (typeof rubberBandState !== 'undefined' && rubberBandState)) return;
+    if (!window.pywebview || !window.pywebview.api || (typeof rubberBandState !== 'undefined' && rubberBandState) || window._touchRbActive) return;
     try {
         const [initData, wpRes] = await Promise.all([
             window.pywebview.api.get_initial_data(),
@@ -124,6 +124,532 @@ async function syncRemoteFlightPlanState() {
     } catch (e) {
         window._skipRemoteSave = false;
     }
+}
+
+// --- CALCOLO E VISUALIZZAZIONE TOP OF DESCENT (ToD 3°) SU MAPPA E VNAV ---
+function calcGreatCircleNm(lat1, lon1, lat2, lon2) {
+    const R = 3440.065;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function computeTopOfDescentData() {
+    if (typeof flightPlan === 'undefined' || !Array.isArray(flightPlan) || flightPlan.length < 2) {
+        return null;
+    }
+
+    const cumDist = [0];
+    for (let i = 0; i < flightPlan.length - 1; i++) {
+        const d = calcGreatCircleNm(
+            Number(flightPlan[i].lat), Number(flightPlan[i].lon),
+            Number(flightPlan[i + 1].lat), Number(flightPlan[i + 1].lon)
+        );
+        cumDist.push(cumDist[i] + d);
+    }
+
+    const totalDistNm = cumDist[cumDist.length - 1];
+    if (totalDistNm < 3) return null;
+
+    const altitudes = flightPlan.map(wp => Number(wp.alt_ft) || 0);
+    const maxAlt = Math.max(...altitudes);
+    const destWp = flightPlan[flightPlan.length - 1];
+    const destElev = Number(destWp.alt_ft) || 0;
+    const altToLose = Math.max(0, maxAlt - destElev);
+
+    if (altToLose < 500) return null;
+
+    // Regola standard 3°: 3.0 NM per ogni 1.000 ft da perdere
+    let descentDistNm = (altToLose / 1000.0) * 3.0;
+    descentDistNm = Math.min(descentDistNm, totalDistNm * 0.65);
+    descentDistNm = Math.max(descentDistNm, 2.0);
+
+    const todDistFromStart = Math.max(totalDistNm * 0.12, totalDistNm - descentDistNm);
+    const todFraction = todDistFromStart / totalDistNm;
+
+    let legIdx = 0;
+    for (let i = 0; i < cumDist.length - 1; i++) {
+        if (todDistFromStart >= cumDist[i] && todDistFromStart <= cumDist[i + 1]) {
+            legIdx = i;
+            break;
+        }
+    }
+
+    const legLen = Math.max(0.001, cumDist[legIdx + 1] - cumDist[legIdx]);
+    const segFrac = Math.max(0, Math.min(1, (todDistFromStart - cumDist[legIdx]) / legLen));
+    const p1 = flightPlan[legIdx];
+    const p2 = flightPlan[legIdx + 1];
+
+    const todLat = Number(p1.lat) + segFrac * (Number(p2.lat) - Number(p1.lat));
+    const todLon = Number(p1.lon) + segFrac * (Number(p2.lon) - Number(p1.lon));
+
+    // Stima Ground Speed attuale o nominale per calcolo VS (fpm = GS * 5.2)
+    const gsText = document.getElementById('valGs')?.innerText || '';
+    const parsedGs = parseInt(gsText.replace(/[^0-9]/g, ''), 10);
+    const defaultGs = maxAlt > 18000 ? 420 : (maxAlt > 9000 ? 220 : 125);
+    const activeGsKt = (!isNaN(parsedGs) && parsedGs > 35) ? parsedGs : defaultGs;
+    const vs3DegFpm = -Math.round((activeGsKt * 5.2) / 50) * 50;
+
+    return {
+        lat: todLat,
+        lon: todLon,
+        fraction: todFraction,
+        totalDistNm: totalDistNm,
+        todDistFromStart: todDistFromStart,
+        descentDistNm: totalDistNm - todDistFromStart,
+        maxAlt: maxAlt,
+        destElev: destElev,
+        destIdent: destWp.ident || 'DEST',
+        altToLose: altToLose,
+        activeGsKt: activeGsKt,
+        vs3DegFpm: vs3DegFpm
+    };
+}
+
+function updateTopOfDescentOverlay() {
+    if (typeof map === 'undefined' || !map) return;
+
+    if (window._todMapMarker) {
+        try { map.removeLayer(window._todMapMarker); } catch (e) {}
+        window._todMapMarker = null;
+    }
+
+    const existingSvgGroup = document.getElementById('todVnavGroup');
+    if (existingSvgGroup) existingSvgGroup.remove();
+
+    const tod = computeTopOfDescentData();
+    if (!tod) return;
+
+    // 1. Marker ToD sulla mappa Leaflet
+    const todIcon = L.divIcon({
+        className: '',
+        html: `
+            <div style="display:flex;align-items:center;gap:4px;transform:translate(-50%,-50%);cursor:pointer;white-space:nowrap;">
+                <div style="width:12px;height:12px;border-radius:50%;background:#fbbf24;border:2px solid #0f172a;box-shadow:0 0 10px #fbbf24;"></div>
+                <span style="background:rgba(15,23,42,0.92);border:1px solid #fbbf24;color:#fbbf24;font-size:10px;font-weight:700;padding:1px 6px;border-radius:999px;box-shadow:0 2px 8px rgba(0,0,0,0.6);">
+                    📉 ToD (-${tod.descentDistNm.toFixed(0)} NM)
+                </span>
+            </div>
+        `,
+        iconSize: [110, 22],
+        iconAnchor: [0, 0]
+    });
+
+    const popupHtml = `
+        <div style="font-family:'Segoe UI',sans-serif;min-width:195px;color:#f8fafc;">
+            <div style="font-weight:700;color:#fbbf24;border-bottom:1px solid rgba(251,191,36,0.3);padding-bottom:4px;margin-bottom:6px;">
+                📉 TOP OF DESCENT (Sentiero 3°)
+            </div>
+            <div style="font-size:11.5px;line-height:1.55;">
+                <div>Quota Crociera: <strong style="color:#38bdf8;">${tod.maxAlt.toLocaleString()} ft</strong></div>
+                <div>Destinazione (${tod.destIdent}): <strong>${tod.destElev.toLocaleString()} ft</strong></div>
+                <div>Quota da perdere: <strong>${tod.altToLose.toLocaleString()} ft</strong></div>
+                <div>Inizio discesa: <strong style="color:#fbbf24;">${tod.descentDistNm.toFixed(1)} NM prima di ${tod.destIdent}</strong></div>
+                <div>VS 3° (@ ${tod.activeGsKt} kt): <strong style="color:#34d399;">${tod.vs3DegFpm} fpm</strong></div>
+            </div>
+        </div>
+    `;
+
+    window._todMapMarker = L.marker([tod.lat, tod.lon], {
+        icon: todIcon,
+        zIndexOffset: 750
+    }).addTo(map).bindPopup(popupHtml);
+
+    // 2. Linea e Badge ToD nel grafico SVG VNAV
+    const acftLine = document.getElementById('acftVnavLine');
+    const svg = acftLine ? acftLine.ownerSVGElement : document.querySelector('#elevationDrawer svg');
+    if (svg) {
+        const vb = svg.viewBox && svg.viewBox.baseVal && svg.viewBox.baseVal.width
+            ? svg.viewBox.baseVal
+            : { width: 1000, height: 110 };
+        const xPos = (tod.fraction * vb.width).toFixed(1);
+        const h = vb.height || 110;
+
+        const ns = "http://www.w3.org/2000/svg";
+        const g = document.createElementNS(ns, "g");
+        g.setAttribute("id", "todVnavGroup");
+
+        const line = document.createElementNS(ns, "line");
+        line.setAttribute("x1", xPos);
+        line.setAttribute("x2", xPos);
+        line.setAttribute("y1", "6");
+        line.setAttribute("y2", String(h));
+        line.setAttribute("stroke", "#fbbf24");
+        line.setAttribute("stroke-width", "1.8");
+        line.setAttribute("stroke-dasharray", "4,3");
+        g.appendChild(line);
+
+        const labelX = Math.min(vb.width - 78, Math.max(8, Number(xPos) - 36));
+        const rect = document.createElementNS(ns, "rect");
+        rect.setAttribute("x", String(labelX));
+        rect.setAttribute("y", "2");
+        rect.setAttribute("width", "74");
+        rect.setAttribute("height", "15");
+        rect.setAttribute("rx", "4");
+        rect.setAttribute("fill", "#0f172a");
+        rect.setAttribute("stroke", "#fbbf24");
+        rect.setAttribute("stroke-width", "1");
+        g.appendChild(rect);
+
+        const txt = document.createElementNS(ns, "text");
+        txt.setAttribute("x", String(labelX + 37));
+        txt.setAttribute("y", "12.5");
+        txt.setAttribute("text-anchor", "middle");
+        txt.setAttribute("fill", "#fbbf24");
+        txt.setAttribute("font-size", "9.5");
+        txt.setAttribute("font-weight", "bold");
+        txt.textContent = `ToD -${tod.descentDistNm.toFixed(0)}NM`;
+        g.appendChild(txt);
+
+        svg.appendChild(g);
+    }
+
+    updateTodHeaderStatus(tod);
+}
+
+function updateTodHeaderStatus(todInput) {
+    const tod = todInput || computeTopOfDescentData();
+    const vnavText = document.getElementById('vnavText');
+    if (!vnavText || !tod) return;
+
+    let statusSuffix = `  |  📉 ToD: ${tod.descentDistNm.toFixed(1)} NM prima di ${tod.destIdent} (VS ${tod.vs3DegFpm} fpm @ ${tod.activeGsKt}kt)`;
+
+    if (typeof lastAcftLatLng !== 'undefined' && lastAcftLatLng && typeof calculateRouteProgress === 'function') {
+        const simDot = document.getElementById('simDot');
+        const isLive = simDot && simDot.classList.contains('live');
+        if (isLive) {
+            const prog = calculateRouteProgress(lastAcftLatLng.lat, lastAcftLatLng.lng);
+            if (prog) {
+                const acftDistNm = prog.fraction * tod.totalDistNm;
+                const distToTod = tod.todDistFromStart - acftDistNm;
+                const distToDest = Math.max(0.1, tod.totalDistNm - acftDistNm);
+
+                if (distToTod > 0.5) {
+                    statusSuffix = `  |  📉 ToD tra ${distToTod.toFixed(1)} NM (VS 3°: ${tod.vs3DegFpm} fpm)`;
+                } else {
+                    const altTxt = document.getElementById('valAlt')?.innerText || '';
+                    const curAlt = parseInt(altTxt.replace(/[^0-9]/g, ''), 10) || tod.maxAlt;
+                    const remAlt = Math.max(0, curAlt - tod.destElev);
+                    const reqVs = -Math.round(((remAlt / distToDest) * (tod.activeGsKt / 60.0)) / 50) * 50;
+                    statusSuffix = `  |  📉 DISCESA -> ${tod.destIdent} (${distToDest.toFixed(1)} NM) • VS Richiesto: ${reqVs} fpm`;
+                }
+            }
+        }
+    }
+
+    const baseText = vnavText.innerText.split('  |  📉')[0];
+    vnavText.innerText = baseText + statusSuffix;
+}
+
+// --- TOUCH RUBBER BANDING PER TABLET E SCHERMI TOUCH ---
+function initTouchRubberBanding() {
+    if (typeof map === 'undefined' || !map) return;
+    const mapContainer = map.getContainer();
+    if (!mapContainer || mapContainer._touchRbInitialized) return;
+    mapContainer._touchRbInitialized = true;
+
+    let touchState = null;
+    let previewLine = null;
+    let previewBadge = null;
+
+    function findTouchSnapCandidate(containerPt) {
+        let best = null;
+        let minPx = 28; // Raggio di aggancio magnetico sul touch (in pixel)
+
+        const checkList = (arr, typeLabel) => {
+            if (!Array.isArray(arr)) return;
+            for (const item of arr) {
+                if (item.lat === undefined || item.lon === undefined) continue;
+                const pt = map.latLngToContainerPoint([Number(item.lat), Number(item.lon)]);
+                const dist = containerPt.distanceTo(pt);
+                if (dist < minPx) {
+                    minPx = dist;
+                    best = {
+                        ident: item.icao || item.ident || 'WPT',
+                        name: item.name || typeLabel,
+                        lat: Number(item.lat),
+                        lon: Number(item.lon),
+                        elev: Number(item.elev || item.alt_ft || 0),
+                        type: typeLabel
+                    };
+                }
+            }
+        };
+
+        if (typeof airportsData !== 'undefined') checkList(airportsData, 'APT');
+        if (typeof vorsData !== 'undefined') checkList(vorsData, 'VOR');
+        if (typeof userWaypoints !== 'undefined') checkList(userWaypoints, 'USER');
+        return best;
+    }
+
+    function clearTouchPreview() {
+        if (previewLine) {
+            try { map.removeLayer(previewLine); } catch (e) {}
+            previewLine = null;
+        }
+        if (previewBadge) {
+            try { map.removeLayer(previewBadge); } catch (e) {}
+            previewBadge = null;
+        }
+        window._touchRbActive = false;
+        try { map.dragging.enable(); } catch (e) {}
+    }
+
+    mapContainer.addEventListener('touchstart', (e) => {
+        if (!e.touches || e.touches.length !== 1) {
+            if (touchState) {
+                clearTouchPreview();
+                touchState = null;
+            }
+            return;
+        }
+        if (typeof flightPlan === 'undefined' || !Array.isArray(flightPlan) || flightPlan.length < 2) return;
+        if (typeof pickingMapCoords !== 'undefined' && pickingMapCoords) return;
+
+        const touch = e.touches[0];
+        const pt = map.mouseEventToContainerPoint(touch);
+
+        // 1. Verifica se il dito ha toccato un Waypoint intermedio esistente
+        for (let i = 1; i < flightPlan.length - 1; i++) {
+            const wpPt = map.latLngToContainerPoint([Number(flightPlan[i].lat), Number(flightPlan[i].lon)]);
+            if (pt.distanceTo(wpPt) <= 26) {
+                touchState = {
+                    mode: 'move',
+                    wpIndex: i,
+                    startPt: pt,
+                    hasDragged: false,
+                    currentLatLng: L.latLng(Number(flightPlan[i].lat), Number(flightPlan[i].lon)),
+                    snapTarget: null
+                };
+                window._touchRbActive = true;
+                map.dragging.disable();
+                return;
+            }
+        }
+
+        // 2. Verifica se il dito ha toccato un segmento della linea di rotta
+        for (let i = 0; i < flightPlan.length - 1; i++) {
+            const p1 = map.latLngToContainerPoint([Number(flightPlan[i].lat), Number(flightPlan[i].lon)]);
+            const p2 = map.latLngToContainerPoint([Number(flightPlan[i + 1].lat), Number(flightPlan[i + 1].lon)]);
+
+            // Lascia liberi i tocchi diretti sugli aeroporti di partenza e arrivo
+            if (i === 0 && pt.distanceTo(p1) < 22) continue;
+            if (i === flightPlan.length - 2 && pt.distanceTo(p2) < 22) continue;
+
+            const segDist = L.LineUtil.pointToSegmentDistance(pt, p1, p2);
+            if (segDist <= 22) {
+                touchState = {
+                    mode: 'insert',
+                    legIndex: i,
+                    startPt: pt,
+                    hasDragged: false,
+                    currentLatLng: map.containerPointToLatLng(pt),
+                    snapTarget: null
+                };
+                window._touchRbActive = true;
+                map.dragging.disable();
+                return;
+            }
+        }
+    }, { passive: true });
+
+    mapContainer.addEventListener('touchmove', (e) => {
+        if (!touchState) return;
+        if (!e.touches || e.touches.length !== 1) {
+            clearTouchPreview();
+            touchState = null;
+            return;
+        }
+
+        const touch = e.touches[0];
+        const pt = map.mouseEventToContainerPoint(touch);
+        if (!touchState.hasDragged && pt.distanceTo(touchState.startPt) < 8) {
+            return;
+        }
+        touchState.hasDragged = true;
+        if (e.cancelable) e.preventDefault();
+
+        const snap = findTouchSnapCandidate(pt);
+        touchState.snapTarget = snap;
+        const targetLatLng = snap ? L.latLng(snap.lat, snap.lon) : map.containerPointToLatLng(pt);
+        touchState.currentLatLng = targetLatLng;
+
+        const prevWp = touchState.mode === 'move'
+            ? flightPlan[touchState.wpIndex - 1]
+            : flightPlan[touchState.legIndex];
+        const nextWp = touchState.mode === 'move'
+            ? flightPlan[touchState.wpIndex + 1]
+            : flightPlan[touchState.legIndex + 1];
+
+        const polyCoords = [
+            [Number(prevWp.lat), Number(prevWp.lon)],
+            [targetLatLng.lat, targetLatLng.lng],
+            [Number(nextWp.lat), Number(nextWp.lon)]
+        ];
+
+        const lineColor = snap ? '#34d399' : '#38bdf8';
+        if (!previewLine) {
+            previewLine = L.polyline(polyCoords, {
+                color: lineColor,
+                weight: 4,
+                dashArray: '8, 6',
+                opacity: 0.95
+            }).addTo(map);
+        } else {
+            previewLine.setLatLngs(polyCoords);
+            previewLine.setStyle({ color: lineColor });
+        }
+
+        const badgeHtml = snap
+            ? `<div style="background:rgba(6,78,59,0.95);border:1.5px solid #34d399;color:#34d399;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;transform:translate(-50%,-145%);box-shadow:0 3px 12px rgba(0,0,0,0.6);">🧲 SNAP: ${snap.ident}</div>`
+            : `<div style="background:rgba(15,23,42,0.92);border:1.5px solid #38bdf8;color:#38bdf8;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;transform:translate(-50%,-145%);box-shadow:0 3px 12px rgba(0,0,0,0.6);">📍 ${targetLatLng.lat.toFixed(3)}, ${targetLatLng.lng.toFixed(3)}</div>`;
+
+        const badgeIcon = L.divIcon({ className: '', html: badgeHtml, iconSize: [120, 24], iconAnchor: [0, 0] });
+        if (!previewBadge) {
+            previewBadge = L.marker(targetLatLng, { icon: badgeIcon, interactive: false, zIndexOffset: 2000 }).addTo(map);
+        } else {
+            previewBadge.setLatLng(targetLatLng);
+            previewBadge.setIcon(badgeIcon);
+        }
+    }, { passive: false });
+
+    const finishTouchRubberBand = () => {
+        if (!touchState) return;
+        const state = touchState;
+        touchState = null;
+        clearTouchPreview();
+
+        if (!state.hasDragged || !state.currentLatLng) return;
+
+        // Salva lo stato corrente nello stack Undo (Ctrl+Z / pulsante Ripristina)
+        if (typeof pushFlightPlanUndoState === 'function') {
+            pushFlightPlanUndoState();
+        } else if (typeof fplUndoStack !== 'undefined' && Array.isArray(fplUndoStack)) {
+            fplUndoStack.push(JSON.parse(JSON.stringify(flightPlan)));
+            if (fplUndoStack.length > 30) fplUndoStack.shift();
+            if (typeof updateUndoButtonUI === 'function') updateUndoButtonUI();
+        }
+
+        const lat = Number(state.currentLatLng.lat.toFixed(5));
+        const lon = Number(state.currentLatLng.lng.toFixed(5));
+        const snap = state.snapTarget;
+
+        if (state.mode === 'move') {
+            const wp = flightPlan[state.wpIndex];
+            if (snap) {
+                wp.ident = snap.ident;
+                wp.name = snap.name;
+                wp.lat = snap.lat;
+                wp.lon = snap.lon;
+                wp.type = snap.type;
+            } else {
+                wp.lat = lat;
+                wp.lon = lon;
+                if (typeof userWaypoints !== 'undefined' && Array.isArray(userWaypoints)) {
+                    const uwp = userWaypoints.find(u => u.ident === wp.ident);
+                    if (uwp) {
+                        uwp.lat = lat;
+                        uwp.lon = lon;
+                        if (typeof persistUserWaypoints === 'function') persistUserWaypoints();
+                    }
+                }
+            }
+        } else if (state.mode === 'insert') {
+            const prevWp = flightPlan[state.legIndex];
+            const nextWp = flightPlan[state.legIndex + 1];
+            const interpAlt = Math.max(
+                1000,
+                Math.round(((Number(prevWp.alt_ft || 5000) + Number(nextWp.alt_ft || 5000)) / 2) / 100) * 100
+            );
+
+            let newWp = null;
+            if (snap) {
+                newWp = {
+                    ident: snap.ident,
+                    name: snap.name,
+                    lat: snap.lat,
+                    lon: snap.lon,
+                    alt_ft: interpAlt,
+                    type: snap.type,
+                    proc_type: 'ENR',
+                    proc_name: 'DCT'
+                };
+            } else {
+                let idx = 1;
+                const usedIds = new Set([
+                    ...flightPlan.map(w => w.ident),
+                    ...((typeof userWaypoints !== 'undefined' && Array.isArray(userWaypoints)) ? userWaypoints.map(w => w.ident) : [])
+                ]);
+                while (usedIds.has(`WP${idx}`)) idx++;
+                const newIdent = `WP${idx}`;
+
+                newWp = {
+                    ident: newIdent,
+                    name: 'User Waypoint (Touch)',
+                    lat: lat,
+                    lon: lon,
+                    alt_ft: interpAlt,
+                    type: 'USER',
+                    proc_type: 'ENR',
+                    proc_name: 'DCT'
+                };
+
+                if (typeof userWaypoints !== 'undefined' && Array.isArray(userWaypoints)) {
+                    userWaypoints.push({
+                        ident: newIdent,
+                        name: 'User Waypoint (Touch)',
+                        lat: lat,
+                        lon: lon,
+                        alt_ft: interpAlt,
+                        type: 'USER'
+                    });
+                    if (typeof persistUserWaypoints === 'function') persistUserWaypoints();
+                }
+            }
+
+            flightPlan.splice(state.legIndex + 1, 0, newWp);
+        }
+
+        if (typeof updateFlightPlanUI === 'function') {
+            updateFlightPlanUI(typeof currentAlternate !== 'undefined' ? currentAlternate : null, false);
+        }
+        setTimeout(updateTopOfDescentOverlay, 30);
+    };
+
+    mapContainer.addEventListener('touchend', finishTouchRubberBand);
+    mapContainer.addEventListener('touchcancel', () => {
+        touchState = null;
+        clearTouchPreview();
+    });
+}
+
+function installTodAndTouchHooks() {
+    if (window._todHooksInstalled) return;
+    window._todHooksInstalled = true;
+
+    if (typeof window.updateFlightPlanUI === 'function') {
+        const origUpdateFpl = window.updateFlightPlanUI;
+        window.updateFlightPlanUI = function(...args) {
+            const res = origUpdateFpl.apply(this, args);
+            setTimeout(updateTopOfDescentOverlay, 40);
+            return res;
+        };
+    }
+
+    if (typeof window.renderVnavChart === 'function') {
+        const origRenderVnav = window.renderVnavChart;
+        window.renderVnavChart = function(...args) {
+            const res = origRenderVnav.apply(this, args);
+            setTimeout(updateTopOfDescentOverlay, 40);
+            return res;
+        };
+    }
+
+    initTouchRubberBanding();
+    setTimeout(updateTopOfDescentOverlay, 150);
 }
 
 // --- GESTIONE SIDEBAR FPL E CASSETTO VNAV ---
@@ -253,6 +779,8 @@ function initDragAndDropPln() {
 
 // --- INIZIALIZZAZIONE APPLICAZIONE E DATI PYWEBVIEW / EFB ---
 async function initAeroGlassApp() {
+    installTodAndTouchHooks();
+
     if (!window.pywebview || !window.pywebview.api || typeof window.pywebview.api.get_initial_data !== 'function') {
         return;
     }
@@ -299,7 +827,13 @@ async function initAeroGlassApp() {
         await loadUserWaypoints();
     } catch (e) {}
 
-    setInterval(pollTelemetry, 1000);
+    setTimeout(updateTopOfDescentOverlay, 250);
+
+    setInterval(() => {
+        pollTelemetry();
+        updateTodHeaderStatus();
+    }, 1000);
+
     setInterval(() => {
         const lbl = document.getElementById('lblEfbNet');
         if (lbl && lbl.innerText.includes('...')) {
@@ -311,6 +845,7 @@ async function initAeroGlassApp() {
 document.addEventListener('DOMContentLoaded', () => {
     initSidebarResizer();
     initDragAndDropPln();
+    installTodAndTouchHooks();
     updateFlightInfoBar(43.5, 12.0);
     setFollowState(followState);
     renderNavAids(vorsData, ilsData);
