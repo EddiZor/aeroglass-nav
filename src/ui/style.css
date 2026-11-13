@@ -85,29 +85,40 @@ body, html {
     box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
 }
 
-/* Barra superiore controlli e telemetria */
-.top-controls-bar {
+/* Barra superiore controlli (Allineata correttamente a destra della sidebar) */
+.top-controls {
     position: absolute;
-    top: 14px;
+    top: 12px;
     right: 16px;
-    left: 348px;
-    z-index: 500;
     display: flex;
-    justify-content: flex-end;
     align-items: center;
-    gap: 10px;
-    flex-wrap: nowrap;
+    justify-content: flex-end;
+    gap: 8px;
+    z-index: 600;
     pointer-events: none;
 }
 
-.top-pills-group, .telemetry-bar {
+.top-controls > * {
     pointer-events: auto;
+}
+
+.top-pills-group {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 5px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    max-width: 100%;
+    scrollbar-width: none;
+    padding: 2px 0;
+}
+
+.top-pills-group::-webkit-scrollbar {
+    display: none;
 }
 
 .top-btn {
+    flex-shrink: 0;
     background: var(--nav-panel-glass);
     border: 1px solid var(--nav-border);
     color: var(--text-main);
@@ -120,6 +131,7 @@ body, html {
     gap: 6px;
     cursor: pointer;
     transition: all 0.15s ease;
+    white-space: nowrap;
 }
 
 .top-btn:hover {
@@ -834,8 +846,64 @@ body.mode-simple .simbrief-box {
     display: none !important;
 }
 
-body.mode-simple .top-pills-group .top-btn:not(#btnToggleUIMode):not(#btnThemeMode):not(#btnFollowAcft):not(#btnToggleNavaids) {
+body.mode-simple .top-pills-group .top-btn:not(#btnToggleUIMode):not(#btnThemeMode):not(#btnFollowAcft):not(#btnToggleNavaids):not(#btnOnlineTraffic):not(#btnSettingsModal) {
     display: none !important;
+}
+
+/* 🌐 TRAFFICO ONLINE VATSIM / IVAO & ⚙️ MODALE IMPOSTAZIONI */
+.online-traffic-icon {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+}
+
+.online-acft-glyph {
+    font-size: 14px;
+    line-height: 1;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.85));
+    transition: transform 0.2s linear;
+}
+
+.online-acft-tag {
+    margin-top: 1px;
+    background: rgba(13, 17, 23, 0.88);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    color: #e2e8f0;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    padding: 0px 4px;
+    border-radius: 3px;
+    white-space: nowrap;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+.settings-modal-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 0;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+    font-size: 12px;
+}
+
+.settings-modal-row:last-child {
+    border-bottom: none;
+}
+
+.settings-modal-lbl {
+    color: var(--text-main);
+    font-weight: 600;
+}
+
+.settings-modal-sub {
+    display: block;
+    font-size: 10.5px;
+    color: var(--text-muted);
+    margin-top: 2px;
 }
 
 .fly-hud-strip {

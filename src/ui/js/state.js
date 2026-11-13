@@ -123,12 +123,22 @@ const AIRSPACES_DATA = {
     ]
 };
 
-// --- PONTE EFB DI RETE (POLYFILL AUTOMATICO PER BROWSER / TABLET WI-FI) ---
-if (!window.pywebview && window.location.protocol.startsWith('http')) {
-    const efbApiProxy = new Proxy({}, {
+// --- PONTE EFB DI RETE & BRIDGE NATIVO ---
+window.addEventListener('pywebviewready', () => {
+    if (window.pywebview && window.pywebview.api) {
+        window._nativePywebviewApi = window.pywebview.api;
+    }
+});
+
+if (!window.pywebview || !window.pywebview.api) {
+    window.pywebview = window.pywebview || {};
+    window.pywebview.api = new Proxy({}, {
         get: function(target, prop) {
             if (prop === 'then' || typeof prop === 'symbol') return undefined;
             return async function(...args) {
+                if (window._nativePywebviewApi && typeof window._nativePywebviewApi[prop] === 'function') {
+                    return await window._nativePywebviewApi[prop](...args);
+                }
                 const response = await fetch(`/api/${prop}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -139,12 +149,6 @@ if (!window.pywebview && window.location.protocol.startsWith('http')) {
                 return data.result;
             };
         }
-    });
-    window.pywebview = { api: efbApiProxy, isNetworkEfb: true };
-    window.addEventListener('DOMContentLoaded', () => {
-        setTimeout(() => {
-            window.dispatchEvent(new Event('pywebviewready'));
-        }, 60);
     });
 }
 

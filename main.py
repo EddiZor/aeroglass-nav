@@ -272,7 +272,7 @@ def main():
     threading.Thread(target=auto_resize_monitor_watcher, daemon=True).start()
 
     window.events.closed += lambda: api._telemetry.shutdown()
-    webview.start(debug=False)
+    webview.start(debug=True)
 
 
 if __name__ == "__main__":
