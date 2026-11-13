@@ -3,6 +3,18 @@ let currentThemeMode = localStorage.getItem('aeroglass_theme_mode') || 'dark';
 let tooltipsEnabled = (localStorage.getItem('aeroglass_tooltips') !== 'false');
 let currentUIMode = localStorage.getItem('aeroglass_ui_mode') || 'extended';
 
+// (Nota: sidebarOpen, drawerOpen e initialized sono già dichiarati in state.js, non vanno ridefiniti qui)
+
+window.currentLang = window.currentLang || 'it';
+window.followState = window.followState !== undefined ? window.followState : 1;
+window.showNavaids = window.showNavaids !== undefined ? window.showNavaids : true;
+window.vorsData = window.vorsData || [];
+window.ilsData = window.ilsData || [];
+window.airportsData = window.airportsData || [];
+window.EXTRA_AIRPORTS = window.EXTRA_AIRPORTS || [];
+window.flightPlan = window.flightPlan || [];
+window.currentAlternate = window.currentAlternate || null;
+
 function ensureUIModeButton() {
     if (document.getElementById('btnToggleUIMode')) return;
     const pillsGroup = document.querySelector('.top-pills-group');
@@ -49,11 +61,11 @@ async function applyUIMode(mode, persist = true) {
 
     if (persist) {
         if (mode === 'simple') {
-            if (typeof sidebarOpen !== 'undefined' && sidebarOpen) toggleSidebar();
-            if (typeof drawerOpen !== 'undefined' && drawerOpen) toggleDrawer();
+            if (sidebarOpen) toggleSidebar();
+            if (drawerOpen) toggleDrawer();
         } else {
-            if (typeof sidebarOpen !== 'undefined' && !sidebarOpen) toggleSidebar();
-            if (typeof drawerOpen !== 'undefined' && !drawerOpen) toggleDrawer();
+            if (!sidebarOpen) toggleSidebar();
+            if (!drawerOpen) toggleDrawer();
         }
     }
 
@@ -114,7 +126,6 @@ const SYNTHETIC_TOOLTIPS = {
         it: "◀/▶ Pannello FPL: Apri o chiudi la barra laterale del Piano di Volo",
         en: "◀/▶ FPL Sidebar: Expand or collapse the Flight Plan side panel"
     },
-    
     drawerToggleTab: {
         it: "▼/▲ Profilo VNAV: Apri o chiudi il grafico altimetrico e Top of Descent",
         en: "▼/▲ VNAV Profile: Expand or collapse vertical terrain & ToD chart"
@@ -126,6 +137,10 @@ const SYNTHETIC_TOOLTIPS = {
     aeroCompassWidget: {
         it: "🧭 Rosa dei Venti: Indica il Nord geografico (Clicca per orientamento North Up 360°)",
         en: "🧭 Compass Rose: Points to True North (Click to reset North Up 360°)"
+    },
+    btnToggleGroundMap: {
+        it: "🛫 Mappa Aeroporto (Taxiway & Parcheggi): Mostra/nascondi layout interno o zooma sull'aeroporto",
+        en: "🛫 Airport Ground Map (Taxiways & Parking): Toggle internal layout or zoom to active airport"
     }
 };
 
@@ -415,6 +430,7 @@ async function applyThemeMode(mode, persist = true) {
     ensureUIModeButton();
     ensureDrawerToggleTab();
     ensureCompassRoseWidget();
+    ensureGroundMapUI();
     applyUIMode(currentUIMode, false);
     initSyntheticTooltipsEngine();
 
@@ -433,6 +449,426 @@ function toggleThemeMode() {
     const order = ['dark', 'night', 'day'];
     const nextIdx = (order.indexOf(currentThemeMode) + 1) % order.length;
     applyThemeMode(order[nextIdx], true);
+}
+
+// --- 🛫 MOTORE MAPPA INTERNA AEROPORTI (TAXIWAYS, RUNWAYS & PARCHEGGI) ---
+let groundMapEnabled = true;
+let groundLayerGroup = null;
+let lastRenderedGroundKey = null;
+let groundFetchInProgress = false;
+const groundOsmCache = {};
+
+const CUSTOM_APT_LAYOUTS = {
+    LIKL: {
+        name: "Aviosuperficie La Comina (Pordenone)",
+        lat: 46.0019, lon: 12.6978,
+        runways: [
+            { ref: "36L/18R", width: 30, surface: "grass", coords: [[45.9968, 12.6969], [46.0070, 12.6969]] },
+            { ref: "36R/18L", width: 30, surface: "grass", coords: [[45.9968, 12.6986], [46.0070, 12.6986]] }
+        ],
+        taxiways: [
+            { ref: "TWY A", coords: [[45.9982, 12.6952], [45.9982, 12.6969], [45.9982, 12.6986]] },
+            { ref: "TWY B", coords: [[46.0015, 12.6952], [46.0015, 12.6969], [46.0015, 12.6986]] },
+            { ref: "TWY MAIN", coords: [[45.9975, 12.6952], [46.0035, 12.6952]] }
+        ],
+        aprons: [
+            [[45.9980, 12.6940], [45.9980, 12.6953], [46.0012, 12.6953], [46.0012, 12.6940]]
+        ],
+        stands: [
+            { ref: "P1", lat: 45.9986, lon: 12.6946 },
+            { ref: "P2", lat: 45.9993, lon: 12.6946 },
+            { ref: "P3", lat: 46.0000, lon: 12.6946 },
+            { ref: "P4", lat: 46.0007, lon: 12.6946 }
+        ]
+    },
+    LIPD: {
+        name: "Aeroporto di Udine-Campoformido",
+        lat: 46.0319, lon: 13.1869,
+        runways: [
+            { ref: "09/27", width: 35, surface: "grass", coords: [[46.0326, 13.1765], [46.0311, 13.1968]] }
+        ],
+        taxiways: [
+            { ref: "A", coords: [[46.0303, 13.1818], [46.0322, 13.1818]] },
+            { ref: "B", coords: [[46.0301, 13.1885], [46.0317, 13.1885]] }
+        ],
+        aprons: [
+            [[46.0295, 13.1808], [46.0295, 13.1842], [46.0305, 13.1842], [46.0305, 13.1808]]
+        ],
+        stands: [
+            { ref: "G1", lat: 46.0300, lon: 13.1815 },
+            { ref: "G2", lat: 46.0300, lon: 13.1825 },
+            { ref: "G3", lat: 46.0300, lon: 13.1835 }
+        ]
+    },
+    LITY: {
+        name: "Aviosuperficie di Agrigento",
+        lat: 37.2464, lon: 13.6697,
+        runways: [
+            { ref: "12/30", width: 20, surface: "asphalt", coords: [[37.2485, 13.6655], [37.2443, 13.6739]] }
+        ],
+        taxiways: [
+            { ref: "TWY A", coords: [[37.2466, 13.6693], [37.2458, 13.6685]] }
+        ],
+        aprons: [
+            [[37.2453, 13.6678], [37.2453, 13.6690], [37.2461, 13.6690], [37.2461, 13.6678]]
+        ],
+        stands: [
+            { ref: "P1", lat: 37.2457, lon: 13.6681 },
+            { ref: "P2", lat: 37.2457, lon: 13.6686 },
+            { ref: "P3", lat: 37.2455, lon: 13.6684 }
+        ]
+    }
+};
+
+function ensureGroundMapUI() {
+    if (typeof map === 'undefined' || !map) return;
+
+    if (!groundLayerGroup && typeof L !== 'undefined') {
+        groundLayerGroup = L.layerGroup().addTo(map);
+    }
+
+    if (!document.getElementById('aptGroundBadge')) {
+        const badge = document.createElement('div');
+        badge.id = 'aptGroundBadge';
+        badge.className = 'apt-ground-status-badge glass-panel';
+        badge.innerHTML = '<span>🛫 GROUND MAP</span> <span id="aptGroundName" style="color:#00d2ff;">---</span>';
+        document.body.appendChild(badge);
+    }
+
+    if (!document.getElementById('btnToggleGroundMap')) {
+        const pillsGroup = document.querySelector('.top-pills-group');
+        if (pillsGroup) {
+            const btn = document.createElement('button');
+            btn.id = 'btnToggleGroundMap';
+            btn.className = 'top-btn active';
+            btn.innerHTML = '🛫 <span>Taxi/Gate: ON</span>';
+            btn.onclick = (e) => {
+                if (e.shiftKey) {
+                    groundMapEnabled = !groundMapEnabled;
+                    btn.classList.toggle('active', groundMapEnabled);
+                    btn.innerHTML = groundMapEnabled ? '🛫 <span>Taxi/Gate: ON</span>' : '🛫 <span>Taxi/Gate: OFF</span>';
+                    if (!groundMapEnabled && groundLayerGroup) {
+                        groundLayerGroup.clearLayers();
+                        lastRenderedGroundKey = null;
+                        const b = document.getElementById('aptGroundBadge');
+                        if (b) b.style.display = 'none';
+                    } else {
+                        evaluateAirportGroundMap();
+                    }
+                    return;
+                }
+                zoomToClosestOrActiveAirport();
+            };
+            const navaidsBtn = document.getElementById('btnToggleNavaids');
+            if (navaidsBtn && navaidsBtn.parentNode === pillsGroup) {
+                pillsGroup.insertBefore(btn, navaidsBtn.nextSibling);
+            } else {
+                pillsGroup.appendChild(btn);
+            }
+        }
+    }
+
+    if (!map._groundMapHooked) {
+        map._groundMapHooked = true;
+        map.on('moveend zoomend', () => {
+            evaluateAirportGroundMap();
+        });
+        setTimeout(evaluateAirportGroundMap, 600);
+    }
+}
+
+function zoomToClosestOrActiveAirport() {
+    if (typeof map === 'undefined' || !map) return;
+    groundMapEnabled = true;
+    const btn = document.getElementById('btnToggleGroundMap');
+    if (btn) {
+        btn.classList.add('active');
+        btn.innerHTML = '🛫 <span>Taxi/Gate: ON</span>';
+    }
+
+    if (Array.isArray(flightPlan) && flightPlan.length > 0) {
+        const dep = flightPlan[0];
+        const arr = flightPlan[flightPlan.length - 1];
+        const c = map.getCenter();
+        const dDep = Math.hypot(c.lat - dep.lat, c.lng - dep.lon);
+        const dArr = Math.hypot(c.lat - arr.lat, c.lng - arr.lon);
+        const target = (dDep < 0.03 && arr) ? arr : dep;
+        map.setView([target.lat, target.lon], 15, { animate: true });
+        return;
+    }
+
+    if (map.getZoom() < 15) {
+        map.setZoom(15);
+    }
+}
+
+function findNearestAirportAtCenter(lat, lon) {
+    for (const [icao, data] of Object.entries(CUSTOM_APT_LAYOUTS)) {
+        if (Math.hypot(lat - data.lat, lon - data.lon) < 0.045) {
+            return { icao, name: data.name, lat: data.lat, lon: data.lon, custom: data };
+        }
+    }
+    if (Array.isArray(airportsData)) {
+        let best = null;
+        let minDist = 0.05;
+        for (const apt of airportsData) {
+            const d = Math.hypot(lat - apt.lat, lon - apt.lon);
+            if (d < minDist) {
+                minDist = d;
+                best = apt;
+            }
+        }
+        if (best) return best;
+    }
+    if (Array.isArray(flightPlan)) {
+        for (const wp of flightPlan) {
+            if (Math.hypot(lat - wp.lat, lon - wp.lon) < 0.045) {
+                return { icao: wp.icao || wp.id, name: wp.name || wp.icao, lat: wp.lat, lon: wp.lon };
+            }
+        }
+    }
+    return null;
+}
+
+async function evaluateAirportGroundMap() {
+    if (!groundMapEnabled || typeof map === 'undefined' || !map || !groundLayerGroup) return;
+
+    const zoom = map.getZoom();
+    const badge = document.getElementById('aptGroundBadge');
+    const badgeName = document.getElementById('aptGroundName');
+
+    if (zoom < 13.5) {
+        if (lastRenderedGroundKey !== null) {
+            groundLayerGroup.clearLayers();
+            lastRenderedGroundKey = null;
+        }
+        if (badge) badge.style.display = 'none';
+        return;
+    }
+
+    const center = map.getCenter();
+    const nearApt = findNearestAirportAtCenter(center.lat, center.lng);
+    const cacheKey = nearApt ? nearApt.icao : `${center.lat.toFixed(2)}_${center.lng.toFixed(2)}`;
+
+    if (lastRenderedGroundKey === cacheKey) return;
+    lastRenderedGroundKey = cacheKey;
+
+    if (badge && badgeName) {
+        badge.style.display = 'flex';
+        badgeName.innerText = nearApt ? `${nearApt.icao} - ${nearApt.name || 'GROUND CHART'}` : 'LOADING TAXI/GATES...';
+    }
+
+    if (nearApt && nearApt.custom) {
+        renderCustomAirportLayout(nearApt.custom);
+    } else if (nearApt && CUSTOM_APT_LAYOUTS[nearApt.icao]) {
+        renderCustomAirportLayout(CUSTOM_APT_LAYOUTS[nearApt.icao]);
+    }
+
+    const refLat = nearApt ? nearApt.lat : center.lat;
+    const refLon = nearApt ? nearApt.lon : center.lon;
+
+    if (groundOsmCache[cacheKey]) {
+        renderOsmAirportLayout(groundOsmCache[cacheKey], nearApt);
+        return;
+    }
+
+    if (groundFetchInProgress) return;
+    groundFetchInProgress = true;
+
+    try {
+        const delta = 0.032;
+        const bbox = `${(refLat - delta).toFixed(4)},${(refLon - delta).toFixed(4)},${(refLat + delta).toFixed(4)},${(refLon + delta).toFixed(4)}`;
+        const query = `[out:json][timeout:10];(way["aeroway"~"runway|taxiway|apron|taxilane"](${bbox});node["aeroway"~"parking_position|gate|holding_position"](${bbox}););out body geom;`;
+        const res = await fetch('https://overpass-api.de/api/interpreter', {
+            method: 'POST',
+            body: 'data=' + encodeURIComponent(query)
+        });
+        if (res.ok) {
+            const data = await res.json();
+            if (data && Array.isArray(data.elements) && data.elements.length > 0) {
+                groundOsmCache[cacheKey] = data.elements;
+                if (lastRenderedGroundKey === cacheKey) {
+                    renderOsmAirportLayout(data.elements, nearApt);
+                }
+            }
+        }
+    } catch (e) {
+    } finally {
+        groundFetchInProgress = false;
+    }
+}
+
+function renderCustomAirportLayout(layout) {
+    if (!groundLayerGroup || !layout) return;
+    groundLayerGroup.clearLayers();
+
+    (layout.aprons || []).forEach(poly => {
+        L.polygon(poly, {
+            color: '#475569',
+            weight: 1,
+            fillColor: '#1e293b',
+            fillOpacity: 0.55,
+            interactive: false
+        }).addTo(groundLayerGroup);
+    });
+
+    (layout.taxiways || []).forEach(twy => {
+        L.polyline(twy.coords, {
+            color: '#f59e0b',
+            weight: 4,
+            opacity: 0.85
+        }).addTo(groundLayerGroup);
+
+        if (twy.ref && twy.coords.length >= 2) {
+            const mid = twy.coords[Math.floor(twy.coords.length / 2)];
+            L.marker(mid, {
+                icon: L.divIcon({
+                    className: 'apt-twy-label',
+                    html: twy.ref,
+                    iconSize: null
+                }),
+                interactive: false
+            }).addTo(groundLayerGroup);
+        }
+    });
+
+    (layout.runways || []).forEach(rwy => {
+        const isGrass = rwy.surface === 'grass';
+        L.polyline(rwy.coords, {
+            color: isGrass ? '#15803d' : '#334155',
+            weight: 14,
+            opacity: 0.92,
+            lineCap: 'butt'
+        }).addTo(groundLayerGroup);
+
+        L.polyline(rwy.coords, {
+            color: isGrass ? '#86efac' : '#f8fafc',
+            weight: 1.5,
+            dashArray: '8, 8',
+            opacity: 0.85
+        }).addTo(groundLayerGroup);
+
+        if (rwy.ref && rwy.coords.length >= 2) {
+            const parts = rwy.ref.split('/');
+            L.marker(rwy.coords[0], {
+                icon: L.divIcon({ className: 'apt-rwy-thr-label', html: parts[0] || rwy.ref, iconSize: null }),
+                interactive: false
+            }).addTo(groundLayerGroup);
+            if (parts[1]) {
+                L.marker(rwy.coords[rwy.coords.length - 1], {
+                    icon: L.divIcon({ className: 'apt-rwy-thr-label', html: parts[1], iconSize: null }),
+                    interactive: false
+                }).addTo(groundLayerGroup);
+            }
+        }
+    });
+
+    (layout.stands || []).forEach(st => {
+        const m = L.marker([st.lat, st.lon], {
+            icon: L.divIcon({
+                className: 'apt-stand-marker',
+                html: st.ref,
+                iconSize: [24, 24]
+            })
+        }).addTo(groundLayerGroup);
+        m.bindTooltip(`🅿️ Parcheggio / Stand <b>${st.ref}</b><br><span style="font-size:10px;color:#94a3b8;">Lat: ${st.lat.toFixed(5)} Lon: ${st.lon.toFixed(5)}</span>`, {
+            direction: 'top',
+            className: 'vnav-route-tooltip'
+        });
+    });
+}
+
+function renderOsmAirportLayout(elements, nearApt) {
+    if (!groundLayerGroup || !Array.isArray(elements)) return;
+    if (!nearApt || !CUSTOM_APT_LAYOUTS[nearApt.icao]) {
+        groundLayerGroup.clearLayers();
+    }
+
+    const shownTwyLabels = new Set();
+
+    elements.filter(el => el.type === 'way' && el.tags?.aeroway === 'apron' && el.geometry).forEach(el => {
+        const latlngs = el.geometry.map(pt => [pt.lat, pt.lon]);
+        L.polygon(latlngs, {
+            color: '#475569',
+            weight: 1,
+            fillColor: '#1e293b',
+            fillOpacity: 0.5,
+            interactive: false
+        }).addTo(groundLayerGroup);
+    });
+
+    elements.filter(el => el.type === 'way' && (el.tags?.aeroway === 'taxiway' || el.tags?.aeroway === 'taxilane') && el.geometry).forEach(el => {
+        const latlngs = el.geometry.map(pt => [pt.lat, pt.lon]);
+        const isLane = el.tags.aeroway === 'taxilane';
+        L.polyline(latlngs, {
+            color: isLane ? '#eab308' : '#f59e0b',
+            weight: isLane ? 2.2 : 3.8,
+            opacity: 0.85,
+            dashArray: isLane ? '4, 4' : null
+        }).addTo(groundLayerGroup);
+
+        const ref = el.tags.ref || el.tags.name;
+        if (ref && latlngs.length >= 2 && !shownTwyLabels.has(ref)) {
+            shownTwyLabels.add(ref);
+            const mid = latlngs[Math.floor(latlngs.length / 2)];
+            L.marker(mid, {
+                icon: L.divIcon({
+                    className: 'apt-twy-label',
+                    html: ref,
+                    iconSize: null
+                }),
+                interactive: false
+            }).addTo(groundLayerGroup);
+        }
+    });
+
+    elements.filter(el => el.type === 'way' && el.tags?.aeroway === 'runway' && el.geometry).forEach(el => {
+        const latlngs = el.geometry.map(pt => [pt.lat, pt.lon]);
+        const isGrass = (el.tags.surface || '').includes('grass') || (el.tags.surface || '').includes('turf');
+        L.polyline(latlngs, {
+            color: isGrass ? '#15803d' : '#334155',
+            weight: 14,
+            opacity: 0.92,
+            lineCap: 'butt'
+        }).addTo(groundLayerGroup);
+
+        L.polyline(latlngs, {
+            color: isGrass ? '#86efac' : '#f8fafc',
+            weight: 1.5,
+            dashArray: '8, 8',
+            opacity: 0.88
+        }).addTo(groundLayerGroup);
+
+        const ref = el.tags.ref;
+        if (ref && latlngs.length >= 2) {
+            const parts = ref.split('/');
+            L.marker(latlngs[0], {
+                icon: L.divIcon({ className: 'apt-rwy-thr-label', html: parts[0] || ref, iconSize: null }),
+                interactive: false
+            }).addTo(groundLayerGroup);
+            if (parts[1]) {
+                L.marker(latlngs[latlngs.length - 1], {
+                    icon: L.divIcon({ className: 'apt-rwy-thr-label', html: parts[1], iconSize: null }),
+                    interactive: false
+                }).addTo(groundLayerGroup);
+            }
+        }
+    });
+
+    elements.filter(el => el.type === 'node' && (el.tags?.aeroway === 'parking_position' || el.tags?.aeroway === 'gate')).forEach(el => {
+        const ref = el.tags.ref || el.tags.name || 'P';
+        const m = L.marker([el.lat, el.lon], {
+            icon: L.divIcon({
+                className: 'apt-stand-marker',
+                html: ref,
+                iconSize: [23, 23]
+            })
+        }).addTo(groundLayerGroup);
+        m.bindTooltip(`🅿️ Stand / Gate <b>${ref}</b><br><span style="font-size:10px;color:#94a3b8;">Lat: ${el.lat.toFixed(5)} Lon: ${el.lon.toFixed(5)}</span>`, {
+            direction: 'top',
+            className: 'vnav-route-tooltip'
+        });
+    });
 }
 
 // --- HOOKS DI COLLEGAMENTO UI (VNAV ToD, NAVLOG, TOUCH) ---
@@ -517,6 +953,7 @@ function toggleDrawer() {
 }
 
 function applyTranslations() {
+    if (typeof translations === 'undefined') return;
     const t = translations[currentLang];
     if (!t) return;
 
@@ -524,27 +961,29 @@ function applyTranslations() {
     if (langLabel) langLabel.innerText = currentLang.toUpperCase();
 
     const omniSearch = document.getElementById('omniSearch');
-    if (omniSearch) omniSearch.placeholder = t.searchPlaceholder;
+    if (omniSearch) omniSearch.placeholder = t.searchPlaceholder || '';
 
     const fplTitle = document.getElementById('fplSectionTitle');
-    if (fplTitle) fplTitle.innerText = t.activeFpl.toUpperCase();
+    if (fplTitle) fplTitle.innerText = (t.activeFpl || '').toUpperCase();
 
     const lblFilters = document.getElementById('lblFilters');
-    if (lblFilters) lblFilters.innerText = t.btnFilters;
+    if (lblFilters) lblFilters.innerText = t.btnFilters || '';
 
     const lblReduce = document.getElementById('lblReduceExpand');
-    if (lblReduce) lblReduce.innerText = t.btnReduce;
+    if (lblReduce) lblReduce.innerText = t.btnReduce || '';
 
     const btnNavaids = document.getElementById('btnToggleNavaids');
-    if (btnNavaids) btnNavaids.innerText = showNavaids ? t.btnNavaids : t.btnNavaidsOff;
+    if (btnNavaids) btnNavaids.innerText = (typeof showNavaids !== 'undefined' && showNavaids) ? (t.btnNavaids || '') : (t.btnNavaidsOff || '');
 
-    setFollowState(followState);
+    if (typeof setFollowState === 'function' && typeof followState !== 'undefined') {
+        setFollowState(followState);
+    }
     updateThemeButtonUI();
     updateTooltipButtonUI();
 
     const vnavText = document.getElementById('vnavText');
-    if (vnavText && (!flightPlan || flightPlan.length === 0)) {
-        vnavText.innerText = t.noFpl.toUpperCase();
+    if (vnavText && (!window.flightPlan || window.flightPlan.length === 0)) {
+        vnavText.innerText = (t.noFpl || '').toUpperCase();
     }
 }
 
@@ -590,7 +1029,9 @@ function initDragAndDropPln() {
         if (files && files.length > 0) {
             const reader = new FileReader();
             reader.onload = async (ev) => {
-                if (ev.target?.result) await processAndRenderPlnXml(ev.target.result);
+                if (ev.target?.result && typeof processAndRenderPlnXml === 'function') {
+                    await processAndRenderPlnXml(ev.target.result);
+                }
             };
             reader.readAsText(files[0]);
         }
@@ -607,10 +1048,10 @@ async function initAeroGlassApp() {
     if (initialized) return;
     initialized = true;
 
-    updateFlightInfoBar(43.5, 12.0);
-    setFollowState(followState);
-    renderNavAids(vorsData, ilsData);
-    updateMapScale();
+    if (typeof updateFlightInfoBar === 'function') updateFlightInfoBar(43.5, 12.0);
+    if (typeof setFollowState === 'function') setFollowState(followState);
+    if (typeof renderNavAids === 'function') renderNavAids(vorsData, ilsData);
+    if (typeof updateMapScale === 'function') updateMapScale();
 
     try {
         if (window.pywebview.api.get_setting) {
@@ -631,7 +1072,7 @@ async function initAeroGlassApp() {
         const initData = await window.pywebview.api.get_initial_data();
         if (initData) {
             if (initData.fpl_ts) window._lastFplTs = initData.fpl_ts;
-            if (initData.efb_info) updateEfbTopBarBadge(initData.efb_info);
+            if (initData.efb_info && typeof updateEfbTopBarBadge === 'function') updateEfbTopBarBadge(initData.efb_info);
             else if (typeof refreshEfbBadgeFromBackend === 'function') await refreshEfbBadgeFromBackend();
 
             if (initData.airports && initData.airports.length > 0) airportsData = [...initData.airports, ...EXTRA_AIRPORTS];
@@ -641,22 +1082,23 @@ async function initAeroGlassApp() {
             if (initData.simbrief_id) {
                 const sbInput = document.getElementById('simbriefIdInput');
                 if (sbInput) sbInput.value = initData.simbrief_id;
-                setSimbriefCompactMode(true);
+                if (typeof setSimbriefCompactMode === 'function') setSimbriefCompactMode(true);
             }
             if (initData.flight_plan && Array.isArray(initData.flight_plan) && initData.flight_plan.length > 0) {
                 flightPlan = initData.flight_plan;
                 currentAlternate = initData.alternate || null;
-                updateFlightPlanUI(currentAlternate, true);
+                if (typeof updateFlightPlanUI === 'function') updateFlightPlanUI(currentAlternate, true);
             }
-            renderNavAids(vorsData, ilsData);
+            if (typeof renderNavAids === 'function') renderNavAids(vorsData, ilsData);
         }
-        await loadUserWaypoints();
+        if (typeof loadUserWaypoints === 'function') await loadUserWaypoints();
+        ensureGroundMapUI();
     } catch (e) {}
 
     if (typeof updateTopOfDescentOverlay === 'function') setTimeout(updateTopOfDescentOverlay, 250);
 
     setInterval(() => {
-        if (!window._demoTourActive) pollTelemetry();
+        if (!window._demoTourActive && typeof pollTelemetry === 'function') pollTelemetry();
         if (typeof updateTodHeaderStatus === 'function') updateTodHeaderStatus();
     }, 1000);
 
@@ -674,21 +1116,21 @@ document.addEventListener('DOMContentLoaded', () => {
     installTodAndTouchHooks();
     applyThemeMode(currentThemeMode, false);
     applyTooltipsMode(tooltipsEnabled, false);
-    updateFlightInfoBar(43.5, 12.0);
-    setFollowState(followState);
-    renderNavAids(vorsData, ilsData);
-    updateMapScale();
+    if (typeof updateFlightInfoBar === 'function') updateFlightInfoBar(43.5, 12.0);
+    if (typeof setFollowState === 'function') setFollowState(followState);
+    if (typeof renderNavAids === 'function') renderNavAids(vorsData, ilsData);
+    ensureGroundMapUI();
+    if (typeof updateMapScale === 'function') updateMapScale();
 
     window.addEventListener('click', (event) => {
-        if (event.target.id === 'createFplModal') closeCreateFplModal();
-        else if (event.target.id === 'flightHistoryModal') closeFlightHistoryModal();
-        else if (event.target.id === 'efbNetworkModal') closeEfbNetworkModal();
-        else if (event.target.id === 'navlogModal') closeNavlogModal();
-        else if (event.target.id === 'fuelPerfModal') closeFuelPerfModal();
+        if (event.target.id === 'createFplModal' && typeof closeCreateFplModal === 'function') closeCreateFplModal();
+        else if (event.target.id === 'flightHistoryModal' && typeof closeFlightHistoryModal === 'function') closeFlightHistoryModal();
+        else if (event.target.id === 'efbNetworkModal' && typeof closeEfbNetworkModal === 'function') closeEfbNetworkModal();
+        else if (event.target.id === 'navlogModal' && typeof closeNavlogModal === 'function') closeNavlogModal();
+        else if (event.target.id === 'fuelPerfModal' && typeof closeFuelPerfModal === 'function') closeFuelPerfModal();
     });
 
     setTimeout(initAeroGlassApp, 300);
 });
 
 window.addEventListener('pywebviewready', initAeroGlassApp);
-
