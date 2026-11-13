@@ -1,6 +1,73 @@
 // --- MODALITÀ TEMA VISIVO (☀️ GIORNO / 🌙 DARK / 🌑 NOTTE) & TOOLTIP SINTETICI ---
 let currentThemeMode = localStorage.getItem('aeroglass_theme_mode') || 'dark';
 let tooltipsEnabled = (localStorage.getItem('aeroglass_tooltips') !== 'false');
+let currentUIMode = localStorage.getItem('aeroglass_ui_mode') || 'extended';
+
+function ensureUIModeButton() {
+    if (document.getElementById('btnToggleUIMode')) return;
+    const pillsGroup = document.querySelector('.top-pills-group');
+    if (!pillsGroup) return;
+
+    const btn = document.createElement('button');
+    btn.id = 'btnToggleUIMode';
+    btn.className = 'top-btn';
+    btn.onclick = toggleUIMode;
+    btn.style.justifyContent = 'center';
+
+    const themeBtn = document.getElementById('btnThemeMode');
+    if (themeBtn && themeBtn.parentNode === pillsGroup) {
+        pillsGroup.insertBefore(btn, themeBtn);
+    } else {
+        pillsGroup.appendChild(btn);
+    }
+    updateUIModeButtonUI();
+}
+
+function updateUIModeButtonUI() {
+    const btn = document.getElementById('btnToggleUIMode');
+    if (!btn) return;
+    const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+
+    if (currentUIMode === 'simple') {
+        btn.innerHTML = isEn ? '🎛️ <span>Simple</span>' : '🎛️ <span>Semplice</span>';
+        btn.style.borderColor = 'rgba(0, 210, 255, 0.65)';
+        btn.style.color = '#00d2ff';
+    } else {
+        btn.innerHTML = isEn ? '🎛️ <span>Extended</span>' : '🎛️ <span>Estesa</span>';
+        btn.style.borderColor = 'rgba(139, 148, 158, 0.35)';
+        btn.style.color = '#8b949e';
+    }
+}
+
+async function applyUIMode(mode, persist = true) {
+    if (!['extended', 'simple'].includes(mode)) mode = 'extended';
+    currentUIMode = mode;
+
+    ensureUIModeButton();
+    document.body.classList.toggle('mode-simple', mode === 'simple');
+    updateUIModeButtonUI();
+
+    if (persist) {
+        if (mode === 'simple') {
+            if (typeof sidebarOpen !== 'undefined' && sidebarOpen) toggleSidebar();
+            if (typeof drawerOpen !== 'undefined' && drawerOpen) toggleDrawer();
+        } else {
+            if (typeof sidebarOpen !== 'undefined' && !sidebarOpen) toggleSidebar();
+            if (typeof drawerOpen !== 'undefined' && !drawerOpen) toggleDrawer();
+        }
+    }
+
+    try { localStorage.setItem('aeroglass_ui_mode', mode); } catch (e) {}
+
+    if (persist && window.pywebview && window.pywebview.api && window.pywebview.api.save_setting) {
+        try { await window.pywebview.api.save_setting('ui_mode', mode); } catch (e) {}
+    }
+}
+
+function toggleUIMode() {
+    const nextMode = (currentUIMode === 'extended') ? 'simple' : 'extended';
+    applyUIMode(nextMode, true);
+}
 
 const SYNTHETIC_TOOLTIPS = {
     btnEfbNet: {
@@ -47,9 +114,18 @@ const SYNTHETIC_TOOLTIPS = {
         it: "◀/▶ Pannello FPL: Apri o chiudi la barra laterale del Piano di Volo",
         en: "◀/▶ FPL Sidebar: Expand or collapse the Flight Plan side panel"
     },
+    
     drawerToggleTab: {
         it: "▼/▲ Profilo VNAV: Apri o chiudi il grafico altimetrico e Top of Descent",
         en: "▼/▲ VNAV Profile: Expand or collapse vertical terrain & ToD chart"
+    },
+    btnToggleUIMode: {
+        it: "🎛️ Vista Interfaccia: Passa tra Modalità Estesa (Completa) e Semplificata (Minimal)",
+        en: "🎛️ UI Mode: Switch between Extended (Full) and Simplified (Minimal) view"
+    },
+    aeroCompassWidget: {
+        it: "🧭 Rosa dei Venti: Indica il Nord geografico (Clicca per orientamento North Up 360°)",
+        en: "🧭 Compass Rose: Points to True North (Click to reset North Up 360°)"
     }
 };
 
@@ -168,7 +244,7 @@ function initSyntheticTooltipsEngine() {
             tipBox.classList.remove('visible');
             return;
         }
-        const target = e.target.closest('button, select, input, #sidebarToggleTab, #drawerToggleTab, .top-btn, .btn');
+        const target = e.target.closest('button, select, input, #sidebarToggleTab, #drawerToggleTab, #aeroCompassWidget, .top-btn, .btn');
         const text = target ? resolveSyntheticTooltip(target) : null;
         if (!text) {
             activeEl = null;
@@ -203,11 +279,90 @@ function ensureDrawerToggleTab() {
     if (!tab) {
         tab = document.createElement('div');
         tab.id = 'drawerToggleTab';
-        tab.onclick = toggleDrawer;
+        tab.onclick = (e) => {
+            e.stopPropagation();
+            toggleDrawer();
+        };
         tab.style.cssText = 'position:absolute;top:-24px;left:50%;transform:translateX(-50%);background:var(--glass-bg);border:1px solid var(--glass-border);border-bottom:none;border-radius:8px 8px 0 0;padding:3px 16px;font-size:10px;font-weight:700;color:var(--cyan);cursor:pointer;display:flex;align-items:center;gap:5px;box-shadow:0 -4px 12px rgba(0,0,0,0.4);';
         tab.innerHTML = `<span id="drawerArrow">${drawerOpen ? '▼' : '▲'}</span> <span>ALT</span>`;
         drawer.appendChild(tab);
     }
+}
+
+function ensureCompassRoseWidget() {
+    if (!document.body) return;
+    let widget = document.getElementById('aeroCompassWidget');
+    if (widget) return;
+
+    widget = document.createElement('div');
+    widget.id = 'aeroCompassWidget';
+    widget.className = 'compass-rose-widget glass-panel';
+    widget.style.cssText = 'position:fixed;top:56px;right:18px;width:72px;height:72px;z-index:1500;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;pointer-events:auto;background:rgba(18,23,31,0.92);border:1.5px solid rgba(0,210,255,0.45);box-shadow:0 8px 24px rgba(0,0,0,0.65);backdrop-filter:blur(12px);';
+
+    widget.innerHTML = `
+        <svg id="compassRoseDial" style="width:62px;height:62px;transform-origin:center center;transition:transform 0.15s linear;" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="46" fill="none" stroke="rgba(139, 148, 158, 0.45)" stroke-width="1.5"/>
+            <circle cx="50" cy="50" r="39" fill="none" stroke="rgba(0, 210, 255, 0.25)" stroke-width="1" stroke-dasharray="2,4"/>
+            <line x1="50" y1="4" x2="50" y2="13" stroke="#f85149" stroke-width="2.8"/>
+            <line x1="96" y1="50" x2="87" y2="50" stroke="#8b949e" stroke-width="2"/>
+            <line x1="50" y1="96" x2="50" y2="87" stroke="#8b949e" stroke-width="2"/>
+            <line x1="4" y1="50" x2="13" y2="50" stroke="#8b949e" stroke-width="2"/>
+            <line x1="82.5" y1="17.5" x2="77.5" y2="22.5" stroke="#8b949e" stroke-width="1.2"/>
+            <line x1="82.5" y1="82.5" x2="77.5" y2="77.5" stroke="#8b949e" stroke-width="1.2"/>
+            <line x1="17.5" y1="82.5" x2="22.5" y2="77.5" stroke="#8b949e" stroke-width="1.2"/>
+            <line x1="17.5" y1="17.5" x2="22.5" y2="22.5" stroke="#8b949e" stroke-width="1.2"/>
+            <polygon points="50,17 44,50 50,44 56,50" fill="#f85149"/>
+            <polygon points="50,83 44,50 50,56 56,50" fill="rgba(139, 148, 158, 0.6)"/>
+            <circle cx="50" cy="50" r="3.2" fill="#00d2ff"/>
+            <text x="50" y="27" text-anchor="middle" fill="#f85149" font-family="Consolas, monospace" font-size="11.5" font-weight="900">N</text>
+            <text x="76" y="53.5" text-anchor="middle" fill="#cbd5e1" font-family="Consolas, monospace" font-size="9.5" font-weight="700">E</text>
+            <text x="50" y="79" text-anchor="middle" fill="#cbd5e1" font-family="Consolas, monospace" font-size="9.5" font-weight="700">S</text>
+            <text x="24" y="53.5" text-anchor="middle" fill="#cbd5e1" font-family="Consolas, monospace" font-size="9.5" font-weight="700">W</text>
+        </svg>
+        <div id="compassHdgReadout" style="position:absolute;bottom:-18px;background:rgba(15,23,42,0.95);border:1px solid rgba(0,210,255,0.45);color:#00d2ff;font-family:Consolas,monospace;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:4px;letter-spacing:0.5px;pointer-events:none;box-shadow:0 4px 10px rgba(0,0,0,0.5);">360°</div>
+    `;
+
+    document.body.appendChild(widget);
+
+    const dial = document.getElementById('compassRoseDial');
+    const readout = document.getElementById('compassHdgReadout');
+
+    window.updateCompassRose = function(mapRotDeg) {
+        if (!dial || !readout) return;
+        dial.style.transform = `rotate(${mapRotDeg}deg)`;
+        let hdg = Math.round((-mapRotDeg % 360 + 360) % 360);
+        if (hdg === 0) hdg = 360;
+        readout.textContent = `${String(hdg).padStart(3, '0')}°`;
+    };
+
+    const syncCompass = () => {
+        const mapEl = document.getElementById('map');
+        if (!mapEl) return;
+        const style = mapEl.style.transform || '';
+        const match = style.match(/rotate\(([-\d.]+)deg\)/);
+        let deg = match ? parseFloat(match[1]) : 0;
+        if (deg === 0 && typeof currentMapRotation !== 'undefined') {
+            deg = currentMapRotation;
+        }
+        window.updateCompassRose(deg);
+    };
+
+    const mapEl = document.getElementById('map');
+    if (mapEl) {
+        const observer = new MutationObserver(syncCompass);
+        observer.observe(mapEl, { attributes: true, attributeFilter: ['style'] });
+    }
+    setInterval(syncCompass, 250);
+    syncCompass();
+
+    widget.addEventListener('click', () => {
+        if (typeof setFollowState === 'function') {
+            setFollowState(1);
+        }
+        const m = document.getElementById('map');
+        if (m) m.style.transform = 'rotate(0deg)';
+        window.updateCompassRose(0);
+    });
 }
 
 function ensureThemeToggleButton() {
@@ -257,7 +412,10 @@ async function applyThemeMode(mode, persist = true) {
 
     ensureThemeToggleButton();
     ensureTooltipToggleButton();
+    ensureUIModeButton();
     ensureDrawerToggleTab();
+    ensureCompassRoseWidget();
+    applyUIMode(currentUIMode, false);
     initSyntheticTooltipsEngine();
 
     document.body.classList.remove('theme-dark', 'theme-night', 'theme-day');
@@ -284,6 +442,7 @@ function installTodAndTouchHooks() {
 
     if (typeof ensureNavlogAndFuelUI === 'function') ensureNavlogAndFuelUI();
     ensureDrawerToggleTab();
+    ensureCompassRoseWidget();
     ensureTooltipToggleButton();
     initSyntheticTooltipsEngine();
     if (typeof initDemoKeyboardShortcuts === 'function') initDemoKeyboardShortcuts();
@@ -336,12 +495,25 @@ function toggleDrawer() {
     const drawer = document.getElementById('elevationDrawer');
     const arrow = document.getElementById('drawerArrow');
     const infoBar = document.getElementById('bottomInfoBar');
+    const sidebar = document.getElementById('sidebarPanel');
     if (!drawer) return;
 
     drawerOpen = !drawerOpen;
     drawer.classList.toggle('collapsed', !drawerOpen);
+
+    if (drawerOpen) {
+        drawer.style.setProperty('height', '108px', 'important');
+        const canvasBox = drawer.querySelector('.elevation-canvas-container');
+        if (canvasBox) canvasBox.style.display = '';
+    } else {
+        drawer.style.setProperty('height', '32px', 'important');
+        const canvasBox = drawer.querySelector('.elevation-canvas-container');
+        if (canvasBox) canvasBox.style.display = 'none';
+    }
+
     if (arrow) arrow.innerText = drawerOpen ? '▼' : '▲';
-    if (infoBar) infoBar.style.bottom = drawerOpen ? '134px' : '36px';
+    if (infoBar) infoBar.style.bottom = drawerOpen ? '134px' : '56px';
+    if (sidebar) sidebar.style.bottom = drawerOpen ? '134px' : '56px';
 }
 
 function applyTranslations() {
@@ -519,3 +691,4 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 window.addEventListener('pywebviewready', initAeroGlassApp);
+

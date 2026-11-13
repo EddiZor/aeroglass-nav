@@ -1,14 +1,29 @@
 :root {
-    --bg-dark: #0f172a;
-    --glass-bg: rgba(15, 23, 42, 0.86);
-    --glass-border: rgba(56, 189, 248, 0.25);
-    --cyan: #38bdf8;
-    --emerald: #34d399;
-    --purple: #e879f9;
-    --amber: #fbbf24;
-    --danger: #f43f5e;
-    --text-main: #f8fafc;
-    --text-muted: #94a3b8;
+    --bg-dark: #090d13;
+    --bg-main: #0d1117;
+    --bg-panel: #161b22;
+    --glass-bg: rgba(18, 23, 31, 0.90);
+    --glass-border: rgba(48, 54, 61, 0.85);
+    --border-color: #30363d;
+    --accent-blue: #00d2ff;
+    --cyan: #00d2ff;
+    --emerald: #2ea043;
+    --amber: #fca311;
+    --purple: #e040fb;
+    --danger: #f85149;
+    --text-main: #f0f6fc;
+    --text-muted: #8b949e;
+    --nav-bg: #0d1117;
+    --nav-panel: #161b22;
+    --nav-panel-glass: rgba(18, 23, 31, 0.90);
+    --nav-border: #30363d;
+    --nav-border-focus: #58a6ff;
+    --nav-cyan: #00d2ff;
+    --nav-amber: #fca311;
+    --nav-green: #2ea043;
+    --nav-magenta: #e040fb;
+    --font-mono: 'JetBrains Mono', 'Consolas', monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 * {
@@ -41,15 +56,33 @@ body, html {
 }
 
 .map-dark-filter .leaflet-tile-pane {
-    filter: invert(100%) hue-rotate(180deg) brightness(92%) contrast(90%);
+    filter: invert(100%) hue-rotate(180deg) brightness(88%) contrast(96%) saturate(85%);
+}
+
+.leaflet-interactive.route-line {
+    stroke: var(--nav-cyan);
+    stroke-width: 3.5px;
+    stroke-linecap: round;
+}
+
+.leaflet-interactive.route-line-active {
+    stroke: var(--nav-magenta);
+    stroke-width: 4px;
+    stroke-linecap: round;
+}
+
+.leaflet-interactive.route-line-inactive {
+    stroke: var(--text-muted);
+    stroke-width: 2px;
+    stroke-dasharray: 4, 6;
 }
 
 .glass-panel {
     background: var(--glass-bg);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
     border: 1px solid var(--glass-border);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
 }
 
 /* Barra superiore controlli e telemetria */
@@ -75,38 +108,38 @@ body, html {
 }
 
 .top-btn {
-    background: rgba(15, 23, 42, 0.88);
-    border: 1px solid rgba(56, 189, 248, 0.4);
+    background: var(--nav-panel-glass);
+    border: 1px solid var(--nav-border);
     color: var(--text-main);
-    padding: 6px 13px;
-    border-radius: 20px;
-    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 11.5px;
     font-weight: 600;
     display: inline-flex;
     align-items: center;
     gap: 6px;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.15s ease;
 }
 
 .top-btn:hover {
     border-color: var(--cyan);
-    background: rgba(56, 189, 248, 0.16);
+    background: rgba(0, 210, 255, 0.12);
 }
 
 .top-btn.active {
-    background: rgba(16, 185, 129, 0.22);
+    background: rgba(46, 160, 67, 0.22);
     border-color: var(--emerald);
-    color: var(--emerald);
+    color: #3fb950;
 }
 
 .top-select {
-    background: rgba(15, 23, 42, 0.88);
-    border: 1px solid rgba(56, 189, 248, 0.4);
+    background: var(--nav-panel-glass);
+    border: 1px solid var(--nav-border);
     color: var(--text-main);
     padding: 6px 12px;
-    border-radius: 20px;
-    font-size: 12px;
+    border-radius: 6px;
+    font-size: 11.5px;
     font-weight: 600;
     outline: none;
     cursor: pointer;
@@ -114,7 +147,7 @@ body, html {
 
 .telemetry-bar {
     padding: 6px 14px;
-    border-radius: 20px;
+    border-radius: 6px;
     font-size: 12px;
     gap: 10px;
 }
@@ -284,18 +317,29 @@ body, html {
 
 .wpt-card {
     flex-shrink: 0;
-    background: rgba(30, 41, 59, 0.55);
-    border: 1px solid rgba(148, 163, 184, 0.16);
-    border-radius: 8px;
+    background: #161b22;
+    border: 1px solid var(--nav-border);
+    border-left: 3px solid var(--cyan);
+    border-radius: 6px;
     padding: 8px 10px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: all 0.15s ease;
 }
-.wpt-card:hover { border-color: var(--cyan); background: rgba(56, 189, 248, 0.08); }
-.wpt-card.apt-endpoint { border-left: 3px solid var(--emerald); }
+.wpt-card:hover {
+    border-color: var(--nav-border-focus);
+    background: #1f242c;
+}
+.wpt-card.apt-endpoint {
+    border-left: 3px solid var(--emerald);
+    background: rgba(46, 160, 67, 0.06);
+}
+.wpt-card.active-wpt {
+    border-left: 3px solid var(--nav-magenta);
+    background: rgba(224, 64, 251, 0.08);
+}
 
 .wpt-icao { font-size: 13px; font-weight: 700; color: var(--cyan); }
 .wpt-name { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
@@ -401,7 +445,15 @@ body, html {
     overflow: hidden;
     transition: height 0.25s ease;
 }
-.elevation-drawer.collapsed { height: 32px; }
+.elevation-drawer.collapsed,
+#elevationDrawer.collapsed {
+    height: 32px !important;
+}
+
+.elevation-drawer.collapsed .elevation-canvas-container,
+#elevationDrawer.collapsed .elevation-canvas-container {
+    display: none;
+}
 
 .elevation-header {
     position: relative;
@@ -773,4 +825,75 @@ body.theme-day .leaflet-tile-pane {
     background: rgba(251, 191, 36, 0.18);
     border-color: rgba(251, 191, 36, 0.55);
     color: #fbbf24;
+}
+
+/* 🎯 MODALITÀ SEMPLIFICATA (MINIMAL VFR/IFR VIEW) */
+body.mode-simple .procedures-dropdown,
+body.mode-simple .user-wp-form,
+body.mode-simple .simbrief-box {
+    display: none !important;
+}
+
+body.mode-simple .top-pills-group .top-btn:not(#btnToggleUIMode):not(#btnThemeMode):not(#btnFollowAcft):not(#btnToggleNavaids) {
+    display: none !important;
+}
+
+/* 🧭 ROSA DEI VENTI DINAMICA (BUSSOLA NAVIGRAPH) */
+.compass-rose-widget {
+    position: absolute;
+    top: 58px;
+    right: 16px;
+    width: 68px;
+    height: 68px;
+    z-index: 500;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: border-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+}
+
+.compass-rose-widget:hover {
+    border-color: var(--cyan);
+    box-shadow: 0 0 16px rgba(0, 210, 255, 0.28);
+    transform: scale(1.04);
+}
+
+.compass-rose-svg {
+    width: 58px;
+    height: 58px;
+    transform-origin: center center;
+    transition: transform 0.12s linear;
+    will-change: transform;
+}
+
+.compass-hdg-readout {
+    position: absolute;
+    bottom: -19px;
+    background: var(--nav-panel-glass);
+    border: 1px solid var(--nav-border);
+    color: var(--cyan);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+    pointer-events: none;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
+}
+
+body.theme-day .compass-rose-widget,
+body.theme-day .compass-hdg-readout {
+    background: rgba(248, 250, 252, 0.94) !important;
+    border-color: rgba(15, 23, 42, 0.22) !important;
+    color: #0284c7 !important;
+}
+
+body.theme-night .compass-rose-widget,
+body.theme-night .compass-hdg-readout {
+    background: rgba(4, 8, 16, 0.94) !important;
+    border-color: rgba(56, 189, 248, 0.16) !important;
 }
