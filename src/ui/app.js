@@ -609,6 +609,323 @@ function toggleThemeMode() {
     applyThemeMode(order[nextIdx], true);
 }
 
+// --- 🌐 TRAFFICO ONLINE LIVE (VATSIM / IVAO) & ⚙️ MODALE IMPOSTAZIONI ---
+let onlineNetworkMode = localStorage.getItem('aeroglass_online_net') || 'off'; // 'off' | 'vatsim' | 'ivao'
+let onlineTrafficRadiusNm = parseInt(localStorage.getItem('aeroglass_traffic_radius') || '180', 10);
+let onlineTrafficLayer = null;
+let onlineTrafficTimer = null;
+let onlineTrafficFetching = false;
+
+function ensureOnlineTrafficAndSettingsUI() {
+    const pillsGroup = document.querySelector('.top-pills-group');
+    if (!pillsGroup) return;
+
+    // 1. Pulsante Toggle VATSIM / IVAO
+    if (!document.getElementById('btnOnlineTraffic')) {
+        const netBtn = document.createElement('button');
+        netBtn.id = 'btnOnlineTraffic';
+        netBtn.className = 'top-btn';
+        netBtn.onclick = cycleOnlineNetworkMode;
+        netBtn.style.justifyContent = 'center';
+
+        const navaidsBtn = document.getElementById('btnToggleNavaids');
+        if (navaidsBtn && navaidsBtn.parentNode === pillsGroup) {
+            pillsGroup.insertBefore(netBtn, navaidsBtn.nextSibling);
+        } else {
+            pillsGroup.appendChild(netBtn);
+        }
+    }
+
+    // 2. Pulsante Icona Impostazioni (⚙️)
+    if (!document.getElementById('btnSettingsModal')) {
+        const setBtn = document.createElement('button');
+        setBtn.id = 'btnSettingsModal';
+        setBtn.className = 'top-btn';
+        setBtn.onclick = openSettingsModal;
+        setBtn.style.justifyContent = 'center';
+        setBtn.style.padding = '5px 10px';
+        setBtn.innerHTML = '⚙️';
+        pillsGroup.appendChild(setBtn);
+    }
+
+    ensureSettingsModalDOM();
+    updateOnlineTrafficButtonUI();
+
+    if (typeof map !== 'undefined' && map && !onlineTrafficLayer && typeof L !== 'undefined') {
+        onlineTrafficLayer = L.layerGroup().addTo(map);
+        map.on('moveend', () => {
+            if (onlineNetworkMode !== 'off' && window._lastOnlinePilotsCache) {
+                renderOnlineTrafficMarkers(window._lastOnlinePilotsCache, onlineNetworkMode);
+            }
+        });
+    }
+}
+
+function updateOnlineTrafficButtonUI() {
+    const btn = document.getElementById('btnOnlineTraffic');
+    if (!btn) return;
+    if (onlineNetworkMode === 'vatsim') {
+        btn.innerHTML = '🌐 <span>VATSIM</span>';
+        btn.style.borderColor = 'rgba(16, 185, 129, 0.65)';
+        btn.style.color = '#34d399';
+    } else if (onlineNetworkMode === 'ivao') {
+        btn.innerHTML = '🌐 <span>IVAO</span>';
+        btn.style.borderColor = 'rgba(56, 189, 248, 0.65)';
+        btn.style.color = '#38bdf8';
+    } else {
+        btn.innerHTML = '🌐 <span>NET: OFF</span>';
+        btn.style.borderColor = 'rgba(139, 148, 158, 0.3)';
+        btn.style.color = '#8b949e';
+    }
+}
+
+async function applyOnlineNetworkMode(mode, persist = true) {
+    if (!['off', 'vatsim', 'ivao'].includes(mode)) mode = 'off';
+    onlineNetworkMode = mode;
+    ensureOnlineTrafficAndSettingsUI();
+    updateOnlineTrafficButtonUI();
+
+    const sel = document.getElementById('settingsNetSelect');
+    if (sel) sel.value = onlineNetworkMode;
+
+    if (onlineTrafficTimer) {
+        clearInterval(onlineTrafficTimer);
+        onlineTrafficTimer = null;
+    }
+
+    if (onlineNetworkMode === 'off') {
+        if (onlineTrafficLayer) onlineTrafficLayer.clearLayers();
+        window._lastOnlinePilotsCache = null;
+    } else {
+        await fetchAndRenderOnlineTraffic();
+        onlineTrafficTimer = setInterval(fetchAndRenderOnlineTraffic, 15000);
+    }
+
+    try { localStorage.setItem('aeroglass_online_net', onlineNetworkMode); } catch (e) {}
+    if (persist && window.pywebview && window.pywebview.api && window.pywebview.api.save_setting) {
+        try { await window.pywebview.api.save_setting('online_network', onlineNetworkMode); } catch (e) {}
+    }
+}
+
+function cycleOnlineNetworkMode() {
+    const order = ['off', 'vatsim', 'ivao'];
+    const next = order[(order.indexOf(onlineNetworkMode) + 1) % order.length];
+    applyOnlineNetworkMode(next, true);
+}
+
+async function fetchAndRenderOnlineTraffic() {
+    if (onlineNetworkMode === 'off' || onlineTrafficFetching) return;
+    if (typeof map === 'undefined' || !map || typeof L === 'undefined') return;
+    if (!onlineTrafficLayer) onlineTrafficLayer = L.layerGroup().addTo(map);
+
+    onlineTrafficFetching = true;
+    try {
+        let pilots = [];
+        if (onlineNetworkMode === 'vatsim') {
+            const res = await fetch('https://data.vatsim.net/v3/vatsim-data.json');
+            if (res.ok) {
+                const data = await res.json();
+                pilots = (data.pilots || []).map(p => ({
+                    callsign: p.callsign || 'N/A',
+                    lat: p.latitude,
+                    lon: p.longitude,
+                    alt: p.altitude || 0,
+                    gs: p.groundspeed || 0,
+                    hdg: p.heading || 0,
+                    dep: p.flight_plan?.departure || '---',
+                    arr: p.flight_plan?.arrival || '---',
+                    acft: p.flight_plan?.aircraft_short || p.flight_plan?.aircraft_faa || 'ACFT'
+                }));
+            }
+        } else if (onlineNetworkMode === 'ivao') {
+            const res = await fetch('https://api.ivao.aero/v2/tracker/whazzup');
+            if (res.ok) {
+                const data = await res.json();
+                const rawPilots = data.clients?.pilots || [];
+                pilots = rawPilots.map(p => ({
+                    callsign: p.callsign || 'N/A',
+                    lat: p.lastTrack?.latitude,
+                    lon: p.lastTrack?.longitude,
+                    alt: p.lastTrack?.altitude || 0,
+                    gs: p.lastTrack?.groundSpeed || 0,
+                    hdg: p.lastTrack?.heading || 0,
+                    dep: p.flightPlan?.departureId || '---',
+                    arr: p.flightPlan?.arrivalId || '---',
+                    acft: p.flightPlan?.aircraftId || 'ACFT'
+                }));
+            }
+        }
+        window._lastOnlinePilotsCache = pilots;
+        renderOnlineTrafficMarkers(pilots, onlineNetworkMode);
+    } catch (e) {
+    } finally {
+        onlineTrafficFetching = false;
+    }
+}
+
+function renderOnlineTrafficMarkers(pilots, netMode) {
+    if (!onlineTrafficLayer || typeof map === 'undefined' || !map) return;
+    onlineTrafficLayer.clearLayers();
+    if (!Array.isArray(pilots) || pilots.length === 0) return;
+
+    const c = map.getCenter();
+    const color = netMode === 'vatsim' ? '#34d399' : '#38bdf8';
+    const netBadge = netMode.toUpperCase();
+    let count = 0;
+
+    for (const p of pilots) {
+        if (p.lat === undefined || p.lon === undefined || isNaN(p.lat) || isNaN(p.lon)) continue;
+        const distNm = computeGreatCircleNm(c.lat, c.lng, p.lat, p.lon);
+        if (distNm > onlineTrafficRadiusNm) continue;
+
+        const rot = ((Number(p.hdg) || 0) - 45);
+        const fl = p.alt >= 5000 ? `FL${String(Math.round(p.alt / 100)).padStart(3, '0')}` : `${Math.round(p.alt)}ft`;
+
+        const m = L.marker([p.lat, p.lon], {
+            icon: L.divIcon({
+                className: 'online-traffic-icon',
+                html: `
+                    <div class="online-acft-glyph" style="color:${color};transform:rotate(${rot}deg);">✈️</div>
+                    <div class="online-acft-tag" style="border-color:${color}66;">${p.callsign}</div>
+                `,
+                iconSize: [56, 30],
+                iconAnchor: [28, 15]
+            })
+        }).addTo(onlineTrafficLayer);
+
+        m.bindTooltip(
+            `<div style="font-family:Consolas,monospace;font-size:11px;line-height:1.45;">
+                <b style="color:${color};">[${netBadge}] ${p.callsign}</b> <span style="color:#94a3b8;">(${p.acft})</span><br>
+                🛫 <b>${p.dep}</b> ➔ 🛬 <b>${p.arr}</b><br>
+                ALT: <b>${fl}</b> | GS: <b>${Math.round(p.gs)} kt</b> | HDG: <b>${String(Math.round(p.hdg)).padStart(3, '0')}°</b>
+            </div>`,
+            { direction: 'top', className: 'vnav-route-tooltip' }
+        );
+
+        count++;
+        if (count >= 160) break;
+    }
+}
+
+function ensureSettingsModalDOM() {
+    if (document.getElementById('aeroSettingsModal')) return;
+    const modal = document.createElement('div');
+    modal.id = 'aeroSettingsModal';
+    modal.className = 'custom-modal';
+    modal.style.display = 'none';
+    modal.innerHTML = `
+        <div class="modal-content glass-panel" style="max-width:440px;width:92%;padding:18px 20px;border:1px solid rgba(0,210,255,0.45);border-radius:12px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid rgba(148,163,184,0.2);">
+                <h3 style="margin:0;font-size:14px;color:#00d2ff;display:flex;align-items:center;gap:8px;">⚙️ <span id="settingsModalTitle">IMPOSTAZIONI AEROGLASS NAV</span></h3>
+                <button class="top-btn" onclick="closeSettingsModal()" style="padding:2px 8px;font-size:12px;">✕</button>
+            </div>
+
+            <div class="settings-modal-row">
+                <div>
+                    <span class="settings-modal-lbl">SimBrief Pilot ID / Username</span>
+                    <span class="settings-modal-sub">ID predefinito per importazione rapida OFP</span>
+                </div>
+                <input id="settingsSimbriefInput" type="text" placeholder="es. 312844" style="width:120px;padding:5px 8px;background:rgba(9,13,19,0.9);border:1px solid rgba(148,163,184,0.35);border-radius:6px;color:#f0f6fc;font-family:Consolas,monospace;font-size:12px;text-align:center;">
+            </div>
+
+            <div class="settings-modal-row">
+                <div>
+                    <span class="settings-modal-lbl">Rete Traffico Online</span>
+                    <span class="settings-modal-sub">Mostra aerei live VATSIM o IVAO intorno alla mappa</span>
+                </div>
+                <select id="settingsNetSelect" onchange="applyOnlineNetworkMode(this.value, true)" style="padding:5px 8px;background:#0d1117;border:1px solid rgba(0,210,255,0.4);border-radius:6px;color:#f0f6fc;font-size:12px;">
+                    <option value="off">Disattivato (OFF)</option>
+                    <option value="vatsim">VATSIM Live</option>
+                    <option value="ivao">IVAO Whazzup</option>
+                </select>
+            </div>
+
+            <div class="settings-modal-row">
+                <div>
+                    <span class="settings-modal-lbl">Raggio Filtro Traffico (NM)</span>
+                    <span class="settings-modal-sub">Distanza massima dal centro mappa</span>
+                </div>
+                <select id="settingsTrafficRadius" onchange="updateTrafficRadiusSetting(this.value)" style="padding:5px 8px;background:#0d1117;border:1px solid rgba(148,163,184,0.35);border-radius:6px;color:#f0f6fc;font-size:12px;">
+                    <option value="80">80 NM</option>
+                    <option value="180">180 NM</option>
+                    <option value="350">350 NM</option>
+                    <option value="600">600 NM</option>
+                </select>
+            </div>
+
+            <div class="settings-modal-row">
+                <div>
+                    <span class="settings-modal-lbl">Modalità Interfaccia</span>
+                    <span class="settings-modal-sub">Estesa (Pianificazione) o FLY (Mini-HUD)</span>
+                </div>
+                <button class="top-btn" onclick="toggleUIMode()" style="min-width:110px;justify-content:center;">Cambia Vista</button>
+            </div>
+
+            <div class="settings-modal-row">
+                <div>
+                    <span class="settings-modal-lbl">Tema Cockpit & Suggerimenti</span>
+                    <span class="settings-modal-sub">Cicla tema visivo o attiva/disattiva i tooltip</span>
+                </div>
+                <div style="display:flex;gap:6px;">
+                    <button class="top-btn" onclick="toggleThemeMode()">🌙 Tema</button>
+                    <button class="top-btn" onclick="applyTooltipsMode(!tooltipsEnabled, true)">💬 Info</button>
+                </div>
+            </div>
+
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
+                <button class="top-btn" onclick="saveSettingsFromModal()" style="border-color:#00d2ff;color:#00d2ff;padding:6px 16px;font-weight:700;">💾 Salva & Chiudi</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+
+function updateTrafficRadiusSetting(val) {
+    onlineTrafficRadiusNm = parseInt(val, 10) || 180;
+    try { localStorage.setItem('aeroglass_traffic_radius', String(onlineTrafficRadiusNm)); } catch (e) {}
+    if (onlineNetworkMode !== 'off' && window._lastOnlinePilotsCache) {
+        renderOnlineTrafficMarkers(window._lastOnlinePilotsCache, onlineNetworkMode);
+    }
+}
+
+function openSettingsModal() {
+    ensureSettingsModalDOM();
+    const modal = document.getElementById('aeroSettingsModal');
+    if (!modal) return;
+
+    const sbMain = document.getElementById('simbriefIdInput');
+    const sbSet = document.getElementById('settingsSimbriefInput');
+    if (sbSet && sbMain) sbSet.value = sbMain.value || '';
+
+    const netSel = document.getElementById('settingsNetSelect');
+    if (netSel) netSel.value = onlineNetworkMode;
+
+    const radSel = document.getElementById('settingsTrafficRadius');
+    if (radSel) radSel.value = String(onlineTrafficRadiusNm);
+
+    modal.style.display = 'flex';
+}
+
+function closeSettingsModal() {
+    const modal = document.getElementById('aeroSettingsModal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function saveSettingsFromModal() {
+    const sbSet = document.getElementById('settingsSimbriefInput');
+    const sbMain = document.getElementById('simbriefIdInput');
+    if (sbSet && sbSet.value.trim()) {
+        const val = sbSet.value.trim();
+        if (sbMain) sbMain.value = val;
+        if (window.pywebview && window.pywebview.api && window.pywebview.api.save_setting) {
+            try { await window.pywebview.api.save_setting('simbrief_id', val); } catch (e) {}
+        }
+    }
+    closeSettingsModal();
+}
+
+// --- HOOKS DI COLLEGAMENTO UI (VNAV ToD, NAVLOG, TOUCH) ---
+
 // --- TRAFFICO ONLINE LIVE (VATSIM / IVAO) & MODALE IMPOSTAZIONI ---
 let onlineNetworkMode = localStorage.getItem('aeroglass_online_net') || 'off';
 let onlineTrafficRadiusNm = parseInt(localStorage.getItem('aeroglass_traffic_radius') || '180', 10);
@@ -1221,8 +1538,7 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (event.target.id === 'aeroSettingsModal' && typeof closeSettingsModal === 'function') closeSettingsModal();
     });
 
-    applyOnlineNetworkMode(onlineNetworkMode, false);
-    setTimeout(() => initAeroGlassApp(false), 200);
+    setTimeout(initAeroGlassApp, 300);
 });
 
 window.addEventListener('pywebviewready', () => {
