@@ -827,7 +827,7 @@ body.theme-day .leaflet-tile-pane {
     color: #fbbf24;
 }
 
-/* 🎯 MODALITÀ SEMPLIFICATA (MINIMAL VFR/IFR VIEW) */
+/* 🎯 MODALITÀ SEMPLIFICATA / FLY (MINIMAL VFR/IFR VIEW & MINI-HUD) */
 body.mode-simple .procedures-dropdown,
 body.mode-simple .user-wp-form,
 body.mode-simple .simbrief-box {
@@ -836,6 +836,84 @@ body.mode-simple .simbrief-box {
 
 body.mode-simple .top-pills-group .top-btn:not(#btnToggleUIMode):not(#btnThemeMode):not(#btnFollowAcft):not(#btnToggleNavaids) {
     display: none !important;
+}
+
+.fly-hud-strip {
+    position: fixed;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-18px);
+    z-index: 650;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 16px;
+    border-radius: 8px;
+    background: rgba(13, 17, 23, 0.92);
+    border: 1px solid rgba(0, 210, 255, 0.45);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65), 0 0 12px rgba(0, 210, 255, 0.12);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s ease, transform 0.22s ease;
+}
+
+body.mode-simple .fly-hud-strip {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+    pointer-events: auto;
+}
+
+.fly-hud-block {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.fly-hud-lbl {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-muted);
+    letter-spacing: 0.6px;
+}
+
+.fly-hud-val {
+    font-weight: 800;
+    color: var(--text-main);
+}
+
+.fly-hud-val.magenta { color: var(--nav-magenta); }
+.fly-hud-val.cyan { color: var(--cyan); }
+.fly-hud-val.emerald { color: #3fb950; }
+.fly-hud-val.amber { color: var(--amber); }
+
+.fly-hud-sep {
+    color: rgba(139, 148, 158, 0.35);
+    font-weight: 400;
+}
+
+.fly-hud-wind-arrow {
+    display: inline-block;
+    font-size: 13px;
+    line-height: 1;
+    color: var(--cyan);
+    transition: transform 0.25s linear;
+}
+
+body.theme-day .fly-hud-strip {
+    background: rgba(248, 250, 252, 0.95) !important;
+    border-color: rgba(2, 132, 199, 0.45) !important;
+    color: #0f172a !important;
+}
+body.theme-day .fly-hud-val { color: #0f172a !important; }
+body.theme-day .fly-hud-val.cyan { color: #0284c7 !important; }
+body.theme-day .fly-hud-val.magenta { color: #a21caf !important; }
+
+body.theme-night .fly-hud-strip {
+    background: rgba(4, 8, 16, 0.96) !important;
+    border-color: rgba(56, 189, 248, 0.22) !important;
 }
 
 /* 🧭 ROSA DEI VENTI DINAMICA (BUSSOLA NAVIGRAPH) */

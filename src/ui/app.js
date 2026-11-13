@@ -35,13 +35,158 @@ function ensureUIModeButton() {
     updateUIModeButtonUI();
 }
 
+function ensureFlyHudStrip() {
+    if (document.getElementById('flyHudStrip')) return;
+    const strip = document.createElement('div');
+    strip.id = 'flyHudStrip';
+    strip.className = 'fly-hud-strip glass-panel';
+    strip.innerHTML = `
+        <div class="fly-hud-block">
+            <span class="fly-hud-lbl">NXT</span>
+            <span id="hudNextWpt" class="fly-hud-val magenta">---</span>
+        </div>
+        <span class="fly-hud-sep">|</span>
+        <div class="fly-hud-block">
+            <span class="fly-hud-lbl">DST</span>
+            <span id="hudNextDist" class="fly-hud-val cyan">--.- NM</span>
+        </div>
+        <span class="fly-hud-sep">|</span>
+        <div class="fly-hud-block">
+            <span class="fly-hud-lbl">ETE</span>
+            <span id="hudNextEte" class="fly-hud-val emerald">--:--</span>
+        </div>
+        <span class="fly-hud-sep">|</span>
+        <div class="fly-hud-block">
+            <span class="fly-hud-lbl">WND</span>
+            <span id="hudWindArrow" class="fly-hud-wind-arrow">↓</span>
+            <span id="hudWindVal" class="fly-hud-val amber">---°/--kt</span>
+        </div>
+    `;
+    document.body.appendChild(strip);
+}
+
+function computeGreatCircleNm(lat1, lon1, lat2, lon2) {
+    const R = 3440.065;
+    const toRad = Math.PI / 180;
+    const dLat = (lat2 - lat1) * toRad;
+    const dLon = (lon2 - lon1) * toRad;
+    const a = Math.sin(dLat / 2) ** 2 +
+              Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function updateFlyHudStrip() {
+    ensureFlyHudStrip();
+    const elWpt = document.getElementById('hudNextWpt');
+    const elDist = document.getElementById('hudNextDist');
+    const elEte = document.getElementById('hudNextEte');
+    const elWnd = document.getElementById('hudWindVal');
+    const elArr = document.getElementById('hudWindArrow');
+    if (!elWpt || !elDist || !elEte || !elWnd) return;
+
+    // 1. Estrazione coordinate aereo, Ground Speed, Heading e Vento da telemetria
+    const tel = window.lastTelemetry || window.currentTelemetry || window.telemetryData || {};
+    const acLat = tel.lat ?? tel.latitude ?? window.acftLat ?? (typeof lastAcftLat !== 'undefined' ? lastAcftLat : null);
+    const acLon = tel.lon ?? tel.lng ?? tel.longitude ?? window.acftLon ?? (typeof lastAcftLon !== 'undefined' ? lastAcftLon : null);
+
+    let gs = parseFloat(tel.gs ?? tel.ground_speed ?? tel.groundSpeed ?? window.currentGs ?? NaN);
+    if (isNaN(gs)) {
+        const gsDom = document.getElementById('valGs');
+        if (gsDom) gs = parseFloat(gsDom.innerText);
+    }
+
+    let hdg = parseFloat(tel.hdg ?? tel.heading ?? window.currentHdg ?? 0);
+    if (isNaN(hdg)) {
+        const hdgDom = document.getElementById('valHdg');
+        if (hdgDom) hdg = parseFloat(hdgDom.innerText) || 0;
+    }
+
+    // 2. Calcolo Prossimo Waypoint, Distanza (NM) ed ETE
+    const fpl = (typeof flightPlan !== 'undefined' && Array.isArray(flightPlan)) ? flightPlan : [];
+    if (fpl.length === 0) {
+        elWpt.innerText = 'NO FPL';
+        elDist.innerText = '--.- NM';
+        elEte.innerText = '--:--';
+    } else {
+        let idx = (typeof activeWaypointIndex !== 'undefined' && activeWaypointIndex >= 0 && activeWaypointIndex < fpl.length)
+            ? activeWaypointIndex
+            : (fpl.length > 1 ? 1 : 0);
+
+        // Se esiste una card evidenziata come active-wpt nella sidebar, sincronizza con quella
+        const activeCard = document.querySelector('.wpt-card.active-wpt .wpt-icao');
+        if (activeCard) {
+            const foundIdx = fpl.findIndex(w => (w.icao || w.id || w.ident) === activeCard.innerText.trim());
+            if (foundIdx !== -1) idx = foundIdx;
+        } else if (acLat !== null && acLon !== null && fpl.length > 1) {
+            // Trova il waypoint successivo più vicino davanti all'aereo
+            let minD = Infinity;
+            for (let i = 1; i < fpl.length; i++) {
+                const d = computeGreatCircleNm(acLat, acLon, fpl[i].lat, fpl[i].lon);
+                if (d < minD) { minD = d; idx = i; }
+            }
+        }
+
+        const wp = fpl[idx] || fpl[fpl.length - 1];
+        elWpt.innerText = wp.icao || wp.id || wp.ident || wp.name || 'WPT';
+
+        let distNm = null;
+        if (acLat !== null && acLon !== null && wp.lat !== undefined && wp.lon !== undefined) {
+            distNm = computeGreatCircleNm(acLat, acLon, wp.lat, wp.lon);
+        } else if (wp.dist !== undefined) {
+            distNm = parseFloat(wp.dist);
+        }
+
+        if (distNm !== null && !isNaN(distNm)) {
+            elDist.innerText = `${distNm.toFixed(1)} NM`;
+            const effGs = (!isNaN(gs) && gs > 25) ? gs : 140;
+            const totalMin = Math.round((distNm / effGs) * 60);
+            const hh = Math.floor(totalMin / 60);
+            const mm = totalMin % 60;
+            elEte.innerText = hh > 0
+                ? `${hh}h${String(mm).padStart(2, '0')}m`
+                : `${String(mm).padStart(2, '0')} min`;
+        } else {
+            elDist.innerText = '--.- NM';
+            elEte.innerText = '--:--';
+        }
+    }
+
+    // 3. Lettura Vento corrente (Direzione, Intensità e Freccia Relativa)
+    let wDir = tel.wind_dir ?? tel.windDir ?? tel.ambient_wind_direction ?? window.windDir ?? null;
+    let wSpd = tel.wind_spd ?? tel.windSpd ?? tel.wind_vel ?? tel.ambient_wind_velocity ?? window.windSpd ?? null;
+
+    if (wDir === null || wSpd === null) {
+        const wxPills = document.querySelectorAll('.wx-pill');
+        for (const pill of wxPills) {
+            const m = pill.innerText.match(/(\d{3})°?\s*\/\s*(\d+)\s*kt/i);
+            if (m) {
+                wDir = parseInt(m[1], 10);
+                wSpd = parseInt(m[2], 10);
+                break;
+            }
+        }
+    }
+
+    if (wDir !== null && wSpd !== null && !isNaN(wDir) && !isNaN(wSpd)) {
+        const dRound = Math.round((Number(wDir) % 360 + 360) % 360);
+        const sRound = Math.round(Number(wSpd));
+        elWnd.innerText = `${String(dRound).padStart(3, '0')}°/${String(sRound).padStart(2, '0')}kt`;
+        if (elArr) {
+            const relRot = (dRound + 180 - (hdg || 0)) % 360;
+            elArr.style.transform = `rotate(${relRot}deg)`;
+        }
+    } else {
+        elWnd.innerText = '---°/--kt';
+    }
+}
+
 function updateUIModeButtonUI() {
     const btn = document.getElementById('btnToggleUIMode');
     if (!btn) return;
     const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
 
     if (currentUIMode === 'simple') {
-        btn.innerHTML = isEn ? '🎛️ <span>Simple</span>' : '🎛️ <span>Semplice</span>';
+        btn.innerHTML = isEn ? '✈️ <span>FLY Mode</span>' : '✈️ <span>FLY (Semplice)</span>';
         btn.style.borderColor = 'rgba(0, 210, 255, 0.65)';
         btn.style.color = '#00d2ff';
     } else {
@@ -56,8 +201,10 @@ async function applyUIMode(mode, persist = true) {
     currentUIMode = mode;
 
     ensureUIModeButton();
+    ensureFlyHudStrip();
     document.body.classList.toggle('mode-simple', mode === 'simple');
     updateUIModeButtonUI();
+    updateFlyHudStrip();
 
     if (persist) {
         if (mode === 'simple') {
@@ -1142,6 +1289,7 @@ async function initAeroGlassApp() {
     setInterval(() => {
         if (!window._demoTourActive && typeof pollTelemetry === 'function') pollTelemetry();
         if (typeof updateTodHeaderStatus === 'function') updateTodHeaderStatus();
+        if (typeof updateFlyHudStrip === 'function') updateFlyHudStrip();
     }, 1000);
 
     setInterval(() => {
