@@ -137,10 +137,6 @@ const SYNTHETIC_TOOLTIPS = {
     aeroCompassWidget: {
         it: "🧭 Rosa dei Venti: Indica il Nord geografico (Clicca per orientamento North Up 360°)",
         en: "🧭 Compass Rose: Points to True North (Click to reset North Up 360°)"
-    },
-    btnToggleGroundMap: {
-        it: "🛫 Mappa Aeroporto (Taxiway & Parcheggi): Mostra/nascondi layout interno o zooma sull'aeroporto",
-        en: "🛫 Airport Ground Map (Taxiways & Parking): Toggle internal layout or zoom to active airport"
     }
 };
 
@@ -430,7 +426,6 @@ async function applyThemeMode(mode, persist = true) {
     ensureUIModeButton();
     ensureDrawerToggleTab();
     ensureCompassRoseWidget();
-    ensureGroundMapUI();
     applyUIMode(currentUIMode, false);
     initSyntheticTooltipsEngine();
 
@@ -450,13 +445,6 @@ function toggleThemeMode() {
     const nextIdx = (order.indexOf(currentThemeMode) + 1) % order.length;
     applyThemeMode(order[nextIdx], true);
 }
-
-// --- 🛫 MOTORE MAPPA INTERNA AEROPORTI (TAXIWAYS, RUNWAYS & PARCHEGGI) ---
-let groundMapEnabled = true;
-let groundLayerGroup = null;
-let lastRenderedGroundKey = null;
-let groundFetchInProgress = false;
-const groundOsmCache = {};
 
 // --- 🗺️ DATABASE TOPOGRAFICO LOCALE AFFIDABILE (STANDARD PROFESSIONALE) ---
 const CUSTOM_APT_LAYOUTS = {
@@ -1147,7 +1135,6 @@ async function initAeroGlassApp() {
             if (typeof renderNavAids === 'function') renderNavAids(vorsData, ilsData);
         }
         if (typeof loadUserWaypoints === 'function') await loadUserWaypoints();
-        ensureGroundMapUI();
     } catch (e) {}
 
     if (typeof updateTopOfDescentOverlay === 'function') setTimeout(updateTopOfDescentOverlay, 250);
@@ -1174,7 +1161,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeof updateFlightInfoBar === 'function') updateFlightInfoBar(43.5, 12.0);
     if (typeof setFollowState === 'function') setFollowState(followState);
     if (typeof renderNavAids === 'function') renderNavAids(vorsData, ilsData);
-    ensureGroundMapUI();
     if (typeof updateMapScale === 'function') updateMapScale();
 
     window.addEventListener('click', (event) => {
