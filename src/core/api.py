@@ -759,6 +759,56 @@ class AeroGlassAPI:
         self._fpl_ts = time.time()
         return {"success": True, "fpl_ts": self._fpl_ts}
 
+    def get_online_network_traffic(self):
+        """Scarica i dati pubblici delle reti online (es. VATSIM) con cache di 60 secondi."""
+        now = time.time()
+        if hasattr(self, "_cached_vatsim_data") and hasattr(self, "_vatsim_fetch_time"):
+            if (now - self._vatsim_fetch_time) < 60.0:
+                return self._cached_vatsim_data
+
+        vatsim_url = "https://data.vatsim.net/v3/vatsim-data.json"
+        try:
+            req = urllib.request.Request(vatsim_url, headers={"User-Agent": "AeroGlassNav/1.0"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                raw_data = json.loads(resp.read().decode("utf-8"))
+
+            controllers = []
+            for c in raw_data.get("controllers", []):
+                controllers.append({
+                    "callsign": c.get("callsign"),
+                    "frequency": c.get("frequency"),
+                    "facility": c.get("facility"),
+                    "name": c.get("name"),
+                    "text_atis": c.get("text_atis")
+                })
+
+            pilots = []
+            for p in raw_data.get("pilots", []):
+                lat = p.get("latitude")
+                lon = p.get("longitude")
+                if lat is not None and lon is not None:
+                    pilots.append({
+                        "callsign": p.get("callsign"),
+                        "name": p.get("name"),
+                        "lat": lat,
+                        "lon": lon,
+                        "alt": p.get("altitude"),
+                        "gs": p.get("groundspeed"),
+                        "hdg": p.get("heading")
+                    })
+
+            result = {
+                "success": True,
+                "controllers": controllers,
+                "pilots": pilots,
+                "timestamp": now
+            }
+            self._cached_vatsim_data = result
+            self._vatsim_fetch_time = now
+            return result
+        except Exception as e:
+            return {"success": False, "error": str(e), "controllers": [], "pilots": []}
+
     # --- TELEMETRIA E CONTROLLI FINESTRA ---
     def get_telemetry(self):
         """Restituisce i dati di telemetria istantanei al frontend insieme al timestamp di sync EFB."""

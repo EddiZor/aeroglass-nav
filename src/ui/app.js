@@ -145,6 +145,10 @@ const SYNTHETIC_TOOLTIPS = {
     btnToggleWeather: {
         it: "💨 Meteo & Venti: Mostra/nascondi vettori vento lungo la rotta e clicca sugli aeroporti per il METAR rapido",
         en: "💨 Weather & Winds: Toggle route wind vectors and click airports for quick METAR popup"
+    },
+    btnToggleNetwork: {
+        it: "🌐 Traffico Online: Mostra/nascondi i piloti di VATSIM / IVAO in volo nelle vicinanze",
+        en: "🌐 Online Traffic: Show or hide nearby VATSIM / IVAO pilots on map"
     }
 };
 
@@ -435,6 +439,7 @@ async function applyThemeMode(mode, persist = true) {
     ensureCompassRoseWidget();
     ensureGroundMapUI();
     ensureWeatherOverlayUI();
+    ensureNetworkOverlayUI();
     applyUIMode(currentUIMode, false);
     initSyntheticTooltipsEngine();
 
@@ -1319,6 +1324,109 @@ function updateVnavCloudLevelLine(targetAltFt) {
     label.style.display = 'block';
 }
 
+// --- 🌐 NETWORK TRAFFIC OVERLAY (VATSIM / IVAO) ---
+let networkOverlayEnabled = (localStorage.getItem('aeroglass_net_overlay') === 'true');
+let networkLayerGroup = null;
+let networkPollInterval = null;
+
+function ensureNetworkOverlayUI() {
+    if (typeof map !== 'undefined' && map && !networkLayerGroup && typeof L !== 'undefined') {
+        networkLayerGroup = L.layerGroup().addTo(map);
+    }
+
+    if (!document.getElementById('btnToggleNetwork')) {
+        const pillsGroup = document.querySelector('.top-pills-group');
+        if (pillsGroup) {
+            const btn = document.createElement('button');
+            btn.id = 'btnToggleNetwork';
+            btn.className = 'top-btn' + (networkOverlayEnabled ? ' active' : '');
+            btn.onclick = () => toggleNetworkOverlay();
+
+            const wxBtn = document.getElementById('btnToggleWeather') || document.getElementById('btnToggleNavaids');
+            if (wxBtn && wxBtn.parentNode === pillsGroup) {
+                pillsGroup.insertBefore(btn, wxBtn.nextSibling);
+            } else {
+                pillsGroup.appendChild(btn);
+            }
+            updateNetworkOverlayButtonUI();
+        }
+    }
+}
+
+function updateNetworkOverlayButtonUI() {
+    const btn = document.getElementById('btnToggleNetwork');
+    if (!btn) return;
+    const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+    btn.classList.toggle('active', networkOverlayEnabled);
+    if (networkOverlayEnabled) {
+        btn.innerHTML = isEn ? '🌐 <span>Online: ON</span>' : '🌐 <span>Online: ON</span>';
+    } else {
+        btn.innerHTML = isEn ? '🌐 <span>Online: OFF</span>' : '🌐 <span>Online: OFF</span>';
+    }
+}
+
+async function toggleNetworkOverlay(forceState) {
+    networkOverlayEnabled = (typeof forceState === 'boolean') ? forceState : !networkOverlayEnabled;
+    ensureNetworkOverlayUI();
+    updateNetworkOverlayButtonUI();
+
+    if (networkOverlayEnabled) {
+        fetchAndRenderNetworkTraffic();
+        if (!networkPollInterval) {
+            networkPollInterval = setInterval(fetchAndRenderNetworkTraffic, 60000);
+        }
+    } else {
+        if (networkPollInterval) {
+            clearInterval(networkPollInterval);
+            networkPollInterval = null;
+        }
+        if (networkLayerGroup) networkLayerGroup.clearLayers();
+    }
+
+    try { localStorage.setItem('aeroglass_net_overlay', String(networkOverlayEnabled)); } catch (e) {}
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.save_setting) {
+        try { await window.pywebview.api.save_setting('net_overlay', String(networkOverlayEnabled)); } catch (e) {}
+    }
+}
+
+async function fetchAndRenderNetworkTraffic() {
+    if (!networkOverlayEnabled || !window.pywebview || !window.pywebview.api || !window.pywebview.api.get_online_network_traffic) return;
+    if (!networkLayerGroup || typeof map === 'undefined' || !map) return;
+
+    try {
+        const res = await window.pywebview.api.get_online_network_traffic();
+        if (!res || !res.success) return;
+
+        networkLayerGroup.clearLayers();
+        const bounds = map.getBounds().pad(0.4);
+
+        let pilotCount = 0;
+        (res.pilots || []).forEach(p => {
+            if (p.lat === undefined || p.lon === undefined) return;
+            const latLng = [p.lat, p.lon];
+            if (!bounds.contains(latLng)) return;
+
+            const hdg = p.hdg || 0;
+            const pilotIcon = L.divIcon({
+                className: '',
+                html: `<div class="net-pilot-marker" style="transform: rotate(${hdg}deg);">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="#fbbf24"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg>
+                </div>`,
+                iconSize: [20, 20],
+                iconAnchor: [10, 10]
+            });
+
+            const m = L.marker(latLng, { icon: pilotIcon, zIndexOffset: 700 }).addTo(networkLayerGroup);
+            m.bindTooltip(`<b>${p.callsign}</b><br>Alt: ${p.alt} ft | GS: ${p.gs} kt`, { direction: 'top', className: 'vnav-route-tooltip' });
+
+            pilotCount++;
+            if (pilotCount >= 120) return;
+        });
+    } catch (err) {
+        console.error("Errore caricamento traffico online:", err);
+    }
+}
+
 // --- HOOKS DI COLLEGAMENTO UI (VNAV ToD, NAVLOG, TOUCH) ---
 function installTodAndTouchHooks() {
     if (window._todHooksInstalled) return;
@@ -1560,6 +1668,8 @@ async function initAeroGlassApp() {
         ensureGroundMapUI();
         ensureWeatherOverlayUI();
         if (weatherOverlayEnabled) renderWeatherOverlay();
+        ensureNetworkOverlayUI();
+        if (networkOverlayEnabled) toggleNetworkOverlay(true);
     } catch (e) {}
 
     if (typeof updateTopOfDescentOverlay === 'function') setTimeout(updateTopOfDescentOverlay, 250);
