@@ -141,6 +141,10 @@ const SYNTHETIC_TOOLTIPS = {
     btnToggleGroundMap: {
         it: "🛫 Mappa Aeroporto (Taxiway & Parcheggi): Mostra/nascondi layout interno o zooma sull'aeroporto",
         en: "🛫 Airport Ground Map (Taxiways & Parking): Toggle internal layout or zoom to active airport"
+    },
+    btnToggleWeather: {
+        it: "💨 Meteo & Venti: Mostra/nascondi vettori vento lungo la rotta e clicca sugli aeroporti per il METAR rapido",
+        en: "💨 Weather & Winds: Toggle route wind vectors and click airports for quick METAR popup"
     }
 };
 
@@ -430,6 +434,7 @@ async function applyThemeMode(mode, persist = true) {
     ensureDrawerToggleTab();
     ensureCompassRoseWidget();
     ensureGroundMapUI();
+    ensureWeatherOverlayUI();
     applyUIMode(currentUIMode, false);
     initSyntheticTooltipsEngine();
 
@@ -754,6 +759,566 @@ function renderCustomAirportLayout(layout) {
     });
 }
 
+// --- 💨 WEATHER OVERLAY (VETTORI VENTO LUNGO LA ROTTA & METAR RAPIDI) ---
+let weatherOverlayEnabled = (localStorage.getItem('aeroglass_wx_overlay') === 'true');
+let weatherLayerGroup = null;
+
+function ensureWeatherOverlayUI() {
+    if (typeof map !== 'undefined' && map && !weatherLayerGroup && typeof L !== 'undefined') {
+        weatherLayerGroup = L.layerGroup().addTo(map);
+        map.on('moveend zoomend', () => {
+            if (weatherOverlayEnabled) renderWeatherOverlay();
+        });
+    }
+
+    if (!document.getElementById('btnToggleWeather')) {
+        const pillsGroup = document.querySelector('.top-pills-group');
+        if (pillsGroup) {
+            const btn = document.createElement('button');
+            btn.id = 'btnToggleWeather';
+            btn.className = 'top-btn' + (weatherOverlayEnabled ? ' active' : '');
+            btn.onclick = () => toggleWeatherOverlay();
+
+            const gndBtn = document.getElementById('btnToggleGroundMap') || document.getElementById('btnToggleNavaids');
+            if (gndBtn && gndBtn.parentNode === pillsGroup) {
+                pillsGroup.insertBefore(btn, gndBtn.nextSibling);
+            } else {
+                pillsGroup.appendChild(btn);
+            }
+            updateWeatherOverlayButtonUI();
+        }
+    }
+}
+
+function updateWeatherOverlayButtonUI() {
+    const btn = document.getElementById('btnToggleWeather');
+    if (!btn) return;
+    const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+    btn.classList.toggle('active', weatherOverlayEnabled);
+    if (weatherOverlayEnabled) {
+        btn.innerHTML = isEn ? '💨 <span>WX: ON</span>' : '💨 <span>Meteo: ON</span>';
+    } else {
+        btn.innerHTML = isEn ? '💨 <span>WX: OFF</span>' : '💨 <span>Meteo: OFF</span>';
+    }
+}
+
+async function toggleWeatherOverlay(forceState) {
+    weatherOverlayEnabled = (typeof forceState === 'boolean') ? forceState : !weatherOverlayEnabled;
+    ensureWeatherOverlayUI();
+    updateWeatherOverlayButtonUI();
+
+    if (weatherOverlayEnabled) {
+        renderWeatherOverlay();
+    } else if (weatherLayerGroup) {
+        weatherLayerGroup.clearLayers();
+    }
+
+    try { localStorage.setItem('aeroglass_wx_overlay', String(weatherOverlayEnabled)); } catch (e) {}
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.save_setting) {
+        try { await window.pywebview.api.save_setting('wx_overlay', String(weatherOverlayEnabled)); } catch (e) {}
+    }
+}
+
+function computeBearingDeg(lat1, lon1, lat2, lon2) {
+    const toRad = Math.PI / 180;
+    const toDeg = 180 / Math.PI;
+    const dLon = (lon2 - lon1) * toRad;
+    const y = Math.sin(dLon) * Math.cos(lat2 * toRad);
+    const x = Math.cos(lat1 * toRad) * Math.sin(lat2 * toRad) -
+              Math.sin(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.cos(dLon);
+    return (Math.atan2(y, x) * toDeg + 360) % 360;
+}
+
+function parseMetarWindNumbers(metarStr) {
+    if (!metarStr) return null;
+    const m = metarStr.match(/\b(\d{3}|VRB)(\d{2,3})(?:G\d{2,3})?(KT|MPS)\b/);
+    if (!m) return null;
+    const dir = m[1] === 'VRB' ? 0 : parseInt(m[1], 10);
+    let spd = parseInt(m[2], 10);
+    if (m[3] === 'MPS') spd = Math.round(spd * 1.94384);
+    return { dir, spd };
+}
+
+function getFlightCategoryFromMetar(metarStr) {
+    if (!metarStr) return { cat: 'VFR', color: '#2ea043' };
+    if (/\b(OVC|BKN|VV)00[0-4]\b/.test(metarStr) || /\b[01]\d{3}\b/.test(metarStr)) {
+        return { cat: 'LIFR', color: '#e040fb' };
+    }
+    if (/\b(OVC|BKN|VV)00[5-9]\b/.test(metarStr) || /\b[234]\d{3}\b/.test(metarStr)) {
+        return { cat: 'IFR', color: '#f85149' };
+    }
+    if (/\b(OVC|BKN)0[12]\d\b/.test(metarStr)) {
+        return { cat: 'MVFR', color: '#00d2ff' };
+    }
+    return { cat: 'VFR', color: '#2ea043' };
+}
+
+function resolveWaypointWind(wp, idx, fpl) {
+    if (wp.wind_dir !== undefined && wp.wind_spd !== undefined && (wp.wind_dir > 0 || wp.wind_spd > 0)) {
+        return { dir: Number(wp.wind_dir), spd: Number(wp.wind_spd) };
+    }
+    const directWx = parseMetarWindNumbers(wp.metar);
+    if (directWx) return directWx;
+
+    const tel = window.lastTelemetry || {};
+    if (tel.connected && tel.wind_dir !== null && tel.wind_dir !== undefined && tel.wind_spd !== null && tel.wind_spd !== undefined) {
+        return { dir: Number(tel.wind_dir), spd: Number(tel.wind_spd) };
+    }
+
+    const depWx = fpl.length > 0 ? parseMetarWindNumbers(fpl[0].metar) : null;
+    const arrWx = fpl.length > 1 ? parseMetarWindNumbers(fpl[fpl.length - 1].metar) : null;
+    if (depWx && arrWx && fpl.length > 1) {
+        const frac = idx / (fpl.length - 1);
+        return {
+            dir: Math.round((depWx.dir * (1 - frac) + arrWx.dir * frac) % 360),
+            spd: Math.round(depWx.spd * (1 - frac) + arrWx.spd * frac)
+        };
+    }
+    return depWx || arrWx || { dir: 270, spd: 12 };
+}
+
+function renderWeatherOverlay() {
+    if (typeof map === 'undefined' || !map || typeof L === 'undefined') return;
+    if (!weatherLayerGroup) weatherLayerGroup = L.layerGroup().addTo(map);
+    weatherLayerGroup.clearLayers();
+    if (!weatherOverlayEnabled) return;
+
+    const fpl = Array.isArray(flightPlan) ? flightPlan : [];
+    const shownApts = new Set();
+
+    // 1. Etichette Vettori Vento lungo la rotta (con indicazione Headwind / Tailwind)
+    if (fpl.length >= 2) {
+        const step = fpl.length > 8 ? 2 : 1;
+        for (let i = 0; i < fpl.length; i++) {
+            const isEndpoint = (i === 0 || i === fpl.length - 1);
+            if (!isEndpoint && (i % step !== 0)) continue;
+
+            const wp = fpl[i];
+            if (wp.lat === undefined || wp.lon === undefined) continue;
+
+            const wind = resolveWaypointWind(wp, i, fpl);
+            const nextWp = i < fpl.length - 1 ? fpl[i + 1] : fpl[i];
+            const prevWp = i > 0 ? fpl[i - 1] : fpl[0];
+            const trackDeg = computeBearingDeg(prevWp.lat, prevWp.lon, nextWp.lat, nextWp.lon);
+
+            // Componente lungo la rotta: > 0 vento contrario (Headwind), < 0 vento in coda (Tailwind)
+            const relRad = ((wind.dir - trackDeg) * Math.PI) / 180;
+            const headComp = Math.round(wind.spd * Math.cos(relRad));
+
+            let compClass = '';
+            let compLabel = '';
+            if (headComp >= 5) {
+                compClass = 'headwind';
+                compLabel = `HW ${headComp}kt`;
+            } else if (headComp <= -5) {
+                compClass = 'tailwind';
+                compLabel = `TW +${Math.abs(headComp)}kt`;
+            } else {
+                compLabel = `XW ${Math.abs(Math.round(wind.spd * Math.sin(relRad)))}kt`;
+            }
+
+            // Il vento proviene da wind.dir, quindi la freccia del flusso punta a (wind.dir + 180)
+            const flowDeg = (wind.dir + 180) % 360;
+            const dirStr = String(wind.dir).padStart(3, '0');
+
+            const m = L.marker([wp.lat, wp.lon], {
+                icon: L.divIcon({
+                    className: '',
+                    html: `
+                        <div class="wx-wind-badge ${compClass}">
+                            <span class="wx-wind-arrow" style="transform:rotate(${flowDeg}deg);">↑</span>
+                            <span>${dirStr}°/${wind.spd}kt</span>
+                            <span style="opacity:0.8;font-size:9px;">(${compLabel})</span>
+                        </div>
+                    `,
+                    iconSize: null
+                }),
+                zIndexOffset: 650
+            }).addTo(weatherLayerGroup);
+
+            const ident = wp.ident || wp.icao || 'WPT';
+            if (isEndpoint && ident.length === 4) {
+                m.on('click', () => openQuickMetarPopup(ident, wp.lat, wp.lon, wp.name, wp.metar));
+                shownApts.add(ident);
+            }
+        }
+    }
+
+    // 2. Pillole cliccabili METAR sugli aeroporti visibili nell'inquadratura mappa
+    const bounds = map.getBounds();
+    const allApts = Array.isArray(airportsData) ? airportsData : [];
+    let aptCount = 0;
+
+    for (const apt of allApts) {
+        if (!apt.icao || shownApts.has(apt.icao)) continue;
+        if (!bounds.contains([apt.lat, apt.lon])) continue;
+
+        shownApts.add(apt.icao);
+        const catInfo = getFlightCategoryFromMetar(apt.metar || '');
+        const wxParsed = typeof parseMetarInfo === 'function' ? parseMetarInfo(apt.metar || '') : null;
+        const windShort = wxParsed && wxParsed.wind !== '---' ? wxParsed.wind : 'METAR';
+
+        const pillMarker = L.marker([apt.lat, apt.lon], {
+            icon: L.divIcon({
+                className: '',
+                html: `
+                    <div class="wx-apt-pill">
+                        <span class="wx-cat-dot" style="background:${catInfo.color};box-shadow:0 0 6px ${catInfo.color};"></span>
+                        <span>${apt.icao}</span>
+                        <span style="color:#94a3b8;font-weight:600;">${windShort}</span>
+                    </div>
+                `,
+                iconSize: null
+            }),
+            zIndexOffset: 600
+        }).addTo(weatherLayerGroup);
+
+        pillMarker.on('click', () => openQuickMetarPopup(apt.icao, apt.lat, apt.lon, apt.name, apt.metar));
+
+        aptCount++;
+        if (aptCount >= 30) break;
+    }
+}
+
+async function openQuickMetarPopup(icao, lat, lon, fallbackName, cachedMetar) {
+    if (typeof map === 'undefined' || !map || typeof L === 'undefined') return;
+
+    const popup = L.popup({
+        className: 'wx-metar-glass-popup',
+        closeButton: true,
+        maxWidth: 290,
+        offset: [0, -6]
+    })
+    .setLatLng([lat, lon])
+    .setContent(`<div style="color:#38bdf8;font-weight:700;">⏳ ${icao} - Caricamento METAR live...</div>`)
+    .openOn(map);
+
+    let metarRaw = cachedMetar || '';
+    let aptName = fallbackName || icao;
+    let elevFt = null;
+
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.resolve_icao) {
+        try {
+            const res = await window.pywebview.api.resolve_icao(icao);
+            if (res && res.success) {
+                if (res.metar) metarRaw = res.metar;
+                if (res.name) aptName = res.name;
+                if (res.elev !== undefined) elevFt = res.elev;
+                const localApt = Array.isArray(airportsData) ? airportsData.find(a => a.icao === icao) : null;
+                if (localApt && res.metar) localApt.metar = res.metar;
+            }
+        } catch (e) {}
+    }
+
+    const catInfo = getFlightCategoryFromMetar(metarRaw);
+    const parsed = (typeof parseMetarInfo === 'function' && metarRaw) ? parseMetarInfo(metarRaw) : null;
+
+    const windTxt = parsed ? parsed.wind : '---';
+    const tempTxt = parsed ? parsed.temp : '---';
+    const qnhTxt = parsed ? parsed.qnh : '---';
+    const elevTxt = elevFt !== null ? ` | ELEV: ${elevFt} ft` : '';
+
+    popup.setContent(`
+        <div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid rgba(148,163,184,0.2);padding-bottom:5px;margin-bottom:6px;">
+                <div>
+                    <strong style="color:#00d2ff;font-size:12.5px;">✈️ ${icao}</strong>
+                    <div style="color:#94a3b8;font-size:10px;">${aptName}${elevTxt}</div>
+                </div>
+                <span style="background:${catInfo.color}22;border:1px solid ${catInfo.color};color:${catInfo.color};padding:1px 6px;border-radius:4px;font-size:10px;font-weight:800;">
+                    ${catInfo.cat}
+                </span>
+            </div>
+            <div style="display:flex;gap:6px;margin-bottom:7px;flex-wrap:wrap;">
+                <span class="wx-pill">💨 ${windTxt}</span>
+                <span class="wx-pill">🌡️ ${tempTxt}</span>
+                <span class="wx-pill">⏲️ ${qnhTxt}</span>
+            </div>
+            <div style="background:rgba(9,13,19,0.85);border:1px solid rgba(148,163,184,0.2);border-radius:5px;padding:6px;color:#e2e8f0;font-size:10.5px;word-break:break-word;">
+                ${metarRaw || 'Nessun bollettino METAR attivo per questo scalo.'}
+            </div>
+        </div>
+    `);
+}
+
+// --- ☁️ LAYER COPERTURA NUVOLOSA ALLA QUOTA AEREO & SELETTORE VNAV ---
+let cloudAltMode = localStorage.getItem('aeroglass_cloud_mode') || 'off'; // 'off' | 'auto' | '5000' | '10000' | '20000' | '30000'
+let cloudLayerGroup = null;
+let lastRenderedCloudAlt = null;
+
+function ensureVnavCloudControls() {
+    const header = document.querySelector('#elevationDrawer .elevation-header') || document.querySelector('.elevation-header');
+    if (!header || document.getElementById('vnavCloudSelector')) return;
+
+    const spacer = header.querySelector('.elevation-header-spacer');
+    const container = document.createElement('div');
+    container.id = 'vnavCloudSelector';
+    container.className = 'vnav-cloud-controls';
+    // Impedisce che il click sui pulsanti di quota chiuda/apra per errore il cassetto VNAV
+    container.addEventListener('click', (e) => e.stopPropagation());
+
+    container.innerHTML = `
+        <span class="vnav-cloud-lbl" id="vnavCloudLbl">☁️ CLOUDS:</span>
+        <button class="vnav-fl-btn" data-mode="off" onclick="setCloudAltitudeMode('off')">OFF</button>
+        <button class="vnav-fl-btn" data-mode="auto" id="btnCloudAuto" onclick="setCloudAltitudeMode('auto')">AUTO (ACFT)</button>
+        <button class="vnav-fl-btn" data-mode="5000" onclick="setCloudAltitudeMode('5000')">FL050</button>
+        <button class="vnav-fl-btn" data-mode="10000" onclick="setCloudAltitudeMode('10000')">FL100</button>
+        <button class="vnav-fl-btn" data-mode="20000" onclick="setCloudAltitudeMode('20000')">FL200</button>
+        <button class="vnav-fl-btn" data-mode="30000" onclick="setCloudAltitudeMode('30000')">FL300</button>
+    `;
+
+    if (spacer) {
+        spacer.replaceWith(container);
+    } else {
+        header.appendChild(container);
+    }
+
+    if (typeof map !== 'undefined' && map && !cloudLayerGroup && typeof L !== 'undefined') {
+        cloudLayerGroup = L.layerGroup().addTo(map);
+        map.on('moveend zoomend', () => {
+            if (cloudAltMode !== 'off') renderCloudCoverageLayer(true);
+        });
+    }
+
+    updateVnavCloudButtonsUI();
+    if (cloudAltMode !== 'off') setTimeout(() => renderCloudCoverageLayer(true), 400);
+}
+
+function getTargetCloudAltitudeFt() {
+    if (cloudAltMode === 'off') return null;
+    if (cloudAltMode === 'auto') {
+        const tel = window.lastTelemetry || {};
+        if (tel.alt_ft) {
+            const parsed = parseInt(String(tel.alt_ft).replace(/[^\d-]/g, ''), 10);
+            if (!isNaN(parsed)) return Math.max(0, parsed);
+        }
+        const domAlt = document.getElementById('valAlt');
+        if (domAlt) {
+            const parsed = parseInt(domAlt.innerText.replace(/[^\d-]/g, ''), 10);
+            if (!isNaN(parsed)) return Math.max(0, parsed);
+        }
+        return 5000;
+    }
+    return parseInt(cloudAltMode, 10) || 5000;
+}
+
+function updateVnavCloudButtonsUI() {
+    const box = document.getElementById('vnavCloudSelector');
+    if (!box) return;
+    const targetAlt = getTargetCloudAltitudeFt();
+    const tel = window.lastTelemetry || {};
+
+    box.querySelectorAll('.vnav-fl-btn').forEach(btn => {
+        const m = btn.getAttribute('data-mode');
+        btn.classList.toggle('active', m === cloudAltMode);
+        if (m === 'auto') {
+            const flStr = targetAlt !== null ? `${Math.round(targetAlt / 100) * 100}ft` : 'ACFT';
+            if (cloudAltMode === 'auto' && tel.in_cloud) {
+                btn.innerHTML = `☁️ IMC (${flStr})`;
+                btn.classList.add('imc-alert');
+            } else {
+                btn.innerHTML = cloudAltMode === 'auto' ? `AUTO (${flStr})` : 'AUTO (ACFT)';
+                btn.classList.remove('imc-alert');
+            }
+        }
+    });
+
+    updateVnavCloudLevelLine(targetAlt);
+}
+
+async function setCloudAltitudeMode(mode) {
+    cloudAltMode = String(mode);
+    try { localStorage.setItem('aeroglass_cloud_mode', cloudAltMode); } catch (e) {}
+    updateVnavCloudButtonsUI();
+    renderCloudCoverageLayer(true);
+
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.save_setting) {
+        try { await window.pywebview.api.save_setting('cloud_alt_mode', cloudAltMode); } catch (e) {}
+    }
+}
+
+function parseMetarCloudLayers(metarStr, stationElevFt = 0) {
+    if (!metarStr) return [];
+    const layers = [];
+    const regex = /\b(FEW|SCT|BKN|OVC|VV)(\d{3})\b/g;
+    let match;
+    while ((match = regex.exec(metarStr)) !== null) {
+        const amount = match[1];
+        const baseAgl = parseInt(match[2], 10) * 100;
+        const baseMsl = baseAgl + (Number(stationElevFt) || 0);
+        let thickness = 2500;
+        let opacity = 0.18;
+        let color = '#94a3b8';
+
+        if (amount === 'FEW') { thickness = 2000; opacity = 0.14; color = '#cbd5e1'; }
+        else if (amount === 'SCT') { thickness = 3000; opacity = 0.24; color = '#94a3b8'; }
+        else if (amount === 'BKN') { thickness = 4500; opacity = 0.36; color = '#64748b'; }
+        else if (amount === 'OVC' || amount === 'VV') { thickness = 6000; opacity = 0.48; color = '#475569'; }
+
+        layers.push({
+            amount,
+            baseFt: baseMsl,
+            topFt: baseMsl + thickness,
+            opacity,
+            color
+        });
+    }
+
+    // Stima cirri/strati in alta quota (FL180-FL340) se sono presenti sistemi frontali (BKN/OVC o QNH basso)
+    if (/\b(BKN|OVC)\d{3}\b/.test(metarStr) || /\bQ(09\d\d|100\d|101[0-2])\b/.test(metarStr)) {
+        layers.push({
+            amount: 'SCT-HI',
+            baseFt: 18000,
+            topFt: 33000,
+            opacity: 0.22,
+            color: '#38bdf8'
+        });
+    }
+    return layers;
+}
+
+function renderCloudCoverageLayer(force = false) {
+    if (typeof map === 'undefined' || !map || typeof L === 'undefined') return;
+    if (!cloudLayerGroup) cloudLayerGroup = L.layerGroup().addTo(map);
+
+    if (cloudAltMode === 'off') {
+        cloudLayerGroup.clearLayers();
+        lastRenderedCloudAlt = null;
+        updateVnavCloudLevelLine(null);
+        return;
+    }
+
+    const targetAlt = getTargetCloudAltitudeFt();
+    if (!force && lastRenderedCloudAlt !== null && Math.abs(targetAlt - lastRenderedCloudAlt) < 350) {
+        return;
+    }
+    lastRenderedCloudAlt = targetAlt;
+    cloudLayerGroup.clearLayers();
+    updateVnavCloudButtonsUI();
+
+    const bandHalfWidth = 3500; // ±3.500 ft intorno alla quota selezionata o quota aereo
+    const allSources = [];
+    const seenIcao = new Set();
+
+    if (Array.isArray(flightPlan)) {
+        flightPlan.forEach(wp => {
+            const id = wp.ident || wp.icao;
+            if (wp.metar && id && !seenIcao.has(id)) {
+                seenIcao.add(id);
+                allSources.push({ icao: id, lat: wp.lat, lon: wp.lon, elev: wp.alt_ft || 0, metar: wp.metar });
+            }
+        });
+    }
+
+    if (Array.isArray(airportsData)) {
+        airportsData.forEach(apt => {
+            if (apt.metar && apt.icao && !seenIcao.has(apt.icao)) {
+                seenIcao.add(apt.icao);
+                allSources.push({ icao: apt.icao, lat: apt.lat, lon: apt.lon, elev: apt.elev || 0, metar: apt.metar });
+            }
+        });
+    }
+
+    const bounds = map.getBounds().pad(0.35);
+
+    allSources.forEach(src => {
+        if (!bounds.contains([src.lat, src.lon])) return;
+        const layers = parseMetarCloudLayers(src.metar, src.elev);
+
+        // Cerca lo strato nuvoloso attivo nella fascia di quota selezionata
+        const matching = layers.filter(l => (targetAlt + bandHalfWidth) >= l.baseFt && (targetAlt - bandHalfWidth) <= l.topFt);
+        if (matching.length === 0) return;
+
+        // Prende lo strato più denso a quella quota
+        const activeLayer = matching.reduce((prev, curr) => (curr.opacity > prev.opacity ? curr : prev), matching[0]);
+
+        // Raggio cella nuvolosa (in metri) proporzionale alla densità
+        const radiusMeters = activeLayer.opacity > 0.3 ? 34000 : 24000;
+
+        L.circle([src.lat, src.lon], {
+            radius: radiusMeters,
+            color: activeLayer.color,
+            weight: 1,
+            opacity: activeLayer.opacity * 0.7,
+            fillColor: activeLayer.color,
+            fillOpacity: activeLayer.opacity,
+            className: 'cloud-cell-svg',
+            interactive: false
+        }).addTo(cloudLayerGroup);
+
+        const flBase = String(Math.round(activeLayer.baseFt / 100)).padStart(3, '0');
+        const flTop = String(Math.round(activeLayer.topFt / 100)).padStart(3, '0');
+
+        L.marker([src.lat, src.lon], {
+            icon: L.divIcon({
+                className: '',
+                html: `<div class="cloud-cell-tag">☁️ ${src.icao} ${activeLayer.amount} FL${flBase}-FL${flTop}</div>`,
+                iconSize: null
+            }),
+            interactive: false,
+            zIndexOffset: 300
+        }).addTo(cloudLayerGroup);
+    });
+}
+
+function updateVnavCloudLevelLine(targetAltFt) {
+    const svg = document.getElementById('vnavSvg');
+    if (!svg) return;
+
+    let line = document.getElementById('vnavCloudAltLine');
+    let label = document.getElementById('vnavCloudAltLabel');
+
+    if (targetAltFt === null || cloudAltMode === 'off') {
+        if (line) line.style.display = 'none';
+        if (label) label.style.display = 'none';
+        return;
+    }
+
+    // Calcola il tetto massimo del grafico VNAV corrente (default almeno 12.000 ft)
+    let maxAlt = 12000;
+    if (Array.isArray(flightPlan) && flightPlan.length > 0) {
+        const fplMax = Math.max(...flightPlan.map(w => Number(w.alt_ft) || 0));
+        maxAlt = Math.max(10000, Math.ceil((fplMax * 1.15) / 1000) * 1000);
+    }
+    if (targetAltFt > maxAlt) maxAlt = Math.ceil((targetAltFt * 1.1) / 1000) * 1000;
+
+    // Coordinate SVG standard di vnavSvg (viewBox 0 0 1000 100)
+    const yRatio = 1 - Math.min(1, Math.max(0, targetAltFt / maxAlt));
+    const yPos = Math.round(10 + yRatio * 75);
+
+    if (!line) {
+        line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.id = 'vnavCloudAltLine';
+        line.setAttribute('x1', '0');
+        line.setAttribute('x2', '1000');
+        line.setAttribute('stroke', '#38bdf8');
+        line.setAttribute('stroke-width', '1.3');
+        line.setAttribute('stroke-dasharray', '5, 5');
+        line.setAttribute('opacity', '0.75');
+        svg.appendChild(line);
+    }
+
+    if (!label) {
+        label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        label.id = 'vnavCloudAltLabel';
+        label.setAttribute('x', '992');
+        label.setAttribute('text-anchor', 'end');
+        label.setAttribute('fill', '#38bdf8');
+        label.setAttribute('font-size', '9.5');
+        label.setAttribute('font-family', 'Consolas, monospace');
+        label.setAttribute('font-weight', 'bold');
+        svg.appendChild(label);
+    }
+
+    line.setAttribute('y1', String(yPos));
+    line.setAttribute('y2', String(yPos));
+    line.style.display = 'block';
+
+    label.setAttribute('y', String(Math.max(11, yPos - 3)));
+    label.textContent = `☁️ CLOUD SCAN: ${targetAltFt.toLocaleString()} FT`;
+    label.style.display = 'block';
+}
+
 // --- HOOKS DI COLLEGAMENTO UI (VNAV ToD, NAVLOG, TOUCH) ---
 function installTodAndTouchHooks() {
     if (window._todHooksInstalled) return;
@@ -761,6 +1326,7 @@ function installTodAndTouchHooks() {
 
     if (typeof ensureNavlogAndFuelUI === 'function') ensureNavlogAndFuelUI();
     ensureDrawerToggleTab();
+    ensureVnavCloudControls();
     ensureCompassRoseWidget();
     ensureTooltipToggleButton();
     initSyntheticTooltipsEngine();
@@ -773,6 +1339,7 @@ function installTodAndTouchHooks() {
             setTimeout(() => {
                 if (typeof updateTopOfDescentOverlay === 'function') updateTopOfDescentOverlay();
                 if (typeof recalculateFuelAndPerfUI === 'function') recalculateFuelAndPerfUI();
+                if (weatherOverlayEnabled && typeof renderWeatherOverlay === 'function') renderWeatherOverlay();
                 const nlModal = document.getElementById('navlogModal');
                 if (nlModal && nlModal.style.display === 'flex' && typeof renderNavlogTable === 'function') {
                     renderNavlogTable();
@@ -786,9 +1353,10 @@ function installTodAndTouchHooks() {
         const origRenderVnav = window.renderVnavChart;
         window.renderVnavChart = function(...args) {
             const res = origRenderVnav.apply(this, args);
-            if (typeof updateTopOfDescentOverlay === 'function') {
-                setTimeout(updateTopOfDescentOverlay, 40);
-            }
+            setTimeout(() => {
+                if (typeof updateTopOfDescentOverlay === 'function') updateTopOfDescentOverlay();
+                if (typeof updateVnavCloudLevelLine === 'function') updateVnavCloudLevelLine(getTargetCloudAltitudeFt());
+            }, 40);
             return res;
         };
     }
@@ -958,6 +1526,12 @@ async function initAeroGlassApp() {
             if (fpRes && fpRes.success && fpRes.value) {
                 try { fuelPerfConfig = { ...fuelPerfConfig, ...JSON.parse(fpRes.value) }; } catch (e) {}
             }
+
+            const wxRes = await window.pywebview.api.get_setting('wx_overlay');
+            if (wxRes && wxRes.success && wxRes.value !== null && wxRes.value !== undefined) {
+                weatherOverlayEnabled = (wxRes.value === 'true');
+                updateWeatherOverlayButtonUI();
+            }
         }
 
         const initData = await window.pywebview.api.get_initial_data();
@@ -984,6 +1558,8 @@ async function initAeroGlassApp() {
         }
         if (typeof loadUserWaypoints === 'function') await loadUserWaypoints();
         ensureGroundMapUI();
+        ensureWeatherOverlayUI();
+        if (weatherOverlayEnabled) renderWeatherOverlay();
     } catch (e) {}
 
     if (typeof updateTopOfDescentOverlay === 'function') setTimeout(updateTopOfDescentOverlay, 250);
@@ -1003,6 +1579,10 @@ async function initAeroGlassApp() {
                 }
             }
             if (typeof updateTodHeaderStatus === 'function') updateTodHeaderStatus();
+            if (cloudAltMode === 'auto' && typeof renderCloudCoverageLayer === 'function') {
+                renderCloudCoverageLayer(false);
+                updateVnavCloudButtonsUI();
+            }
         }, 1000);
 
         const efbTimer = setInterval(() => {

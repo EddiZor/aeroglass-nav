@@ -987,3 +987,164 @@ body.theme-night .compass-hdg-readout {
     background: rgba(4, 8, 16, 0.94) !important;
     border-color: rgba(56, 189, 248, 0.16) !important;
 }
+
+/* 💨 WEATHER OVERLAY (VETTORI VENTO IN QUOTA & METAR RAPIDI) */
+body.mode-simple .top-pills-group #btnToggleWeather {
+    display: inline-flex !important;
+}
+
+.wx-wind-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(13, 17, 23, 0.90);
+    border: 1px solid rgba(0, 210, 255, 0.45);
+    color: #f0f6fc;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 5px;
+    white-space: nowrap;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.65);
+    transform: translate(-50%, -135%);
+    pointer-events: auto;
+}
+
+.wx-wind-badge.tailwind {
+    border-color: rgba(46, 160, 67, 0.75);
+    color: #3fb950;
+}
+
+.wx-wind-badge.headwind {
+    border-color: rgba(252, 163, 17, 0.75);
+    color: #fca311;
+}
+
+.wx-wind-arrow {
+    display: inline-block;
+    font-size: 12px;
+    line-height: 1;
+}
+
+.wx-apt-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(13, 17, 23, 0.92);
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    color: #f8fafc;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 800;
+    padding: 2px 7px;
+    border-radius: 12px;
+    white-space: nowrap;
+    cursor: pointer;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.7);
+    transform: translate(-50%, 55%);
+    pointer-events: auto;
+    transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.wx-apt-pill:hover {
+    transform: translate(-50%, 55%) scale(1.1);
+    border-color: var(--cyan);
+    z-index: 950 !important;
+}
+
+.wx-cat-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.leaflet-popup.wx-metar-glass-popup .leaflet-popup-content-wrapper {
+    background: rgba(13, 17, 23, 0.96) !important;
+    border: 1px solid rgba(0, 210, 255, 0.55) !important;
+    border-radius: 10px !important;
+    color: #f0f6fc !important;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.85) !important;
+    padding: 2px !important;
+}
+
+.leaflet-popup.wx-metar-glass-popup .leaflet-popup-tip {
+    background: rgba(13, 17, 23, 0.96) !important;
+}
+
+.leaflet-popup.wx-metar-glass-popup .leaflet-popup-content {
+    margin: 10px 12px !important;
+    font-family: var(--font-mono) !important;
+    font-size: 11px !important;
+    line-height: 1.45 !important;
+}
+
+/* ☁️ SELETTORE QUOTA NUVOLE NEL CASSETTO VNAV & LAYER NUVOLE */
+.vnav-cloud-controls {
+    justify-self: end;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    z-index: 15;
+}
+
+.vnav-cloud-lbl {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-muted);
+    margin-right: 3px;
+    letter-spacing: 0.4px;
+    white-space: nowrap;
+}
+
+.vnav-fl-btn {
+    background: rgba(13, 17, 23, 0.85);
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+
+.vnav-fl-btn:hover {
+    border-color: var(--cyan);
+    color: var(--text-main);
+}
+
+.vnav-fl-btn.active {
+    background: rgba(0, 210, 255, 0.20);
+    border-color: var(--cyan);
+    color: var(--cyan);
+    box-shadow: 0 0 8px rgba(0, 210, 255, 0.25);
+}
+
+.vnav-fl-btn.imc-alert {
+    background: rgba(224, 64, 251, 0.22);
+    border-color: var(--nav-magenta);
+    color: var(--nav-magenta);
+}
+
+.cloud-cell-svg {
+    filter: blur(10px);
+    pointer-events: none !important;
+}
+
+.cloud-cell-tag {
+    background: rgba(15, 23, 42, 0.82);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    color: #cbd5e1;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 4px;
+    white-space: nowrap;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}

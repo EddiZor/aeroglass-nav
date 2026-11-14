@@ -606,6 +606,9 @@ class AeroGlassAPI:
                         else:
                             proc_type = "STAR"
 
+                    w_dir = int(float(fix.findtext("wind_dir", 0) or 0))
+                    w_spd = int(float(fix.findtext("wind_spd", 0) or 0))
+
                     fpl.append({
                         "ident": ident,
                         "name": fix.findtext("name", "Waypoint"),
@@ -614,7 +617,9 @@ class AeroGlassAPI:
                         "alt_ft": int(float(fix.findtext("altitude_feet", 5000))),
                         "type": fix.findtext("type", "WPT"),
                         "proc_type": proc_type,
-                        "proc_name": via if via and via != "DCT" else proc_type
+                        "proc_name": via if via and via != "DCT" else proc_type,
+                        "wind_dir": w_dir,
+                        "wind_spd": w_spd
                     })
 
             destination = root.find("destination")

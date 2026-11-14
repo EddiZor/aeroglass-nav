@@ -135,6 +135,7 @@ class TelemetryManager:
                 on_ground = self._safe_get(aq_ref, "SIM_ON_GROUND")
                 wind_dir = self._safe_get(aq_ref, "AMBIENT_WIND_DIRECTION")
                 wind_spd = self._safe_get(aq_ref, "AMBIENT_WIND_VELOCITY")
+                in_cloud = self._safe_get(aq_ref, "AMBIENT_IN_CLOUD")
 
                 now = time.time()
                 if (now - self._last_meta_time) >= 30.0 or self._cached_title == "MSFS 2024":
@@ -174,7 +175,8 @@ class TelemetryManager:
                     "hdg_deg": f"{hdg_mag_deg}°",
                     "hdg_true": hdg_true_deg,
                     "wind_dir": w_dir_val,
-                    "wind_spd": w_spd_val
+                    "wind_spd": w_spd_val,
+                    "in_cloud": bool(int(in_cloud)) if in_cloud is not None else False
                 }
 
                 # Lock acquisito solo per pochi microsecondi durante lo scambio del dizionario in memoria
