@@ -44,6 +44,7 @@ class DummyTelemetry:
 class AeroGlassAPI:
     def __init__(self):
         self._window = None
+        self._db_lock = threading.Lock()
         # Inizializza il database SQLite (~/.aeroglass_nav/aeroglass.db)
         init_db()
         if SimTelemetry is not None:
@@ -57,6 +58,7 @@ class AeroGlassAPI:
         self._last_saved_fpl_sig = ""
         self._fpl_ts = time.time()
         self.efb_ip = self._detect_local_ip()
+        self._ip_last_check = time.time()
         self.efb_port = 8339
         self._httpd = None
         self._migrate_legacy_files()
@@ -76,6 +78,7 @@ class AeroGlassAPI:
         """Rileva l'indirizzo IP locale del PC sulla rete LAN/Wi-Fi."""
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.settimeout(0.5)
                 s.connect(("8.8.8.8", 80))
                 return s.getsockname()[0]
         except Exception:
@@ -195,7 +198,10 @@ class AeroGlassAPI:
 
     def get_efb_info(self):
         """Restituisce IP locale, porta attiva e URL completo per collegare il Tablet EFB."""
-        self.efb_ip = self._detect_local_ip()
+        now = time.time()
+        if (now - self._ip_last_check) > 30.0 or not self.efb_ip:
+            self._ip_last_check = now
+            self.efb_ip = self._detect_local_ip()
         url = f"http://{self.efb_ip}:{self.efb_port}"
         return {
             "success": True,
@@ -239,10 +245,11 @@ class AeroGlassAPI:
 
         airports = []
         try:
-            with get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT icao, name, lat, lon, elev, rwy, metar FROM cached_airports")
-                airports = [dict(row) for row in cursor.fetchall()]
+            with self._db_lock:
+                with get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT icao, name, lat, lon, elev, rwy, metar FROM cached_airports")
+                    airports = [dict(row) for row in cursor.fetchall()]
         except Exception:
             airports = []
 
@@ -270,21 +277,22 @@ class AeroGlassAPI:
 
         # 1. Controlla prima se l'aeroporto è già presente nel database SQLite
         try:
-            with get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT icao, name, lat, lon, elev, rwy, metar FROM cached_airports WHERE icao = ?", (code,))
-                row = cursor.fetchone()
-                if row:
-                    result = {
-                        "success": True,
-                        "icao": row["icao"],
-                        "name": row["name"],
-                        "lat": float(row["lat"]),
-                        "lon": float(row["lon"]),
-                        "elev": int(row["elev"] or 0),
-                        "metar": row["metar"] or "",
-                        "is_airport": True
-                    }
+            with self._db_lock:
+                with get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT icao, name, lat, lon, elev, rwy, metar FROM cached_airports WHERE icao = ?", (code,))
+                    row = cursor.fetchone()
+                    if row:
+                        result = {
+                            "success": True,
+                            "icao": row["icao"],
+                            "name": row["name"],
+                            "lat": float(row["lat"]),
+                            "lon": float(row["lon"]),
+                            "elev": int(row["elev"] or 0),
+                            "metar": row["metar"] or "",
+                            "is_airport": True
+                        }
         except Exception:
             pass
 
@@ -383,21 +391,22 @@ class AeroGlassAPI:
         # 5. Salva o aggiorna l'aeroporto trovato nella tabella SQLite cached_airports
         if result:
             try:
-                with get_connection() as conn:
-                    cursor = conn.cursor()
-                    cursor.execute("""
-                        INSERT OR REPLACE INTO cached_airports (icao, name, lat, lon, elev, rwy, metar)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        result["icao"],
-                        result["name"],
-                        float(result["lat"]),
-                        float(result["lon"]),
-                        int(result["elev"]),
-                        "",
-                        result.get("metar", "")
-                    ))
-                    conn.commit()
+                with self._db_lock:
+                    with get_connection() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            INSERT OR REPLACE INTO cached_airports (icao, name, lat, lon, elev, rwy, metar)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            result["icao"],
+                            result["name"],
+                            float(result["lat"]),
+                            float(result["lon"]),
+                            int(result["elev"]),
+                            "",
+                            result.get("metar", "")
+                        ))
+                        conn.commit()
             except Exception:
                 pass
             return result
@@ -407,24 +416,26 @@ class AeroGlassAPI:
     def get_setting(self, key):
         """Recupera un'impostazione dalla tabella settings di SQLite."""
         try:
-            with get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT value FROM settings WHERE key = ?", (key,))
-                row = cursor.fetchone()
-                return {"success": True, "value": row["value"] if row else None}
+            with self._db_lock:
+                with get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT value FROM settings WHERE key = ?", (key,))
+                    row = cursor.fetchone()
+                    return {"success": True, "value": row["value"] if row else None}
         except Exception as e:
             return {"success": False, "value": None, "error": str(e)}
 
     def save_setting(self, key, value):
         """Salva o aggiorna un'impostazione nella tabella settings di SQLite."""
         try:
-            with get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
-                    (key, str(value).strip())
-                )
-                conn.commit()
+            with self._db_lock:
+                with get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                        (key, str(value).strip())
+                    )
+                    conn.commit()
             return {"success": True}
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -455,52 +466,54 @@ class AeroGlassAPI:
     def get_user_waypoints(self):
         """Restituisce tutti i waypoint personalizzati salvati nel DB SQLite."""
         try:
-            with get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT ident, name, lat, lon, alt_ft, type FROM user_waypoints ORDER BY id ASC")
-                rows = cursor.fetchall()
-                waypoints = [dict(row) for row in rows]
-                return {"success": True, "waypoints": waypoints}
+            with self._db_lock:
+                with get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT ident, name, lat, lon, alt_ft, type FROM user_waypoints ORDER BY id ASC")
+                    rows = cursor.fetchall()
+                    waypoints = [dict(row) for row in rows]
+                    return {"success": True, "waypoints": waypoints}
         except Exception as e:
             return {"success": False, "waypoints": [], "error": str(e)}
 
     def save_user_waypoints(self, waypoints):
         """Sincronizza la lista dei waypoint utente nel DB SQLite e aggiorna il timestamp di sync EFB."""
         try:
-            with get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("DELETE FROM user_waypoints")
-                for wp in (waypoints or []):
-                    cursor.execute("""
-                        INSERT OR REPLACE INTO user_waypoints (ident, name, lat, lon, alt_ft, type)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    """, (
-                        str(wp.get("ident", "")).upper(),
-                        wp.get("name", "User Waypoint"),
-                        float(wp.get("lat", 0.0)),
-                        float(wp.get("lon", 0.0)),
-                        int(wp.get("alt_ft", 5000)),
-                        wp.get("type", "USER")
-                    ))
-                conn.commit()
+            with self._db_lock:
+                with get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM user_waypoints")
+                    for wp in (waypoints or []):
+                        cursor.execute("""
+                            INSERT OR REPLACE INTO user_waypoints (ident, name, lat, lon, alt_ft, type)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                        """, (
+                            str(wp.get("ident", "")).upper(),
+                            wp.get("name", "User Waypoint"),
+                            float(wp.get("lat", 0.0)),
+                            float(wp.get("lon", 0.0)),
+                            int(wp.get("alt_ft", 5000)),
+                            wp.get("type", "USER")
+                        ))
+                    conn.commit()
             self._fpl_ts = time.time()
             return {"success": True, "fpl_ts": self._fpl_ts}
         except Exception as e:
-            print("Errore save_user_waypoints:", e)
             return {"success": False, "error": str(e)}
 
     # --- STORICO VOLI E FUEL LOG (SQLITE) ---
     def get_flight_history(self):
         """Restituisce lo storico dei voli registrati nel DB SQLite."""
         try:
-            with get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    SELECT id, date, aircraft, departure, destination, distance_nm, fuel_used_gal
-                    FROM flight_history ORDER BY id DESC
-                """)
-                rows = cursor.fetchall()
-                return {"success": True, "history": [dict(r) for r in rows]}
+            with self._db_lock:
+                with get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        SELECT id, date, aircraft, departure, destination, distance_nm, fuel_used_gal
+                        FROM flight_history ORDER BY id DESC
+                    """)
+                    rows = cursor.fetchall()
+                    return {"success": True, "history": [dict(r) for r in rows]}
         except Exception as e:
             return {"success": False, "history": [], "error": str(e)}
 
@@ -508,20 +521,21 @@ class AeroGlassAPI:
         """Aggiunge un volo completato nello storico SQLite."""
         try:
             now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-            with get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    INSERT INTO flight_history (date, aircraft, departure, destination, distance_nm, fuel_used_gal)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (
-                    now_str,
-                    str(aircraft or "MSFS 2024").strip(),
-                    str(departure or "---").strip().upper(),
-                    str(destination or "---").strip().upper(),
-                    round(float(distance_nm or 0.0), 1),
-                    round(float(fuel_used_gal or 0.0), 1)
-                ))
-                conn.commit()
+            with self._db_lock:
+                with get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        INSERT INTO flight_history (date, aircraft, departure, destination, distance_nm, fuel_used_gal)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (
+                        now_str,
+                        str(aircraft or "MSFS 2024").strip(),
+                        str(departure or "---").strip().upper(),
+                        str(destination or "---").strip().upper(),
+                        round(float(distance_nm or 0.0), 1),
+                        round(float(fuel_used_gal or 0.0), 1)
+                    ))
+                    conn.commit()
             return {"success": True}
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -529,10 +543,11 @@ class AeroGlassAPI:
     def delete_flight_record(self, record_id):
         """Elimina un singolo volo dallo storico SQLite."""
         try:
-            with get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("DELETE FROM flight_history WHERE id = ?", (int(record_id),))
-                conn.commit()
+            with self._db_lock:
+                with get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM flight_history WHERE id = ?", (int(record_id),))
+                    conn.commit()
             return {"success": True}
         except Exception as e:
             return {"success": False, "error": str(e)}

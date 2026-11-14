@@ -90,7 +90,7 @@ function updateFlightInfoBar(lat, lon) {
     if (dateEl) dateEl.innerText = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
     if (utcEl) utcEl.innerText = `UTC: ${String(now.getUTCHours()).padStart(2,'0')}:${String(now.getUTCMinutes()).padStart(2,'0')}:${String(now.getUTCSeconds()).padStart(2,'0')}`;
     if (sysEl) sysEl.innerText = `SYS: ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
-    if (coordsEl && lat !== undefined && lon !== undefined) {
+    if (coordsEl && lat !== undefined && lon !== undefined && lat !== null && lon !== null) {
         coordsEl.innerText = `LAT: ${Number(lat).toFixed(5)} LON: ${Number(lon).toFixed(5)}`;
     }
 }
@@ -98,10 +98,13 @@ function updateFlightInfoBar(lat, lon) {
 // --- POLLING TELEMETRIA SIMCONNECT & SYNC EFB ---
 async function pollTelemetry() {
     updateFlightInfoBar();
-    if (!window.pywebview || !window.pywebview.api) return;
+    if (!window.pywebview || !window.pywebview.api || typeof window.pywebview.api.get_telemetry !== 'function') return;
+
     try {
         const data = await window.pywebview.api.get_telemetry();
         if (!data) return;
+
+        window.lastTelemetry = data;
 
         // Sincronizzazione automatica bidirezionale della rotta tra PC e Tablet EFB
         if (data.fpl_ts) {
@@ -115,17 +118,28 @@ async function pollTelemetry() {
             }
         }
 
-        document.getElementById('simStatus').innerText = data.mode;
-        document.getElementById('simDot').className = 'status-dot' + (data.connected ? ' live' : '');
-        document.getElementById('valAlt').innerText = data.alt_ft;
-        document.getElementById('valGs').innerText = data.gs_kt;
-        document.getElementById('valHdg').innerText = data.hdg_deg;
-        document.getElementById('valAcft').innerText = data.aircraft || "MSFS 2024";
+        const elStatus = document.getElementById('simStatus');
+        const elDot = document.getElementById('simDot');
+        const elAlt = document.getElementById('valAlt');
+        const elGs = document.getElementById('valGs');
+        const elHdg = document.getElementById('valHdg');
+        const elAcft = document.getElementById('valAcft');
 
-        if (data.lat !== undefined && data.lon !== undefined && data.lat !== null) {
+        if (elStatus) elStatus.innerText = data.mode || 'DEMO';
+        if (elDot) elDot.className = 'status-dot' + (data.connected ? ' live' : '');
+        if (elAlt) elAlt.innerText = data.alt_ft || '--- ft';
+        if (elGs) elGs.innerText = data.gs_kt || '--- kt';
+        if (elHdg) elHdg.innerText = data.hdg_deg || '---°';
+        if (elAcft) elAcft.innerText = data.aircraft || "MSFS 2024";
+
+        if (typeof map === 'undefined' || !map || typeof L === 'undefined') return;
+
+        if (data.lat !== undefined && data.lon !== undefined && data.lat !== null && data.lon !== null) {
             const newLatLng = L.latLng(data.lat, data.lon);
-            let mapHeading = (data.hdg_true !== undefined && data.hdg_true !== null) ? Number(data.hdg_true) : Number(data.hdg_deg);
-            if (isNaN(mapHeading)) mapHeading = lastAcftHdgTrue;
+            let mapHeading = (data.hdg_true !== undefined && data.hdg_true !== null)
+                ? parseFloat(data.hdg_true)
+                : parseFloat(data.hdg_deg);
+            if (isNaN(mapHeading)) mapHeading = lastAcftHdgTrue || 0;
             lastAcftHdgTrue = mapHeading;
             lastAcftLatLng = newLatLng;
 
@@ -137,7 +151,7 @@ async function pollTelemetry() {
                     const svgContent = getAircraftSvgIcon(acftName);
                     const dynamicIcon = L.divIcon({
                         className: '',
-                        html: `<div id="acftSvg" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;transform-origin:center center;transition:transform 0.25s linear;filter:drop-shadow(0 0 10px #38bdf8) drop-shadow(0 0 20px #38bdf8);transform:rotate(${mapHeading}deg);">${svgContent}</div>`,
+                        html: `<div id="acftSvg" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;transform-origin:center center;transition:transform 0.25s linear;filter:drop-shadow(0 0 6px rgba(56, 189, 248, 0.85));transform:rotate(${mapHeading}deg);">${svgContent}</div>`,
                         iconSize: [36, 36],
                         iconAnchor: [18, 18]
                     });
@@ -154,16 +168,23 @@ async function pollTelemetry() {
                     if (svgEl) svgEl.style.transform = `rotate(${mapHeading}deg)`;
                 }
 
+                // Sposta la mappa solo se l'aereo si è effettivamente mosso rispetto al centro mappa (> ~8 metri)
                 if (followState !== 0) {
-                    map.panTo(newLatLng, { animate: true, duration: 0.5 });
+                    const c = map.getCenter();
+                    if (Math.hypot(c.lat - newLatLng.lat, c.lng - newLatLng.lng) > 0.00008) {
+                        map.panTo(newLatLng, { animate: true, duration: 0.45 });
+                    }
                 }
 
                 // Rotazione dinamica per Track Up
                 const mapEl = document.getElementById('map');
-                if (followState === 2 && mapEl) {
-                    mapEl.style.transition = 'transform 0.25s linear';
-                    // Lo scale(1.45) serve a nascondere i bordi neri mentre la mappa quadrata ruota
-                    mapEl.style.transform = `scale(1.45) rotate(${-mapHeading}deg)`;
+                if (mapEl) {
+                    if (followState === 2) {
+                        mapEl.style.transition = 'transform 0.25s linear';
+                        mapEl.style.transform = `scale(1.45) rotate(${-mapHeading}deg)`;
+                    } else if (mapEl.style.transform && mapEl.style.transform.includes('scale')) {
+                        mapEl.style.transform = 'rotate(0deg)';
+                    }
                 }
 
             } else if (aircraftMarker) {
@@ -174,14 +195,16 @@ async function pollTelemetry() {
             updateFlightInfoBar(data.lat, data.lon);
 
             const acftLine = document.getElementById('acftVnavLine');
-            if (data.connected && acftLine && flightPlan && flightPlan.length >= 2) {
+            if (data.connected && acftLine && flightPlan && flightPlan.length >= 2 && typeof calculateRouteProgress === 'function') {
                 const res = calculateRouteProgress(data.lat, data.lon);
                 if (res) {
                     const xPos = res.fraction * 1000;
                     acftLine.setAttribute('x1', xPos);
                     acftLine.setAttribute('x2', xPos);
                     acftLine.style.display = 'block';
-                    updateActiveWaypointHighlight(data.lat, data.lon, mapHeading);
+                    if (typeof updateActiveWaypointHighlight === 'function') {
+                        updateActiveWaypointHighlight(data.lat, data.lon, mapHeading);
+                    }
                 } else {
                     acftLine.style.display = 'none';
                 }

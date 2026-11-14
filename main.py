@@ -56,6 +56,7 @@ def check_single_instance():
         return False
     return True
 
+
 def focus_existing_instance():
     """Trova la finestra dell'applicazione già aperta e la porta in primo piano."""
     user32 = ctypes.windll.user32
@@ -67,16 +68,17 @@ def focus_existing_instance():
             user32.ShowWindow(hwnd, 5)  # SW_SHOW
         user32.SetForegroundWindow(hwnd)
 
+
 def show_already_running_warning():
     """Mostra un popup Frameless in stile AeroGlass centrato sulla finestra principale."""
     user32 = ctypes.windll.user32
     hwnd = user32.FindWindowW(None, "AeroGlass Nav - Flight Planner & Moving Map")
-    
+
     warn_w = 320
     warn_h = 160
     x_pos = None
     y_pos = None
-    
+
     # Calcola il centro esatto della finestra principale in esecuzione
     if hwnd:
         rect = wintypes.RECT()
@@ -140,7 +142,7 @@ def show_already_running_warning():
     </body>
     </html>
     """
-    
+
     class WarningAPI:
         def __init__(self):
             self._window = None
@@ -149,8 +151,7 @@ def show_already_running_warning():
                 self._window.destroy()
 
     api = WarningAPI()
-    
-    # Crea la finestra passandole le coordinate esatte del centro della UI principale
+
     warning_window = webview.create_window(
         title="AeroGlass Nav - Avviso",
         html=html_content,
@@ -166,6 +167,7 @@ def show_already_running_warning():
     )
     api._window = warning_window
     webview.start()
+
 
 def apply_aeroglass_titlebar(hwnd):
     """Applica i colori AeroGlass (#0f172a e #38bdf8) alla barra del titolo nativa di Windows 11."""
@@ -225,53 +227,51 @@ def main():
         user32 = ctypes.windll.user32
         hwnd = None
         while not hwnd:
-            time.sleep(0.1)
+            time.sleep(0.15)
             hwnd = user32.FindWindowW(None, "AeroGlass Nav - Flight Planner & Moving Map")
 
         apply_aeroglass_titlebar(hwnd)
+        last_hmon = user32.MonitorFromWindow(hwnd, 2)
 
         while True:
-            time.sleep(0.4)
+            time.sleep(0.8)
             try:
-                if not hwnd:
-                    hwnd = user32.FindWindowW(None, "AeroGlass Nav - Flight Planner & Moving Map")
-                    if not hwnd:
-                        continue
+                if not hwnd or not user32.IsWindow(hwnd):
+                    break
 
-                if user32.IsZoomed(hwnd):
+                if user32.IsZoomed(hwnd) or user32.IsIconic(hwnd):
                     continue
 
-                rect = wintypes.RECT()
-                if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                # Non intervenire se l'utente sta tenendo premuto il tasto sinistro del mouse (trascinamento/resize)
+                if user32.GetAsyncKeyState(0x01) & 0x8000:
                     continue
-
-                cur_w = rect.right - rect.left
-                cur_h = rect.bottom - rect.top
 
                 hmon = user32.MonitorFromWindow(hwnd, 2)
-                mi = MONITORINFO()
-                mi.cbSize = ctypes.sizeof(MONITORINFO)
-                if user32.GetMonitorInfoW(hmon, ctypes.byref(mi)):
-                    mw = mi.rcMonitor.right - mi.rcMonitor.left
-                    mh = mi.rcMonitor.bottom - mi.rcMonitor.top
-
-                    target_w = int(mw * 0.8)
-                    target_h = int(mh * 0.8)
-
-                    if abs(cur_w - target_w) > 15 or abs(cur_h - target_h) > 15:
-                        time.sleep(0.3)
-                        rect2 = wintypes.RECT()
-                        user32.GetWindowRect(hwnd, ctypes.byref(rect2))
-                        if rect.left == rect2.left and rect.top == rect2.top:
-                            center_x = mi.rcMonitor.left + (mw - target_w) // 2
-                            center_y = mi.rcMonitor.top + (mh - target_h) // 2
-                            user32.SetWindowPos(hwnd, 0, center_x, center_y, target_w, target_h, 0x0040)
+                if hmon and hmon != last_hmon:
+                    last_hmon = hmon
+                    mi = MONITORINFO()
+                    mi.cbSize = ctypes.sizeof(MONITORINFO)
+                    if user32.GetMonitorInfoW(hmon, ctypes.byref(mi)):
+                        mw = mi.rcMonitor.right - mi.rcMonitor.left
+                        mh = mi.rcMonitor.bottom - mi.rcMonitor.top
+                        target_w = int(mw * 0.8)
+                        target_h = int(mh * 0.8)
+                        center_x = mi.rcMonitor.left + (mw - target_w) // 2
+                        center_y = mi.rcMonitor.top + (mh - target_h) // 2
+                        # 0x0014 = SWP_NOACTIVATE (0x0010) | SWP_NOZORDER (0x0004): non ruba mai il focus a MSFS 2024
+                        user32.SetWindowPos(hwnd, 0, center_x, center_y, target_w, target_h, 0x0014)
             except Exception:
                 pass
 
     threading.Thread(target=auto_resize_monitor_watcher, daemon=True).start()
 
-    window.events.closed += lambda: api._telemetry.shutdown()
+    def on_closed():
+        try:
+            api._telemetry.shutdown()
+        except Exception:
+            pass
+
+    window.events.closed += on_closed
     webview.start(debug=False)
 
 

@@ -90,34 +90,57 @@ body, html {
     position: absolute;
     top: 14px;
     right: 16px;
-    left: 348px;
+    left: 352px;
     z-index: 500;
     display: flex;
     justify-content: flex-end;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: nowrap;
     pointer-events: none;
 }
 
-.top-pills-group, .telemetry-bar {
+.top-pills-group {
     pointer-events: auto;
     display: flex;
     align-items: center;
+    gap: 6px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    max-width: 100%;
+    min-width: 0;
+    scrollbar-width: none;
+}
+
+.top-pills-group::-webkit-scrollbar {
+    display: none;
+}
+
+.telemetry-bar {
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    white-space: nowrap;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
     gap: 8px;
 }
 
 .top-btn {
+    flex-shrink: 0;
+    white-space: nowrap;
     background: var(--nav-panel-glass);
     border: 1px solid var(--nav-border);
     color: var(--text-main);
-    padding: 6px 12px;
+    padding: 6px 10px;
     border-radius: 6px;
     font-size: 11.5px;
     font-weight: 600;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     cursor: pointer;
     transition: all 0.15s ease;
 }
@@ -134,22 +157,17 @@ body, html {
 }
 
 .top-select {
+    flex-shrink: 0;
+    white-space: nowrap;
     background: var(--nav-panel-glass);
     border: 1px solid var(--nav-border);
     color: var(--text-main);
-    padding: 6px 12px;
+    padding: 6px 10px;
     border-radius: 6px;
     font-size: 11.5px;
     font-weight: 600;
     outline: none;
     cursor: pointer;
-}
-
-.telemetry-bar {
-    padding: 6px 14px;
-    border-radius: 6px;
-    font-size: 12px;
-    gap: 10px;
 }
 
 .status-dot {

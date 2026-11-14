@@ -123,8 +123,12 @@ const AIRSPACES_DATA = {
     ]
 };
 
-// --- PONTE EFB DI RETE (POLYFILL AUTOMATICO PER BROWSER / TABLET WI-FI) ---
-if (!window.pywebview && window.location.protocol.startsWith('http')) {
+// --- PONTE EFB DI RETE (ESCLUSIVO PER BROWSER ESTERNO / TABLET WI-FI) ---
+// In Edge WebView2 Desktop (pywebview) window.chrome.webview è sempre definito:
+// non sovrascriviamo mai window.pywebview sul Desktop per lasciare agire il bridge nativo Python.
+const isDesktopWebView = Boolean(window.chrome && window.chrome.webview);
+
+if (!isDesktopWebView && !window.pywebview && window.location.protocol.startsWith('http')) {
     const efbApiProxy = new Proxy({}, {
         get: function(target, prop) {
             if (prop === 'then' || typeof prop === 'symbol') return undefined;
@@ -147,8 +151,6 @@ if (!window.pywebview && window.location.protocol.startsWith('http')) {
         }, 60);
     });
 }
-
-// --- STATO GLOBALE E SORGENTI CARTOGRAFICHE ---
 
 // --- VARIABILI DI STATO GLOBALE ---
 let currentLang = 'it';
@@ -184,7 +186,7 @@ let isPickingUserWp = false;
 let tempPickMarker = null;
 
 // Stato Rubber Banding (trascinamento elastico segmenti e waypoint) e Storico Undo
-let rubberBandState = null; // { mode: 'insert'|'move', legIndex, wptIndex, startPoint, currentLatLng, snapTarget }
+let rubberBandState = null;
 let rubberBandPoly = null;
 let rubberBandMarker = null;
 let fplUndoStack = [];

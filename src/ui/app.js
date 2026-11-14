@@ -367,7 +367,6 @@ function ensureCompassRoseWidget() {
         const observer = new MutationObserver(syncCompass);
         observer.observe(mapEl, { attributes: true, attributeFilter: ['style'] });
     }
-    setInterval(syncCompass, 250);
     syncCompass();
 
     widget.addEventListener('click', () => {
@@ -451,39 +450,32 @@ function toggleThemeMode() {
     applyThemeMode(order[nextIdx], true);
 }
 
-// --- 🛫 MOTORE MAPPA INTERNA AEROPORTI (TAXIWAYS, RUNWAYS & PARCHEGGI) ---
+// --- 🛫 MOTORE MAPPA INTERNA AEROPORTI LOCALE (TAXIWAYS, RUNWAYS & PARCHEGGI) ---
 let groundMapEnabled = true;
 let groundLayerGroup = null;
 let lastRenderedGroundKey = null;
-let groundFetchInProgress = false;
-const groundOsmCache = {};
 
-// --- 🗺️ DATABASE TOPOGRAFICO LOCALE AFFIDABILE (STANDARD PROFESSIONALE) ---
 const CUSTOM_APT_LAYOUTS = {
     LIPZ: {
         name: "Venezia Marco Polo (LIPZ)",
         lat: 45.5053, lon: 12.3519,
         runways: [
-            // Piste reali uniche e pulite di LIPZ (04R/22L e 04L/22R)
             { ref: "04R/22L", width: 45, surface: "asphalt", coords: [[45.4912, 12.3325], [45.5186, 12.3654]] },
             { ref: "04L/22R", width: 45, surface: "asphalt", coords: [[45.4954, 12.3278], [45.5228, 12.3607]] }
         ],
         taxiways: [
-            // Raccordi principali puliti senza doppioni
             { ref: "A", coords: [[45.5012, 12.3390], [45.5100, 12.3480]] },
             { ref: "B", coords: [[45.4980, 12.3350], [45.5050, 12.3430]] },
             { ref: "C", coords: [[45.5030, 12.3410], [45.5080, 12.3450]] },
             { ref: "M", coords: [[45.4940, 12.3300], [45.5150, 12.3600]] }
         ],
         aprons: [
-            // Piazzale commerciale principale circoscritto e pulito
             [[45.5035, 12.3410], [45.5035, 12.3460], [45.5085, 12.3460], [45.5085, 12.3410]]
         ],
         stands: [
-            // Parcheggi ufficiali e posizionamento esatto del Gate 116
             { ref: "114", lat: 45.5065, lon: 12.3438 },
             { ref: "115", lat: 45.5069, lon: 12.3442 },
-            { ref: "116", lat: 45.5073, lon: 12.3446 }, // <- Il tuo aereo parcheggiato qui
+            { ref: "116", lat: 45.5073, lon: 12.3446 },
             { ref: "117", lat: 45.5077, lon: 12.3450 },
             { ref: "118", lat: 45.5081, lon: 12.3454 },
             { ref: "501", lat: 45.5042, lon: 12.3421 },
@@ -640,29 +632,10 @@ function findNearestAirportAtCenter(lat, lon) {
             return { icao, name: data.name, lat: data.lat, lon: data.lon, custom: data };
         }
     }
-    if (Array.isArray(airportsData)) {
-        let best = null;
-        let minDist = 0.05;
-        for (const apt of airportsData) {
-            const d = Math.hypot(lat - apt.lat, lon - apt.lon);
-            if (d < minDist) {
-                minDist = d;
-                best = apt;
-            }
-        }
-        if (best) return best;
-    }
-    if (Array.isArray(flightPlan)) {
-        for (const wp of flightPlan) {
-            if (Math.hypot(lat - wp.lat, lon - wp.lon) < 0.045) {
-                return { icao: wp.icao || wp.id, name: wp.name || wp.icao, lat: wp.lat, lon: wp.lon };
-            }
-        }
-    }
     return null;
 }
 
-async function evaluateAirportGroundMap() {
+function evaluateAirportGroundMap() {
     if (!groundMapEnabled || typeof map === 'undefined' || !map || !groundLayerGroup) return;
 
     const zoom = map.getZoom();
@@ -680,57 +653,25 @@ async function evaluateAirportGroundMap() {
 
     const center = map.getCenter();
     const nearApt = findNearestAirportAtCenter(center.lat, center.lng);
-    const cacheKey = nearApt ? nearApt.icao : `${center.lat.toFixed(2)}_${center.lng.toFixed(2)}`;
 
-    if (lastRenderedGroundKey === cacheKey) return;
-    lastRenderedGroundKey = cacheKey;
-
-    if (badge && badgeName) {
-        badge.style.display = 'flex';
-        badgeName.innerText = nearApt ? `${nearApt.icao} - ${nearApt.name || 'GROUND CHART'}` : 'LOADING TAXI/GATES...';
-    }
-
-if (nearApt && nearApt.custom) {
-        renderCustomAirportLayout(nearApt.custom);
-        return; // Interrompe ed evita di scaricare dati OSM rumorosi se abbiamo il layout pulito locale
-    } else if (nearApt && CUSTOM_APT_LAYOUTS[nearApt.icao]) {
-        renderCustomAirportLayout(CUSTOM_APT_LAYOUTS[nearApt.icao]);
-        return; // Interrompe ed usa esclusivamente il database locale validato
-    }
-
-    // Per gli altri aeroporti senza layout custom locale, fallback pulito
-    const refLat = nearApt ? nearApt.lat : center.lat;
-    const refLon = nearApt ? nearApt.lon : center.lon;
-
-    if (groundOsmCache[cacheKey]) {
-        renderOsmAirportLayout(groundOsmCache[cacheKey], nearApt);
+    if (!nearApt || !nearApt.custom) {
+        if (lastRenderedGroundKey !== null) {
+            groundLayerGroup.clearLayers();
+            lastRenderedGroundKey = null;
+        }
+        if (badge) badge.style.display = 'none';
         return;
     }
 
-    if (groundFetchInProgress) return;
-    groundFetchInProgress = true;
+    if (lastRenderedGroundKey === nearApt.icao) return;
+    lastRenderedGroundKey = nearApt.icao;
 
-    try {
-        const delta = 0.042;
-        const bbox = `${(refLat - delta).toFixed(4)},${(refLon - delta).toFixed(4)},${(refLat + delta).toFixed(4)},${(refLon + delta).toFixed(4)}`;
-        const query = `[out:json][timeout:15];(way["aeroway"~"runway|taxiway|apron|taxilane|parking_position"](${bbox});node["aeroway"~"parking_position|gate|holding_position"](${bbox});way["aeroway"~"gate|parking_position"](${bbox}););out body geom;`;
-        const res = await fetch('https://overpass-api.de/api/interpreter', {
-            method: 'POST',
-            body: 'data=' + encodeURIComponent(query)
-        });
-        if (res.ok) {
-            const data = await res.json();
-            if (data && Array.isArray(data.elements) && data.elements.length > 0) {
-                groundOsmCache[cacheKey] = data.elements;
-                if (lastRenderedGroundKey === cacheKey) {
-                    renderOsmAirportLayout(data.elements, nearApt);
-                }
-            }
-        }
-    } catch (e) {
-    } finally {
-        groundFetchInProgress = false;
+    if (badge && badgeName) {
+        badge.style.display = 'flex';
+        badgeName.innerText = `${nearApt.icao} - ${nearApt.name || 'GROUND CHART'}`;
     }
+
+    renderCustomAirportLayout(nearApt.custom);
 }
 
 function renderCustomAirportLayout(layout) {
@@ -807,119 +748,6 @@ function renderCustomAirportLayout(layout) {
             })
         }).addTo(groundLayerGroup);
         m.bindTooltip(`🅿️ Parcheggio / Stand <b>${st.ref}</b><br><span style="font-size:10px;color:#94a3b8;">Lat: ${st.lat.toFixed(5)} Lon: ${st.lon.toFixed(5)}</span>`, {
-            direction: 'top',
-            className: 'vnav-route-tooltip'
-        });
-    });
-}
-
-function renderOsmAirportLayout(elements, nearApt) {
-    if (!groundLayerGroup || !Array.isArray(elements)) return;
-    if (!nearApt || !CUSTOM_APT_LAYOUTS[nearApt.icao]) {
-        groundLayerGroup.clearLayers();
-    }
-
-    const shownTwyLabels = new Set();
-
-    elements.filter(el => el.type === 'way' && el.tags?.aeroway === 'apron' && el.geometry).forEach(el => {
-        const latlngs = el.geometry.map(pt => [pt.lat, pt.lon]);
-        L.polygon(latlngs, {
-            color: '#475569',
-            weight: 1,
-            fillColor: '#1e293b',
-            fillOpacity: 0.5,
-            interactive: false
-        }).addTo(groundLayerGroup);
-    });
-
-    elements.filter(el => el.type === 'way' && (el.tags?.aeroway === 'taxiway' || el.tags?.aeroway === 'taxilane') && el.geometry).forEach(el => {
-        const latlngs = el.geometry.map(pt => [pt.lat, pt.lon]);
-        const isLane = el.tags.aeroway === 'taxilane';
-        L.polyline(latlngs, {
-            color: isLane ? '#eab308' : '#f59e0b',
-            weight: isLane ? 2.2 : 3.8,
-            opacity: 0.85,
-            dashArray: isLane ? '4, 4' : null
-        }).addTo(groundLayerGroup);
-
-        const ref = el.tags.ref || el.tags.name;
-        if (ref && latlngs.length >= 2 && !shownTwyLabels.has(ref)) {
-            shownTwyLabels.add(ref);
-            const mid = latlngs[Math.floor(latlngs.length / 2)];
-            L.marker(mid, {
-                icon: L.divIcon({
-                    className: 'apt-twy-label',
-                    html: ref,
-                    iconSize: null
-                }),
-                interactive: false
-            }).addTo(groundLayerGroup);
-        }
-    });
-
-    elements.filter(el => el.type === 'way' && el.tags?.aeroway === 'runway' && el.geometry).forEach(el => {
-        const latlngs = el.geometry.map(pt => [pt.lat, pt.lon]);
-        const isGrass = (el.tags.surface || '').includes('grass') || (el.tags.surface || '').includes('turf');
-        L.polyline(latlngs, {
-            color: isGrass ? '#15803d' : '#334155',
-            weight: 14,
-            opacity: 0.92,
-            lineCap: 'butt'
-        }).addTo(groundLayerGroup);
-
-        L.polyline(latlngs, {
-            color: isGrass ? '#86efac' : '#f8fafc',
-            weight: 1.5,
-            dashArray: '8, 8',
-            opacity: 0.88
-        }).addTo(groundLayerGroup);
-
-        const ref = el.tags.ref;
-        if (ref && latlngs.length >= 2) {
-            const parts = ref.split('/');
-            L.marker(latlngs[0], {
-                icon: L.divIcon({ className: 'apt-rwy-thr-label', html: parts[0] || ref, iconSize: null }),
-                interactive: false
-            }).addTo(groundLayerGroup);
-            if (parts[1]) {
-                L.marker(latlngs[latlngs.length - 1], {
-                    icon: L.divIcon({ className: 'apt-rwy-thr-label', html: parts[1], iconSize: null }),
-                    interactive: false
-                }).addTo(groundLayerGroup);
-            }
-        }
-    });
-
-    const getElementCenter = (el) => {
-        if (el.lat !== undefined && el.lon !== undefined) return { lat: el.lat, lon: el.lon };
-        if (el.geometry && Array.isArray(el.geometry) && el.geometry.length > 0) {
-            let sumLat = 0, sumLon = 0;
-            el.geometry.forEach(pt => { sumLat += pt.lat; sumLon += pt.lon; });
-            return { lat: sumLat / el.geometry.length, lon: sumLon / el.geometry.length };
-        }
-        return null;
-    };
-
-    elements.forEach(el => {
-        const tags = el.tags || {};
-        const aw = tags.aeroway;
-        const isStand = (aw === 'parking_position' || aw === 'gate' || tags.gate || ta+gs.stand || tags['aeroway:ref']);
-        if (!isStand) return;
-
-        const ref = tags.ref || tags.gate || tags.stand || tags['aeroway:ref'] || tags.name;
-        if (!ref || ref.length > 6) return;
-
-        const center = getElementCenter(el);
-        if (!center) return;
-
-        const m = L.marker([center.lat, center.lon], {
-            icon: L.divIcon({
-                className: 'apt-stand-marker',
-                html: ref,
-                iconSize: [23, 23]
-            })
-        }).addTo(groundLayerGroup);
-        m.bindTooltip(`🅿️ Stand / Gate <b>${ref}</b><br><span style="font-size:10px;color:#94a3b8;">Lat: ${center.lat.toFixed(5)} Lon: ${center.lon.toFixed(5)}</span>`, {
             direction: 'top',
             className: 'vnav-route-tooltip'
         });
@@ -1094,6 +922,9 @@ function initDragAndDropPln() {
 }
 
 // --- INIZIALIZZAZIONE APPLICAZIONE E DATI PYWEBVIEW / EFB ---
+let _telemetryBusy = false;
+let _efbBadgeRetries = 0;
+
 async function initAeroGlassApp() {
     installTodAndTouchHooks();
     applyThemeMode(currentThemeMode, false);
@@ -1116,6 +947,11 @@ async function initAeroGlassApp() {
             const tipRes = await window.pywebview.api.get_setting('show_tooltips');
             if (tipRes && tipRes.success && tipRes.value !== null && tipRes.value !== undefined) {
                 await applyTooltipsMode(tipRes.value !== 'false', false);
+            }
+
+            const uiRes = await window.pywebview.api.get_setting('ui_mode');
+            if (uiRes && uiRes.success && uiRes.value) {
+                await applyUIMode(uiRes.value, false);
             }
 
             const fpRes = await window.pywebview.api.get_setting('fuel_perf_config');
@@ -1152,17 +988,33 @@ async function initAeroGlassApp() {
 
     if (typeof updateTopOfDescentOverlay === 'function') setTimeout(updateTopOfDescentOverlay, 250);
 
-    setInterval(() => {
-        if (!window._demoTourActive && typeof pollTelemetry === 'function') pollTelemetry();
-        if (typeof updateTodHeaderStatus === 'function') updateTodHeaderStatus();
-    }, 1000);
+    if (!window._aeroLoopsStarted) {
+        window._aeroLoopsStarted = true;
 
-    setInterval(() => {
-        const lbl = document.getElementById('lblEfbNet');
-        if (lbl && lbl.innerText.includes('...') && typeof refreshEfbBadgeFromBackend === 'function') {
-            refreshEfbBadgeFromBackend();
-        }
-    }, 1500);
+        // Semaforo _telemetryBusy: impedisce l'accumulo di chiamate IPC se MSFS 2024 è impegnato in un caricamento
+        setInterval(async () => {
+            if (!window._demoTourActive && typeof pollTelemetry === 'function' && !_telemetryBusy) {
+                _telemetryBusy = true;
+                try {
+                    await pollTelemetry();
+                } catch (e) {
+                } finally {
+                    _telemetryBusy = false;
+                }
+            }
+            if (typeof updateTodHeaderStatus === 'function') updateTodHeaderStatus();
+        }, 1000);
+
+        const efbTimer = setInterval(() => {
+            const lbl = document.getElementById('lblEfbNet');
+            if (lbl && lbl.innerText.includes('...') && typeof refreshEfbBadgeFromBackend === 'function' && _efbBadgeRetries < 6) {
+                _efbBadgeRetries++;
+                refreshEfbBadgeFromBackend();
+            } else {
+                clearInterval(efbTimer);
+            }
+        }, 1500);
+    }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1185,7 +1037,9 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (event.target.id === 'fuelPerfModal' && typeof closeFuelPerfModal === 'function') closeFuelPerfModal();
     });
 
-    setTimeout(initAeroGlassApp, 300);
+    if (window.pywebview && window.pywebview.api) {
+        initAeroGlassApp();
+    }
 });
 
 window.addEventListener('pywebviewready', initAeroGlassApp);
