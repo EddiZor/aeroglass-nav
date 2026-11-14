@@ -1324,8 +1324,8 @@ function updateVnavCloudLevelLine(targetAltFt) {
     label.style.display = 'block';
 }
 
-// --- 🌐 NETWORK TRAFFIC OVERLAY (VATSIM / IVAO) ---
-let networkOverlayEnabled = (localStorage.getItem('aeroglass_net_overlay') === 'true');
+// --- 🌐 NETWORK TRAFFIC OVERLAY (OFF / ON / IVAO / VATSIM) ---
+let networkOverlayMode = localStorage.getItem('aeroglass_net_overlay') || 'off'; // 'off' | 'on' | 'ivao' | 'vatsim'
 let networkLayerGroup = null;
 let networkPollInterval = null;
 
@@ -1339,8 +1339,8 @@ function ensureNetworkOverlayUI() {
         if (pillsGroup) {
             const btn = document.createElement('button');
             btn.id = 'btnToggleNetwork';
-            btn.className = 'top-btn' + (networkOverlayEnabled ? ' active' : '');
-            btn.onclick = () => toggleNetworkOverlay();
+            btn.className = 'top-btn';
+            btn.onclick = () => cycleNetworkOverlayMode();
 
             const wxBtn = document.getElementById('btnToggleWeather') || document.getElementById('btnToggleNavaids');
             if (wxBtn && wxBtn.parentNode === pillsGroup) {
@@ -1356,21 +1356,39 @@ function ensureNetworkOverlayUI() {
 function updateNetworkOverlayButtonUI() {
     const btn = document.getElementById('btnToggleNetwork');
     if (!btn) return;
-    const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
-    btn.classList.toggle('active', networkOverlayEnabled);
-    if (networkOverlayEnabled) {
-        btn.innerHTML = isEn ? '🌐 <span>Online: ON</span>' : '🌐 <span>Online: ON</span>';
-    } else {
-        btn.innerHTML = isEn ? '🌐 <span>Online: OFF</span>' : '🌐 <span>Online: OFF</span>';
+    
+    btn.classList.remove('active');
+    if (networkOverlayMode === 'off') {
+        btn.innerHTML = '🌐 <span>Online: OFF</span>';
+        btn.style.borderColor = 'rgba(148, 163, 184, 0.25)';
+        btn.style.color = '#94a3b8';
+    } else if (networkOverlayMode === 'on') {
+        btn.classList.add('active');
+        btn.innerHTML = '🌐 <span>Online: ON</span>';
+        btn.style.borderColor = 'rgba(56, 189, 248, 0.55)';
+        btn.style.color = '#38bdf8';
+    } else if (networkOverlayMode === 'ivao') {
+        btn.classList.add('active');
+        btn.innerHTML = '🌐 <span>IVAO</span>';
+        btn.style.borderColor = 'rgba(0, 210, 255, 0.75)';
+        btn.style.color = '#00d2ff';
+    } else if (networkOverlayMode === 'vatsim') {
+        btn.classList.add('active');
+        btn.innerHTML = '🌐 <span>VATSIM</span>';
+        btn.style.borderColor = 'rgba(251, 191, 36, 0.75)';
+        btn.style.color = '#fbbf24';
     }
 }
 
-async function toggleNetworkOverlay(forceState) {
-    networkOverlayEnabled = (typeof forceState === 'boolean') ? forceState : !networkOverlayEnabled;
+function cycleNetworkOverlayMode() {
+    const sequence = ['off', 'on', 'ivao', 'vatsim'];
+    const nextIdx = (sequence.indexOf(networkOverlayMode) + 1) % sequence.length;
+    networkOverlayMode = sequence[nextIdx];
+    
     ensureNetworkOverlayUI();
     updateNetworkOverlayButtonUI();
 
-    if (networkOverlayEnabled) {
+    if (networkOverlayMode !== 'off') {
         fetchAndRenderNetworkTraffic();
         if (!networkPollInterval) {
             networkPollInterval = setInterval(fetchAndRenderNetworkTraffic, 60000);
@@ -1383,14 +1401,14 @@ async function toggleNetworkOverlay(forceState) {
         if (networkLayerGroup) networkLayerGroup.clearLayers();
     }
 
-    try { localStorage.setItem('aeroglass_net_overlay', String(networkOverlayEnabled)); } catch (e) {}
+    try { localStorage.setItem('aeroglass_net_overlay', networkOverlayMode); } catch (e) {}
     if (window.pywebview && window.pywebview.api && window.pywebview.api.save_setting) {
-        try { await window.pywebview.api.save_setting('net_overlay', String(networkOverlayEnabled)); } catch (e) {}
+        try { window.pywebview.api.save_setting('net_overlay', networkOverlayMode); } catch (e) {}
     }
 }
 
 async function fetchAndRenderNetworkTraffic() {
-    if (!networkOverlayEnabled || !window.pywebview || !window.pywebview.api || !window.pywebview.api.get_online_network_traffic) return;
+    if (networkOverlayMode === 'off' || !window.pywebview || !window.pywebview.api || !window.pywebview.api.get_online_network_traffic) return;
     if (!networkLayerGroup || typeof map === 'undefined' || !map) return;
 
     try {
@@ -1403,24 +1421,38 @@ async function fetchAndRenderNetworkTraffic() {
         let pilotCount = 0;
         (res.pilots || []).forEach(p => {
             if (p.lat === undefined || p.lon === undefined) return;
+            
+            const isVatsim = (p.network === 'vatsim');
+            // Filtro in base alla modalità scelta
+            if (networkOverlayMode === 'ivao' && isVatsim) return;
+            if (networkOverlayMode === 'vatsim' && !isVatsim) return;
+
             const latLng = [p.lat, p.lon];
             if (!bounds.contains(latLng)) return;
+
+            const planeColor = isVatsim ? '#fbbf24' : '#00d2ff'; // Giallo VATSIM, Ciano IVAO
+            const netLabel = isVatsim ? 'VATSIM' : 'IVAO';
 
             const hdg = p.hdg || 0;
             const pilotIcon = L.divIcon({
                 className: '',
                 html: `<div class="net-pilot-marker" style="transform: rotate(${hdg}deg);">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="#fbbf24"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="${planeColor}">
+                        <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+                    </svg>
                 </div>`,
                 iconSize: [20, 20],
                 iconAnchor: [10, 10]
             });
 
             const m = L.marker(latLng, { icon: pilotIcon, zIndexOffset: 700 }).addTo(networkLayerGroup);
-            m.bindTooltip(`<b>${p.callsign}</b><br>Alt: ${p.alt} ft | GS: ${p.gs} kt`, { direction: 'top', className: 'vnav-route-tooltip' });
+            m.bindTooltip(`<b>[${netLabel}] ${p.callsign}</b><br>Alt: ${p.alt} ft | GS: ${p.gs} kt`, { 
+                direction: 'top', 
+                className: 'vnav-route-tooltip' 
+            });
 
             pilotCount++;
-            if (pilotCount >= 120) return;
+            if (pilotCount >= 140) return;
         });
     } catch (err) {
         console.error("Errore caricamento traffico online:", err);
@@ -1640,6 +1672,12 @@ async function initAeroGlassApp() {
                 weatherOverlayEnabled = (wxRes.value === 'true');
                 updateWeatherOverlayButtonUI();
             }
+
+            const netRes = await window.pywebview.api.get_setting('net_overlay');
+            if (netRes && netRes.success && netRes.value !== null && netRes.value !== undefined) {
+                networkOverlayMode = String(netRes.value);
+                updateNetworkOverlayButtonUI();
+            }
         }
 
         const initData = await window.pywebview.api.get_initial_data();
@@ -1669,7 +1707,12 @@ async function initAeroGlassApp() {
         ensureWeatherOverlayUI();
         if (weatherOverlayEnabled) renderWeatherOverlay();
         ensureNetworkOverlayUI();
-        if (networkOverlayEnabled) toggleNetworkOverlay(true);
+        if (networkOverlayMode !== 'off') {
+            fetchAndRenderNetworkTraffic();
+            if (!networkPollInterval) {
+                networkPollInterval = setInterval(fetchAndRenderNetworkTraffic, 60000);
+            }
+        }
     } catch (e) {}
 
     if (typeof updateTopOfDescentOverlay === 'function') setTimeout(updateTopOfDescentOverlay, 250);

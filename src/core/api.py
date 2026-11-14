@@ -760,54 +760,76 @@ class AeroGlassAPI:
         return {"success": True, "fpl_ts": self._fpl_ts}
 
     def get_online_network_traffic(self):
-        """Scarica i dati pubblici delle reti online (es. VATSIM) con cache di 60 secondi."""
+        """Scarica i dati pubblici delle reti online (VATSIM e IVAO) con cache di 60 secondi."""
         now = time.time()
-        if hasattr(self, "_cached_vatsim_data") and hasattr(self, "_vatsim_fetch_time"):
-            if (now - self._vatsim_fetch_time) < 60.0:
-                return self._cached_vatsim_data
+        if hasattr(self, "_cached_network_data") and hasattr(self, "_net_fetch_time"):
+            if (now - self._net_fetch_time) < 60.0:
+                return self._cached_network_data
 
-        vatsim_url = "https://data.vatsim.net/v3/vatsim-data.json"
+        pilots = []
+        controllers = []
+
+        # 1. Fetch VATSIM
         try:
+            vatsim_url = "https://data.vatsim.net/v3/vatsim-data.json"
             req = urllib.request.Request(vatsim_url, headers={"User-Agent": "AeroGlassNav/1.0"})
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                raw_data = json.loads(resp.read().decode("utf-8"))
+            with urllib.request.urlopen(req, timeout=4) as resp:
+                v_data = json.loads(resp.read().decode("utf-8"))
+                for p in v_data.get("pilots", []):
+                    lat, lon = p.get("latitude"), p.get("longitude")
+                    if lat is not None and lon is not None:
+                        pilots.append({
+                            "callsign": p.get("callsign"),
+                            "name": p.get("name"),
+                            "lat": lat,
+                            "lon": lon,
+                            "alt": p.get("altitude"),
+                            "gs": p.get("groundspeed"),
+                            "hdg": p.get("heading"),
+                            "network": "vatsim"
+                        })
+        except Exception:
+            pass
 
-            controllers = []
-            for c in raw_data.get("controllers", []):
-                controllers.append({
-                    "callsign": c.get("callsign"),
-                    "frequency": c.get("frequency"),
-                    "facility": c.get("facility"),
-                    "name": c.get("name"),
-                    "text_atis": c.get("text_atis")
-                })
+        # 2. Fetch IVAO (Whazzup v2)
+        try:
+            ivao_url = "https://api.ivao.aero/v2/tracker/whazzup"
+            req = urllib.request.Request(ivao_url, headers={"User-Agent": "AeroGlassNav/1.0"})
+            with urllib.request.urlopen(req, timeout=4) as resp:
+                i_data = json.loads(resp.read().decode("utf-8"))
+                clients = i_data.get("clients", {})
+                pilot_list = clients.get("pilots", []) if isinstance(clients, dict) else clients
+                for p in pilot_list:
+                    lat = p.get("latitude") or (p.get("lastTrack") or {}).get("latitude")
+                    lon = p.get("longitude") or (p.get("lastTrack") or {}).get("longitude")
+                    callsign = p.get("callsign") or (p.get("user") or {}).get("callsign")
+                    alt = p.get("altitude") or (p.get("lastTrack") or {}).get("altitude")
+                    gs = p.get("groundspeed") or (p.get("lastTrack") or {}).get("groundspeed")
+                    hdg = p.get("heading") or (p.get("lastTrack") or {}).get("heading")
 
-            pilots = []
-            for p in raw_data.get("pilots", []):
-                lat = p.get("latitude")
-                lon = p.get("longitude")
-                if lat is not None and lon is not None:
-                    pilots.append({
-                        "callsign": p.get("callsign"),
-                        "name": p.get("name"),
-                        "lat": lat,
-                        "lon": lon,
-                        "alt": p.get("altitude"),
-                        "gs": p.get("groundspeed"),
-                        "hdg": p.get("heading")
-                    })
+                    if lat is not None and lon is not None:
+                        pilots.append({
+                            "callsign": callsign,
+                            "name": p.get("name"),
+                            "lat": lat,
+                            "lon": lon,
+                            "alt": alt,
+                            "gs": gs,
+                            "hdg": hdg,
+                            "network": "ivao"
+                        })
+        except Exception:
+            pass
 
-            result = {
-                "success": True,
-                "controllers": controllers,
-                "pilots": pilots,
-                "timestamp": now
-            }
-            self._cached_vatsim_data = result
-            self._vatsim_fetch_time = now
-            return result
-        except Exception as e:
-            return {"success": False, "error": str(e), "controllers": [], "pilots": []}
+        result = {
+            "success": True,
+            "controllers": controllers,
+            "pilots": pilots,
+            "timestamp": now
+        }
+        self._cached_network_data = result
+        self._net_fetch_time = now
+        return result
 
     # --- TELEMETRIA E CONTROLLI FINESTRA ---
     def get_telemetry(self):
