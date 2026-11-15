@@ -464,13 +464,13 @@ class AeroGlassAPI:
             z = float(zoom)
             if z < 6.5:
                 allowed = ("large_airport",)
-                limit = 120
+                limit = 180
             elif z < 9.0:
                 allowed = ("large_airport", "medium_airport")
-                limit = 220
+                limit = 320
             else:
                 allowed = ("large_airport", "medium_airport", "small_airport")
-                limit = 350
+                limit = 500
 
             placeholders = ",".join("?" for _ in allowed)
             query = f"""

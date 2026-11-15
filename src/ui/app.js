@@ -446,6 +446,7 @@ async function applyThemeMode(mode, persist = true) {
     ensureDrawerToggleTab();
     ensureCompassRoseWidget();
     ensureGroundMapUI();
+    ensureWorldAirportsLayerUI();
     ensureWeatherOverlayUI();
     ensureNetworkOverlayUI();
     ensureScratchpadUI();
@@ -772,6 +773,125 @@ function renderCustomAirportLayout(layout) {
             className: 'vnav-route-tooltip'
         });
     });
+}
+
+// --- 🌍 LAYER AEROPORTI MONDIALI DINAMICI (BOUNDING BOX + RITENZIONE IN VISTA) ---
+let worldAirportsLayerGroup = null;
+const _renderedWorldAirports = new Map(); // icao -> { marker, data }
+let _worldAptFetchTimer = null;
+
+function ensureWorldAirportsLayerUI() {
+    if (typeof map === 'undefined' || !map || typeof L === 'undefined') return;
+
+    if (!worldAirportsLayerGroup) {
+        worldAirportsLayerGroup = L.layerGroup().addTo(map);
+    }
+
+    if (!map._worldAirportsHooked) {
+        map._worldAirportsHooked = true;
+        map.on('moveend zoomend', () => {
+            scheduleWorldAirportsUpdate();
+        });
+        setTimeout(scheduleWorldAirportsUpdate, 450);
+    }
+}
+
+function scheduleWorldAirportsUpdate() {
+    if (_worldAptFetchTimer) clearTimeout(_worldAptFetchTimer);
+    _worldAptFetchTimer = setTimeout(() => {
+        fetchAndRenderWorldAirportsInView();
+    }, 180);
+}
+
+async function fetchAndRenderWorldAirportsInView() {
+    if (typeof map === 'undefined' || !map || typeof L === 'undefined') return;
+    if (!worldAirportsLayerGroup) {
+        worldAirportsLayerGroup = L.layerGroup().addTo(map);
+    }
+
+    // Area visibile + 25% di margine attorno ai bordi
+    const paddedBounds = map.getBounds().pad(0.25);
+    const zoom = map.getZoom();
+
+    // 1. Rimuove solo i marker che sono usciti dall'area visibile allargata:
+    //    restringendo la mappa (zoom out), quelli già caricati e ancora in vista restano visibili!
+    for (const [icao, entry] of _renderedWorldAirports.entries()) {
+        if (!paddedBounds.contains([entry.data.lat, entry.data.lon])) {
+            worldAirportsLayerGroup.removeLayer(entry.marker);
+            _renderedWorldAirports.delete(icao);
+        }
+    }
+
+    // 2. Richiede al database SQLite gli aeroporti presenti nella nuova inquadratura
+    if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.get_airports_in_bounds) return;
+
+    try {
+        const res = await window.pywebview.api.get_airports_in_bounds(
+            paddedBounds.getSouth(),
+            paddedBounds.getNorth(),
+            paddedBounds.getWest(),
+            paddedBounds.getEast(),
+            zoom
+        );
+
+        if (!res || !res.success || !Array.isArray(res.airports)) return;
+
+        // Sincronizza anche l'array globale airportsData per ricerca rapida e layer meteo
+        const knownIcaos = new Set(airportsData.map(a => a.icao));
+
+        res.airports.forEach(apt => {
+            if (!apt.icao || apt.lat === undefined || apt.lon === undefined) return;
+
+            if (!knownIcaos.has(apt.icao)) {
+                knownIcaos.add(apt.icao);
+                airportsData.push({
+                    icao: apt.icao,
+                    name: apt.name,
+                    lat: apt.lat,
+                    lon: apt.lon,
+                    elev: apt.elev_ft || 0,
+                    type: apt.type,
+                    metar: ''
+                });
+            }
+
+            // Se l'aeroporto è già disegnato sulla mappa, lo mantiene senza ricrearlo
+            if (_renderedWorldAirports.has(apt.icao)) return;
+
+            let sizeClass = 'apt-small';
+            if (apt.type === 'large_airport') sizeClass = 'apt-large';
+            else if (apt.type === 'medium_airport') sizeClass = 'apt-medium';
+
+            const marker = L.marker([apt.lat, apt.lon], {
+                icon: L.divIcon({
+                    className: '',
+                    html: `
+                        <div class="world-apt-pin ${sizeClass}">
+                            <span class="world-apt-dot"></span>
+                            <span>${apt.icao}</span>
+                        </div>
+                    `,
+                    iconSize: null
+                }),
+                zIndexOffset: apt.type === 'large_airport' ? 520 : (apt.type === 'medium_airport' ? 480 : 440)
+            }).addTo(worldAirportsLayerGroup);
+
+            const elevStr = apt.elev_ft !== undefined && apt.elev_ft !== null ? ` (${apt.elev_ft} ft)` : '';
+            marker.bindTooltip(`<b>✈️ ${apt.icao}</b> - ${apt.name || ''}${elevStr}`, {
+                direction: 'top',
+                offset: [0, -6],
+                className: 'vnav-route-tooltip'
+            });
+
+            marker.on('click', () => {
+                openQuickMetarPopup(apt.icao, apt.lat, apt.lon, apt.name, '');
+            });
+
+            _renderedWorldAirports.set(apt.icao, { marker, data: apt });
+        });
+    } catch (e) {
+        console.error("Errore caricamento aeroporti in vista:", e);
+    }
 }
 
 // --- 💨 WEATHER OVERLAY (VETTORI VENTO LUNGO LA ROTTA & METAR RAPIDI) ---
@@ -2394,6 +2514,8 @@ async function initAeroGlassApp() {
         }
         if (typeof loadUserWaypoints === 'function') await loadUserWaypoints();
         ensureGroundMapUI();
+        ensureWorldAirportsLayerUI();
+        fetchAndRenderWorldAirportsInView();
         ensureWeatherOverlayUI();
         if (weatherOverlayEnabled) renderWeatherOverlay();
         ensureNetworkOverlayUI();

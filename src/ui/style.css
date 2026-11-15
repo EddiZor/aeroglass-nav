@@ -1281,6 +1281,56 @@ body.mode-simple .top-pills-group #btnToggleMeasure {
     font-size: 10px;
 }
 
+/* ✈️ MARKER AEROPORTI MONDIALI DINAMICI (BOUNDING BOX) */
+.world-apt-pin {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(13, 17, 23, 0.88);
+    border: 1px solid rgba(56, 189, 248, 0.55);
+    border-radius: 5px;
+    padding: 1px 5px;
+    color: #e2e8f0;
+    font-family: Consolas, monospace;
+    font-size: 10px;
+    font-weight: 700;
+    white-space: nowrap;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.65);
+    transform: translate(-50%, -50%);
+    cursor: pointer;
+    transition: transform 0.12s ease, border-color 0.12s ease;
+}
+
+.world-apt-pin:hover {
+    transform: translate(-50%, -50%) scale(1.12);
+    border-color: #00d2ff;
+    z-index: 999 !important;
+}
+
+.world-apt-pin.apt-large {
+    border-color: #00d2ff;
+    color: #00d2ff;
+    font-size: 10.5px;
+}
+
+.world-apt-pin.apt-medium {
+    border-color: rgba(52, 211, 153, 0.65);
+    color: #34d399;
+}
+
+.world-apt-pin.apt-small {
+    border-color: rgba(251, 191, 36, 0.55);
+    color: #fbbf24;
+    font-size: 9.5px;
+}
+
+.world-apt-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
 /* 💨 WEATHER OVERLAY (VETTORI VENTO IN QUOTA & METAR RAPIDI) */
 body.mode-simple .top-pills-group #btnToggleWeather {
     display: inline-flex !important;
