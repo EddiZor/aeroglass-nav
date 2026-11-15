@@ -69,16 +69,16 @@
     <!-- Pannello Filtri a scomparsa (inclusi SID/STAR e Spazi Aerei Avanzati) -->
     <div id="proceduresPanel" class="procedures-dropdown glass-panel" style="display: none;">
         <div style="font-size: 11px; font-weight: 700; color: var(--cyan); margin-bottom: 6px;">LIVELLI MAPPA & PROCEDURE</div>
-        <label class="filter-check">
-            <input type="checkbox" checked onchange="toggleFixesLayer(this.checked)"> Mostra Waypoint Rotta
+        <label class="filter-check" for="chkShowFixes">
+            <input type="checkbox" id="chkShowFixes" checked onchange="toggleFixesLayer(this.checked)"> Mostra Waypoint Rotta
         </label>
-        <label class="filter-check">
-            <input type="checkbox" checked onchange="toggleNavaidsLayer()"> Mostra Radioassistenze (VOR/ILS)
+        <label class="filter-check" for="chkShowNavaids">
+            <input type="checkbox" id="chkShowNavaids" checked onchange="toggleNavaidsLayer()"> Mostra Radioassistenze (VOR/ILS)
         </label>
-        <label class="filter-check">
+        <label class="filter-check" for="chkShowSidStar">
             <input type="checkbox" id="chkShowSidStar" checked onchange="toggleSidStarLayer(this.checked)"> Evidenzia Transizioni SID / STAR
         </label>
-        <label class="filter-check">
+        <label class="filter-check" for="chkShowApprCone">
             <input type="checkbox" id="chkShowApprCone" checked onchange="toggleApproachConeLayer(this.checked)"> Cono Avvicinamento (ILS / RNAV)
         </label>
         <div id="activeProceduresSummary" style="font-size: 10.5px; font-family: Consolas, monospace; color: var(--text-muted); background: rgba(9,13,22,0.55); border: 1px solid rgba(56,189,248,0.2); border-radius: 6px; padding: 6px 8px; margin-top: 4px; line-height: 1.45;">
@@ -87,13 +87,13 @@
             APPR: <strong id="sumAppr" style="color: var(--cyan);">---</strong>
         </div>
         <div style="font-size: 11px; font-weight: 700; color: var(--cyan); margin-top: 8px; margin-bottom: 4px; border-top: 1px solid rgba(148,163,184,0.2); padding-top: 6px;">SPAZI AEREI AVANZATI</div>
-        <label class="filter-check">
+        <label class="filter-check" for="chkAirspaceTma">
             <input type="checkbox" id="chkAirspaceTma" onchange="toggleAirspaceLayer('tma', this.checked)"> Mostra TMA (Terminal Control)
         </label>
-        <label class="filter-check">
+        <label class="filter-check" for="chkAirspaceCtr">
             <input type="checkbox" id="chkAirspaceCtr" onchange="toggleAirspaceLayer('ctr', this.checked)"> Mostra CTR (Control Zone)
         </label>
-        <label class="filter-check">
+        <label class="filter-check" for="chkAirspaceRestricted">
             <input type="checkbox" id="chkAirspaceRestricted" onchange="toggleAirspaceLayer('restricted', this.checked)"> Zone Restrittive / Pericolose
         </label>
     </div>
@@ -166,16 +166,16 @@
                 <span style="cursor: pointer; color: var(--text-muted); font-size: 16px;" onclick="closeCreateFplModal()">✕</span>
             </div>
             <div class="modal-body">
-                <label class="modal-label" id="lblModalDep">Aeroporto di Partenza (ICAO)</label>
+                <label class="modal-label" id="lblModalDep" for="manualDep">Aeroporto di Partenza (ICAO)</label>
                 <input type="text" id="manualDep" class="glass-input" placeholder="es. LIPD o LIRF" style="text-transform: uppercase;">
 
-                <label class="modal-label" id="lblModalWpts" style="margin-top: 8px;">Waypoint Intermedi (separati da spazio o virgola)</label>
+                <label class="modal-label" id="lblModalWpts" for="manualWpts" style="margin-top: 8px;">Waypoint Intermedi (separati da spazio o virgola)</label>
                 <input type="text" id="manualWpts" class="glass-input" placeholder="es. RON VIL BOL (opzionale)" style="text-transform: uppercase;">
 
-                <label class="modal-label" id="lblModalDest" style="margin-top: 8px;">Aeroporto di Arrivo (ICAO)</label>
+                <label class="modal-label" id="lblModalDest" for="manualDest" style="margin-top: 8px;">Aeroporto di Arrivo (ICAO)</label>
                 <input type="text" id="manualDest" class="glass-input" placeholder="es. LIPZ o LITY" style="text-transform: uppercase;">
 
-                <label class="modal-label" id="lblModalAlt" style="margin-top: 8px;">Quota di Crociera (FT)</label>
+                <label class="modal-label" id="lblModalAlt" for="manualCruiseAlt" style="margin-top: 8px;">Quota di Crociera (FT)</label>
                 <input type="number" id="manualCruiseAlt" class="glass-input" value="12000" step="500">
             </div>
             <div class="modal-footer">

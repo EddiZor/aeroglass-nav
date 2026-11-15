@@ -1529,27 +1529,27 @@ function ensureScratchpadUI() {
             <div class="sp-body" id="spTabAtc">
                 <div class="sp-craft-grid">
                     <div class="sp-field">
-                        <label>SQUAWK</label>
+                        <label for="spInpXpdr">SQUAWK</label>
                         <input type="text" id="spInpXpdr" maxlength="4" placeholder="7000" oninput="onScratchpadInputChange()">
                     </div>
                     <div class="sp-field">
-                        <label>QNH (hPa)</label>
+                        <label for="spInpQnh">QNH (hPa)</label>
                         <input type="text" id="spInpQnh" maxlength="6" placeholder="1013" oninput="onScratchpadInputChange()">
                     </div>
                     <div class="sp-field">
-                        <label>ALT / FL</label>
+                        <label for="spInpFl">ALT / FL</label>
                         <input type="text" id="spInpFl" maxlength="7" placeholder="FL120" oninput="onScratchpadInputChange()">
                     </div>
                     <div class="sp-field">
-                        <label>HDG / VEC</label>
+                        <label for="spInpHdg">HDG / VEC</label>
                         <input type="text" id="spInpHdg" maxlength="5" placeholder="270°" oninput="onScratchpadInputChange()">
                     </div>
                     <div class="sp-field">
-                        <label>SPEED (KT)</label>
+                        <label for="spInpSpd">SPEED (KT)</label>
                         <input type="text" id="spInpSpd" maxlength="5" placeholder="250" oninput="onScratchpadInputChange()">
                     </div>
                     <div class="sp-field">
-                        <label>NEXT FREQ</label>
+                        <label for="spInpFreq">NEXT FREQ</label>
                         <input type="text" id="spInpFreq" maxlength="7" placeholder="122.800" oninput="onScratchpadInputChange()">
                     </div>
                 </div>
@@ -1589,6 +1589,26 @@ function ensureScratchpadUI() {
         initScratchpadCanvas();
         renderScratchpadFrequencies();
     }
+
+    // 1. Associa tutti i <label> privi di 'for' al relativo controllo
+    document.querySelectorAll('label:not([for])').forEach((lbl, idx) => {
+        const ctrl = lbl.querySelector('input, select, textarea') ||
+                     (lbl.nextElementSibling && lbl.nextElementSibling.matches('input, select, textarea') ? lbl.nextElementSibling : null) ||
+                     (lbl.parentElement ? lbl.parentElement.querySelector('input, select, textarea') : null);
+        if (ctrl) {
+            if (!ctrl.id) ctrl.id = `aero_auto_field_${idx}`;
+            lbl.setAttribute('for', ctrl.id);
+        }
+    });
+
+    // 2. Aggiunge aria-label a tutti gli <input>/<select>/<textarea> privi di <label> associato
+    document.querySelectorAll('input, select, textarea').forEach((ctrl, idx) => {
+        if (!ctrl.id) ctrl.id = `aero_ctrl_${idx}`;
+        const hasLabel = document.querySelector(`label[for="${ctrl.id}"]`) || ctrl.closest('label');
+        if (!hasLabel && !ctrl.getAttribute('aria-label')) {
+            ctrl.setAttribute('aria-label', ctrl.getAttribute('placeholder') || ctrl.getAttribute('title') || ctrl.id);
+        }
+    });
 }
 
 function toggleScratchpad(forceState) {

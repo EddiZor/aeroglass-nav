@@ -272,7 +272,7 @@ def main():
             pass
 
     window.events.closed += on_closed
-    webview.start(debug=False)
+    webview.start(debug=True)
 
 
 if __name__ == "__main__":
