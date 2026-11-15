@@ -471,6 +471,55 @@ function toggleThemeMode() {
     applyThemeMode(order[nextIdx], true);
 }
 
+// --- 🔍 RICERCA RAPIDA AEROPORTO & CENTRATURA MAPPA ---
+async function searchAndCenterAirport(query) {
+    const q = (query || '').trim().toUpperCase();
+    if (!q) return;
+
+    let found = (typeof airportsData !== 'undefined' ? airportsData : []).find(a => a.icao === q || (a.name && a.name.toUpperCase().includes(q)));
+    
+    if (found && found.lat !== undefined && found.lon !== undefined) {
+        if (typeof map !== 'undefined' && map) {
+            map.setView([found.lat, found.lon], 13, { animate: true });
+            if (typeof openQuickMetarPopup === 'function') {
+                openQuickMetarPopup(found.icao, found.lat, found.lon, found.name, found.metar || '');
+            }
+        }
+        return;
+    }
+
+    if (window.pywebview && window.pywebview.api) {
+        try {
+            if (q.length >= 3 && window.pywebview.api.resolve_icao) {
+                const res = await window.pywebview.api.resolve_icao(q);
+                if (res && res.success && res.lat !== undefined && res.lon !== undefined) {
+                    if (typeof map !== 'undefined' && map) {
+                        map.setView([res.lat, res.lon], 13, { animate: true });
+                        if (typeof openQuickMetarPopup === 'function') {
+                            openQuickMetarPopup(res.icao, res.lat, res.lon, res.name, res.metar || '');
+                        }
+                    }
+                    return;
+                }
+            }
+            if (window.pywebview.api.search_world_airports) {
+                const searchRes = await window.pywebview.api.search_world_airports(q);
+                if (searchRes && searchRes.success && Array.isArray(searchRes.results) && searchRes.results.length > 0) {
+                    const apt = searchRes.results[0];
+                    if (apt.lat !== undefined && apt.lon !== undefined && typeof map !== 'undefined' && map) {
+                        map.setView([apt.lat, apt.lon], 13, { animate: true });
+                        if (typeof openQuickMetarPopup === 'function') {
+                            openQuickMetarPopup(apt.icao, apt.lat, apt.lon, apt.name, '');
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.error("Errore ricerca aeroporto:", e);
+        }
+    }
+}
+
 // --- 🛫 MOTORE MAPPA INTERNA AEROPORTI LOCALE (TAXIWAYS, RUNWAYS & PARCHEGGI) ---
 let groundMapEnabled = true;
 let groundLayerGroup = null;

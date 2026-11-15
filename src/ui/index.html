@@ -123,7 +123,7 @@
         </div>
 
         <div class="search-box">
-            <input type="text" id="omniSearch" class="glass-input" placeholder="Cerca ICAO, VOR o Aeroporto..." oninput="filterAirports(this.value)">
+            <input type="text" id="omniSearch" class="glass-input" placeholder="Cerca ICAO, VOR o Aeroporto..." oninput="filterAirports(this.value)" onkeydown="if(event.key==='Enter') searchAndCenterAirport(this.value)" title="Digita un codice ICAO e premi Invio per centrare la mappa">
         </div>
 
         <!-- Sezione Waypoints Utente Personalizzati -->
