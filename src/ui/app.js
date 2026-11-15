@@ -153,6 +153,10 @@ const SYNTHETIC_TOOLTIPS = {
     btnToggleScratchpad: {
         it: "📝 Scratchpad EFB: Blocco note ATC (Squawk, QNH, FL), disegno a mano libera e frequenze rapide",
         en: "📝 EFB Scratchpad: ATC clearance pad (Squawk, QNH, FL), freehand draw canvas and common frequencies"
+    },
+    btnToggleMeasure: {
+        it: "📏 Righello Tattico: Misura distanza (NM), prua (MAG/TRUE) e tempo ETE tra due punti (oppure usa il Clic Destro sulla mappa)",
+        en: "📏 Measure Tool: Measure distance (NM), heading (MAG/TRUE) and ETE between two points (or Right-Click on map)"
     }
 };
 
@@ -445,6 +449,7 @@ async function applyThemeMode(mode, persist = true) {
     ensureWeatherOverlayUI();
     ensureNetworkOverlayUI();
     ensureScratchpadUI();
+    ensureMeasureToolUI();
     applyUIMode(currentUIMode, false);
     initSyntheticTooltipsEngine();
 
@@ -1838,6 +1843,246 @@ function sendFreqToScratchpad(freqVal) {
     if (inp) inp.value = freqVal;
     onScratchpadInputChange();
     switchScratchpadTab('atc');
+}
+
+// --- 📏 RIGHELLO DISTANZA / PRUA / ETE (MEASURE TOOL) ---
+let measureToolActive = false;
+let measureLayerGroup = null;
+let measureStartLatLng = null;
+let measureEndLatLng = null;
+let measureLocked = false;
+let _measureLine = null;
+let _measureStartMarker = null;
+let _measureEndMarker = null;
+let _measureBadgeMarker = null;
+
+function ensureMeasureToolUI() {
+    if (typeof map !== 'undefined' && map && typeof L !== 'undefined') {
+        if (!measureLayerGroup) {
+            measureLayerGroup = L.layerGroup().addTo(map);
+        }
+        if (!map._measureToolHooked) {
+            map._measureToolHooked = true;
+
+            // Clic destro sulla mappa: 1° clic inizia, 2° clic blocca la misura, 3° clic cancella
+            map.on('contextmenu', (e) => {
+                if (e.originalEvent) e.originalEvent.preventDefault();
+                handleMeasurePointInput(e.latlng);
+            });
+
+            // Clic sinistro/touch quando la modalità pulsante 📏 Righello è attiva
+            map.on('click', (e) => {
+                if (!measureToolActive) return;
+                handleMeasurePointInput(e.latlng);
+            });
+
+            // Aggiornamento elastico della linea mentre si muove il mouse
+            map.on('mousemove', (e) => {
+                if (measureStartLatLng && !measureLocked) {
+                    measureEndLatLng = e.latlng;
+                    renderMeasureOverlay();
+                }
+            });
+
+            window.addEventListener('keydown', (ev) => {
+                if (ev.key === 'Escape' && (measureStartLatLng || measureToolActive)) {
+                    clearMeasureTool(true);
+                }
+            });
+        }
+    }
+
+    if (!document.getElementById('btnToggleMeasure')) {
+        const pillsGroup = document.querySelector('.top-pills-group');
+        if (pillsGroup) {
+            const btn = document.createElement('button');
+            btn.id = 'btnToggleMeasure';
+            btn.className = 'top-btn';
+            btn.onclick = () => toggleMeasureToolButton();
+
+            const spBtn = document.getElementById('btnToggleScratchpad') || document.getElementById('btnToggleNetwork');
+            if (spBtn && spBtn.parentNode === pillsGroup) {
+                pillsGroup.insertBefore(btn, spBtn.nextSibling);
+            } else {
+                pillsGroup.appendChild(btn);
+            }
+            updateMeasureButtonUI();
+        }
+    }
+}
+
+function updateMeasureButtonUI() {
+    const btn = document.getElementById('btnToggleMeasure');
+    if (!btn) return;
+    const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+    const isActive = measureToolActive || measureStartLatLng !== null;
+    btn.classList.toggle('active', isActive);
+    btn.innerHTML = isEn ? '📏 <span>Measure</span>' : '📏 <span>Righello</span>';
+    if (isActive) {
+        btn.style.borderColor = 'rgba(251, 191, 36, 0.75)';
+        btn.style.color = '#fbbf24';
+    } else {
+        btn.style.borderColor = '';
+        btn.style.color = '';
+    }
+}
+
+function toggleMeasureToolButton() {
+    ensureMeasureToolUI();
+    if (measureToolActive || measureStartLatLng !== null) {
+        clearMeasureTool(true);
+    } else {
+        measureToolActive = true;
+        const mapEl = document.getElementById('map');
+        if (mapEl) mapEl.style.cursor = 'crosshair';
+        updateMeasureButtonUI();
+    }
+}
+
+function handleMeasurePointInput(latlng) {
+    if (!latlng) return;
+    if (!measureStartLatLng) {
+        measureStartLatLng = latlng;
+        measureEndLatLng = latlng;
+        measureLocked = false;
+        renderMeasureOverlay();
+    } else if (!measureLocked) {
+        measureEndLatLng = latlng;
+        measureLocked = true;
+        measureToolActive = false;
+        const mapEl = document.getElementById('map');
+        if (mapEl) mapEl.style.cursor = '';
+        renderMeasureOverlay();
+    } else {
+        // Se già bloccato, un nuovo clic destro fa ripartire o pulisce
+        clearMeasureTool(false);
+        measureStartLatLng = latlng;
+        measureEndLatLng = latlng;
+        measureLocked = false;
+        renderMeasureOverlay();
+    }
+    updateMeasureButtonUI();
+}
+
+function clearMeasureTool(deactivateButton = true) {
+    measureStartLatLng = null;
+    measureEndLatLng = null;
+    measureLocked = false;
+    if (deactivateButton) measureToolActive = false;
+    _measureLine = null;
+    _measureStartMarker = null;
+    _measureEndMarker = null;
+    _measureBadgeMarker = null;
+    if (measureLayerGroup) measureLayerGroup.clearLayers();
+    const mapEl = document.getElementById('map');
+    if (mapEl) mapEl.style.cursor = '';
+    updateMeasureButtonUI();
+}
+
+function computeDistanceNm(lat1, lon1, lat2, lon2) {
+    const R_NM = 3440.065;
+    const toRad = Math.PI / 180;
+    const dLat = (lat2 - lat1) * toRad;
+    const dLon = (lon2 - lon1) * toRad;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R_NM * c;
+}
+
+function getEffectiveGroundSpeedKt() {
+    const tel = window.lastTelemetry || {};
+    const simGs = Number(tel.gs_kt || tel.groundspeed || 0);
+    if (tel.connected && simGs >= 25) return Math.round(simGs);
+
+    const domGs = document.getElementById('valGs');
+    if (domGs) {
+        const parsed = parseInt(domGs.innerText.replace(/[^\d]/g, ''), 10);
+        if (!isNaN(parsed) && parsed >= 25) return parsed;
+    }
+
+    if (typeof fuelPerfConfig !== 'undefined' && fuelPerfConfig && Number(fuelPerfConfig.tas) > 30) {
+        return Math.round(Number(fuelPerfConfig.tas));
+    }
+    return 120; // Velocità di riferimento a terra / demo
+}
+
+function getMagneticDeclinationDeg(lat, lon) {
+    const tel = window.lastTelemetry || {};
+    if (tel.mag_var !== undefined && tel.mag_var !== null && !isNaN(Number(tel.mag_var))) {
+        return Number(tel.mag_var);
+    }
+    // Stima declinazione magnetica centro-europea/mediterranea (~3.5°E in Italia)
+    return Math.max(-25, Math.min(25, 1.5 + (lon - 5.0) * 0.22));
+}
+
+function formatMeasureEte(distNm, gsKt) {
+    if (!gsKt || gsKt <= 0 || distNm < 0.05) return '00m 00s';
+    const totalHours = distNm / gsKt;
+    const totalSec = Math.round(totalHours * 3600);
+    if (totalSec < 60) return `${totalSec}s`;
+    const hrs = Math.floor(totalSec / 3600);
+    const mins = Math.floor((totalSec % 3600) / 60);
+    const secs = totalSec % 60;
+    if (hrs > 0) return `${hrs}h ${String(mins).padStart(2, '0')}m`;
+    return `${mins}m ${String(secs).padStart(2, '0')}s`;
+}
+
+function renderMeasureOverlay() {
+    if (!measureLayerGroup || !measureStartLatLng || !measureEndLatLng || typeof L === 'undefined') return;
+
+    const p1 = [measureStartLatLng.lat, measureStartLatLng.lng];
+    const p2 = [measureEndLatLng.lat, measureEndLatLng.lng];
+    const mid = [(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2];
+
+    const distNm = computeDistanceNm(p1[0], p1[1], p2[0], p2[1]);
+    const distKm = distNm * 1.852;
+    const trueBrg = Math.round(computeBearingDeg(p1[0], p1[1], p2[0], p2[1])) || 360;
+    const magVar = getMagneticDeclinationDeg(mid[0], mid[1]);
+    let magBrg = Math.round((trueBrg - magVar + 360) % 360);
+    if (magBrg === 0) magBrg = 360;
+
+    const gsKt = getEffectiveGroundSpeedKt();
+    const eteStr = formatMeasureEte(distNm, gsKt);
+
+    const badgeHtml = `
+        <div class="measure-info-badge" onclick="clearMeasureTool(true)" title="Clicca per cancellare il righello">
+            <div class="m-row-main">
+                <span>📏 ${distNm.toFixed(1)} NM</span>
+                <span style="color:#00d2ff;">${String(magBrg).padStart(3, '0')}°M</span>
+                <span style="color:#cbd5e1;font-size:10px;">(${String(trueBrg).padStart(3, '0')}°T)</span>
+            </div>
+            <div class="m-row-sub">
+                ⏱️ ETE: <b style="color:#34d399;">${eteStr}</b> @ ${gsKt} kt | ${distKm.toFixed(1)} km <span style="color:#f85149;margin-left:4px;">[✕]</span>
+            </div>
+        </div>
+    `;
+
+    if (!_measureLine) {
+        measureLayerGroup.clearLayers();
+        _measureLine = L.polyline([p1, p2], {
+            color: '#fbbf24',
+            weight: 2.8,
+            dashArray: '7, 6',
+            opacity: 0.95
+        }).addTo(measureLayerGroup);
+
+        const dotIcon = L.divIcon({ className: 'measure-pin-dot', iconSize: [12, 12], iconAnchor: [6, 6] });
+        _measureStartMarker = L.marker(p1, { icon: dotIcon, interactive: false }).addTo(measureLayerGroup);
+        _measureEndMarker = L.marker(p2, { icon: dotIcon, interactive: false }).addTo(measureLayerGroup);
+
+        _measureBadgeMarker = L.marker(mid, {
+            icon: L.divIcon({ className: '', html: badgeHtml, iconSize: null }),
+            zIndexOffset: 1200
+        }).addTo(measureLayerGroup);
+    } else {
+        _measureLine.setLatLngs([p1, p2]);
+        _measureStartMarker.setLatLng(p1);
+        _measureEndMarker.setLatLng(p2);
+        _measureBadgeMarker.setLatLng(mid);
+        _measureBadgeMarker.setIcon(L.divIcon({ className: '', html: badgeHtml, iconSize: null }));
+    }
 }
 
 // --- HOOKS DI COLLEGAMENTO UI (VNAV ToD, NAVLOG, TOUCH) ---
