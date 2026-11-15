@@ -85,35 +85,60 @@ body, html {
     box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
 }
 
-/* Barra superiore controlli e telemetria */
-.top-controls-bar {
+/* Barra superiore controlli (Allineata correttamente a destra della sidebar) */
+.top-controls {
     position: absolute;
-    top: 14px;
+    top: 12px;
     right: 16px;
+<<<<<<< HEAD
     left: 352px;
     z-index: 500;
+=======
+>>>>>>> 7d0deddcc1a0487a43ae9f8bb57fd9a9f9a01f49
     display: flex;
-    justify-content: flex-end;
     align-items: center;
+<<<<<<< HEAD
     gap: 8px;
     flex-wrap: nowrap;
     pointer-events: none;
 }
 
 .top-pills-group {
+=======
+    justify-content: flex-end;
+    gap: 8px;
+    z-index: 600;
+    pointer-events: none;
+}
+
+.top-controls > * {
+>>>>>>> 7d0deddcc1a0487a43ae9f8bb57fd9a9f9a01f49
     pointer-events: auto;
+}
+
+.top-pills-group {
     display: flex;
     align-items: center;
+<<<<<<< HEAD
     gap: 6px;
     flex-wrap: nowrap;
     overflow-x: auto;
     max-width: 100%;
     min-width: 0;
     scrollbar-width: none;
+=======
+    gap: 5px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    max-width: 100%;
+    scrollbar-width: none;
+    padding: 2px 0;
+>>>>>>> 7d0deddcc1a0487a43ae9f8bb57fd9a9f9a01f49
 }
 
 .top-pills-group::-webkit-scrollbar {
     display: none;
+<<<<<<< HEAD
 }
 
 .telemetry-bar {
@@ -126,11 +151,16 @@ body, html {
     border-radius: 6px;
     font-size: 12px;
     gap: 8px;
+=======
+>>>>>>> 7d0deddcc1a0487a43ae9f8bb57fd9a9f9a01f49
 }
 
 .top-btn {
     flex-shrink: 0;
+<<<<<<< HEAD
     white-space: nowrap;
+=======
+>>>>>>> 7d0deddcc1a0487a43ae9f8bb57fd9a9f9a01f49
     background: var(--nav-panel-glass);
     border: 1px solid var(--nav-border);
     color: var(--text-main);
@@ -143,6 +173,7 @@ body, html {
     gap: 5px;
     cursor: pointer;
     transition: all 0.15s ease;
+    white-space: nowrap;
 }
 
 .top-btn:hover {
@@ -845,87 +876,149 @@ body.theme-day .leaflet-tile-pane {
     color: #fbbf24;
 }
 
-/* 🎯 MODALITÀ SEMPLIFICATA (MINIMAL VFR/IFR VIEW) */
+/* 🎯 MODALITÀ SEMPLIFICATA / FLY (MINIMAL VFR/IFR VIEW & MINI-HUD) */
 body.mode-simple .procedures-dropdown,
 body.mode-simple .user-wp-form,
 body.mode-simple .simbrief-box {
     display: none !important;
 }
 
-body.mode-simple .top-pills-group .top-btn:not(#btnToggleUIMode):not(#btnThemeMode):not(#btnFollowAcft):not(#btnToggleNavaids) {
+body.mode-simple .top-pills-group .top-btn:not(#btnToggleUIMode):not(#btnThemeMode):not(#btnFollowAcft):not(#btnToggleNavaids):not(#btnOnlineTraffic):not(#btnSettingsModal) {
     display: none !important;
 }
 
-/* 🛫 MAPPA INTERNA AEROPORTUALE (TAXIWAY, RUNWAY & PARKING STANDS) */
-.apt-twy-label {
-    background: #111827 !important;
-    border: 1.5px solid #fbbf24 !important;
-    color: #fbbf24 !important;
-    font-family: var(--font-mono) !important;
-    font-size: 10px !important;
-    font-weight: 800 !important;
-    padding: 1px 5px !important;
-    border-radius: 3px !important;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.75) !important;
-    white-space: nowrap;
-    text-align: center;
-    transform: translate(-50%, -50%);
-}
-
-.apt-stand-marker {
-    background: rgba(16, 185, 129, 0.22);
-    border: 1.5px solid #2ea043;
-    color: #3fb950;
-    font-family: var(--font-mono);
-    font-size: 9.5px;
-    font-weight: 800;
-    border-radius: 50%;
+/* 🌐 TRAFFICO ONLINE VATSIM / IVAO & ⚙️ MODALE IMPOSTAZIONI */
+.online-traffic-icon {
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 0 8px rgba(46, 160, 67, 0.45);
-    transform: translate(-50%, -50%);
-    transition: transform 0.15s ease, background 0.15s ease;
+    pointer-events: auto;
 }
 
-.apt-stand-marker:hover {
-    background: #2ea043;
-    color: #090d13;
-    transform: translate(-50%, -50%) scale(1.25);
-    z-index: 900 !important;
+.online-acft-glyph {
+    font-size: 14px;
+    line-height: 1;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.85));
+    transition: transform 0.2s linear;
 }
 
-.apt-rwy-thr-label {
-    background: rgba(9, 13, 19, 0.92);
-    border: 1px solid #f0f6fc;
-    color: #f0f6fc;
+.online-acft-tag {
+    margin-top: 1px;
+    background: rgba(13, 17, 23, 0.88);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    color: #e2e8f0;
     font-family: var(--font-mono);
-    font-size: 10px;
-    font-weight: 900;
-    padding: 1px 5px;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 0px 4px;
     border-radius: 3px;
-    transform: translate(-50%, -50%);
+    white-space: nowrap;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+.settings-modal-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 0;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+    font-size: 12px;
+}
+
+.settings-modal-row:last-child {
+    border-bottom: none;
+}
+
+.settings-modal-lbl {
+    color: var(--text-main);
+    font-weight: 600;
+}
+
+.settings-modal-sub {
+    display: block;
+    font-size: 10.5px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.fly-hud-strip {
+    position: fixed;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-18px);
+    z-index: 650;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 16px;
+    border-radius: 8px;
+    background: rgba(13, 17, 23, 0.92);
+    border: 1px solid rgba(0, 210, 255, 0.45);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65), 0 0 12px rgba(0, 210, 255, 0.12);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s ease, transform 0.22s ease;
+}
+
+body.mode-simple .fly-hud-strip {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+    pointer-events: auto;
+}
+
+.fly-hud-block {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     white-space: nowrap;
 }
 
-.apt-ground-status-badge {
-    position: fixed;
-    bottom: 134px;
-    left: 356px;
-    z-index: 500;
-    padding: 5px 12px;
-    border-radius: 6px;
-    font-size: 11px;
-    font-family: var(--font-mono);
+.fly-hud-lbl {
+    font-size: 10px;
     font-weight: 700;
-    color: #fbbf24;
-    background: rgba(18, 23, 31, 0.92);
-    border: 1px solid rgba(251, 191, 36, 0.45);
-    display: none;
-    align-items: center;
-    gap: 8px;
-    pointer-events: auto;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+    color: var(--text-muted);
+    letter-spacing: 0.6px;
+}
+
+.fly-hud-val {
+    font-weight: 800;
+    color: var(--text-main);
+}
+
+.fly-hud-val.magenta { color: var(--nav-magenta); }
+.fly-hud-val.cyan { color: var(--cyan); }
+.fly-hud-val.emerald { color: #3fb950; }
+.fly-hud-val.amber { color: var(--amber); }
+
+.fly-hud-sep {
+    color: rgba(139, 148, 158, 0.35);
+    font-weight: 400;
+}
+
+.fly-hud-wind-arrow {
+    display: inline-block;
+    font-size: 13px;
+    line-height: 1;
+    color: var(--cyan);
+    transition: transform 0.25s linear;
+}
+
+body.theme-day .fly-hud-strip {
+    background: rgba(248, 250, 252, 0.95) !important;
+    border-color: rgba(2, 132, 199, 0.45) !important;
+    color: #0f172a !important;
+}
+body.theme-day .fly-hud-val { color: #0f172a !important; }
+body.theme-day .fly-hud-val.cyan { color: #0284c7 !important; }
+body.theme-day .fly-hud-val.magenta { color: #a21caf !important; }
+
+body.theme-night .fly-hud-strip {
+    background: rgba(4, 8, 16, 0.96) !important;
+    border-color: rgba(56, 189, 248, 0.22) !important;
 }
 
 /* 🧭 ROSA DEI VENTI DINAMICA (BUSSOLA NAVIGRAPH) */
