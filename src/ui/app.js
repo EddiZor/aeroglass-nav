@@ -149,6 +149,10 @@ const SYNTHETIC_TOOLTIPS = {
     btnToggleNetwork: {
         it: "🌐 Traffico Online: Mostra/nascondi i piloti di VATSIM / IVAO in volo nelle vicinanze",
         en: "🌐 Online Traffic: Show or hide nearby VATSIM / IVAO pilots on map"
+    },
+    btnToggleScratchpad: {
+        it: "📝 Scratchpad EFB: Blocco note ATC (Squawk, QNH, FL), disegno a mano libera e frequenze rapide",
+        en: "📝 EFB Scratchpad: ATC clearance pad (Squawk, QNH, FL), freehand draw canvas and common frequencies"
     }
 };
 
@@ -440,6 +444,7 @@ async function applyThemeMode(mode, persist = true) {
     ensureGroundMapUI();
     ensureWeatherOverlayUI();
     ensureNetworkOverlayUI();
+    ensureScratchpadUI();
     applyUIMode(currentUIMode, false);
     initSyntheticTooltipsEngine();
 
@@ -1459,6 +1464,382 @@ async function fetchAndRenderNetworkTraffic() {
     }
 }
 
+// --- 📝 SCRATCHPAD EFB (ATC CLEARANCE PAD, FREEHAND CANVAS & FREQUENZE) ---
+let scratchpadOpen = false;
+let scratchpadData = {
+    xpdr: '',
+    qnh: '',
+    fl: '',
+    hdg: '',
+    spd: '',
+    freq: '',
+    notes: '',
+    drawing: ''
+};
+
+try {
+    const savedSp = localStorage.getItem('aeroglass_scratchpad');
+    if (savedSp) scratchpadData = { ...scratchpadData, ...JSON.parse(savedSp) };
+} catch (e) {}
+
+let _spPenColor = '#00d2ff';
+let _spEraser = false;
+
+function ensureScratchpadUI() {
+    if (!document.getElementById('btnToggleScratchpad')) {
+        const pillsGroup = document.querySelector('.top-pills-group');
+        if (pillsGroup) {
+            const btn = document.createElement('button');
+            btn.id = 'btnToggleScratchpad';
+            btn.className = 'top-btn' + (scratchpadOpen ? ' active' : '');
+            btn.innerHTML = '📝 <span>Note EFB</span>';
+            btn.onclick = () => toggleScratchpad();
+
+            const netBtn = document.getElementById('btnToggleNetwork') || document.getElementById('btnToggleWeather');
+            if (netBtn && netBtn.parentNode === pillsGroup) {
+                pillsGroup.insertBefore(btn, netBtn.nextSibling);
+            } else {
+                pillsGroup.appendChild(btn);
+            }
+        }
+    }
+
+    if (!document.getElementById('aeroScratchpadDrawer')) {
+        const drawer = document.createElement('div');
+        drawer.id = 'aeroScratchpadDrawer';
+        drawer.className = 'aero-scratchpad-drawer glass-panel';
+        drawer.innerHTML = `
+            <div class="sp-header" id="spDragHeader">
+                <div class="sp-title">📝 <span>EFB SCRATCHPAD & ATC</span></div>
+                <div style="display:flex;gap:5px;">
+                    <button class="sp-mini-btn" onclick="syncScratchpadFromSim()" title="Copia QNH e Quota dal Simulatore">🔄 SIM</button>
+                    <button class="sp-mini-btn" onclick="toggleScratchpad()">✕</button>
+                </div>
+            </div>
+            <div class="sp-tabs">
+                <button class="sp-tab-btn active" data-tab="atc" onclick="switchScratchpadTab('atc')">📋 ATC PAD</button>
+                <button class="sp-tab-btn" data-tab="draw" onclick="switchScratchpadTab('draw')">✏️ DISEGNO</button>
+                <button class="sp-tab-btn" data-tab="freq" onclick="switchScratchpadTab('freq')">📻 FREQ</button>
+            </div>
+            <div class="sp-body" id="spTabAtc">
+                <div class="sp-craft-grid">
+                    <div class="sp-field">
+                        <label>SQUAWK</label>
+                        <input type="text" id="spInpXpdr" maxlength="4" placeholder="7000" oninput="onScratchpadInputChange()">
+                    </div>
+                    <div class="sp-field">
+                        <label>QNH (hPa)</label>
+                        <input type="text" id="spInpQnh" maxlength="6" placeholder="1013" oninput="onScratchpadInputChange()">
+                    </div>
+                    <div class="sp-field">
+                        <label>ALT / FL</label>
+                        <input type="text" id="spInpFl" maxlength="7" placeholder="FL120" oninput="onScratchpadInputChange()">
+                    </div>
+                    <div class="sp-field">
+                        <label>HDG / VEC</label>
+                        <input type="text" id="spInpHdg" maxlength="5" placeholder="270°" oninput="onScratchpadInputChange()">
+                    </div>
+                    <div class="sp-field">
+                        <label>SPEED (KT)</label>
+                        <input type="text" id="spInpSpd" maxlength="5" placeholder="250" oninput="onScratchpadInputChange()">
+                    </div>
+                    <div class="sp-field">
+                        <label>NEXT FREQ</label>
+                        <input type="text" id="spInpFreq" maxlength="7" placeholder="122.800" oninput="onScratchpadInputChange()">
+                    </div>
+                </div>
+                <textarea class="sp-textarea" id="spInpNotes" placeholder="Appunti ATC, C.R.A.F.T. clearance, piste in uso, taxiway (es. Stand 114 via Twy A, H/S Rwy 04R)..." oninput="onScratchpadInputChange()"></textarea>
+                <div class="sp-toolbar">
+                    <button class="sp-mini-btn" onclick="insertScratchpadTemplate('VFR 7000')">VFR 7000</button>
+                    <button class="sp-mini-btn" onclick="insertScratchpadTemplate('IFR 1000')">IFR 1000</button>
+                    <button class="sp-mini-btn" onclick="insertScratchpadTemplate('STD 1013')">STD 1013</button>
+                    <button class="sp-mini-btn" style="color:#f85149;" onclick="clearScratchpadAtc()">🗑️ Pulisci</button>
+                </div>
+            </div>
+            <div class="sp-body" id="spTabDraw" style="display:none;">
+                <div class="sp-canvas-wrap">
+                    <canvas id="spDrawCanvas" width="318" height="195"></canvas>
+                </div>
+                <div class="sp-toolbar">
+                    <div style="display:flex;gap:6px;align-items:center;">
+                        <span class="sp-color-dot active" style="background:#00d2ff;" onclick="setScratchpadPen('#00d2ff', this)"></span>
+                        <span class="sp-color-dot" style="background:#fbbf24;" onclick="setScratchpadPen('#fbbf24', this)"></span>
+                        <span class="sp-color-dot" style="background:#2ea043;" onclick="setScratchpadPen('#2ea043', this)"></span>
+                        <span class="sp-color-dot" style="background:#f85149;" onclick="setScratchpadPen('#f85149', this)"></span>
+                    </div>
+                    <div style="display:flex;gap:5px;">
+                        <button class="sp-mini-btn" id="btnSpEraser" onclick="toggleScratchpadEraser()">🧽 Gomma</button>
+                        <button class="sp-mini-btn" style="color:#f85149;" onclick="clearScratchpadCanvas()">🗑️ Pulisci</button>
+                    </div>
+                </div>
+            </div>
+            <div class="sp-body" id="spTabFreq" style="display:none;">
+                <div class="sp-freq-list" id="spFreqListContainer"></div>
+            </div>
+        `;
+        document.body.appendChild(drawer);
+
+        populateScratchpadInputs();
+        initScratchpadDraggable(drawer, document.getElementById('spDragHeader'));
+        initScratchpadCanvas();
+        renderScratchpadFrequencies();
+    }
+}
+
+function toggleScratchpad(forceState) {
+    ensureScratchpadUI();
+    scratchpadOpen = (typeof forceState === 'boolean') ? forceState : !scratchpadOpen;
+    const drawer = document.getElementById('aeroScratchpadDrawer');
+    const btn = document.getElementById('btnToggleScratchpad');
+    if (drawer) drawer.classList.toggle('open', scratchpadOpen);
+    if (btn) btn.classList.toggle('active', scratchpadOpen);
+    if (scratchpadOpen) renderScratchpadFrequencies();
+}
+
+function switchScratchpadTab(tabName) {
+    const drawer = document.getElementById('aeroScratchpadDrawer');
+    if (!drawer) return;
+    drawer.querySelectorAll('.sp-tab-btn').forEach(b => {
+        b.classList.toggle('active', b.getAttribute('data-tab') === tabName);
+    });
+    document.getElementById('spTabAtc').style.display = (tabName === 'atc') ? 'flex' : 'none';
+    document.getElementById('spTabDraw').style.display = (tabName === 'draw') ? 'flex' : 'none';
+    document.getElementById('spTabFreq').style.display = (tabName === 'freq') ? 'flex' : 'none';
+    if (tabName === 'freq') renderScratchpadFrequencies();
+}
+
+function populateScratchpadInputs() {
+    const mapIds = {
+        spInpXpdr: 'xpdr',
+        spInpQnh: 'qnh',
+        spInpFl: 'fl',
+        spInpHdg: 'hdg',
+        spInpSpd: 'spd',
+        spInpFreq: 'freq',
+        spInpNotes: 'notes'
+    };
+    for (const [id, key] of Object.entries(mapIds)) {
+        const el = document.getElementById(id);
+        if (el) el.value = scratchpadData[key] || '';
+    }
+}
+
+function onScratchpadInputChange() {
+    scratchpadData.xpdr = document.getElementById('spInpXpdr')?.value || '';
+    scratchpadData.qnh = document.getElementById('spInpQnh')?.value || '';
+    scratchpadData.fl = document.getElementById('spInpFl')?.value || '';
+    scratchpadData.hdg = document.getElementById('spInpHdg')?.value || '';
+    scratchpadData.spd = document.getElementById('spInpSpd')?.value || '';
+    scratchpadData.freq = document.getElementById('spInpFreq')?.value || '';
+    scratchpadData.notes = document.getElementById('spInpNotes')?.value || '';
+    persistScratchpadData();
+}
+
+function persistScratchpadData() {
+    const raw = JSON.stringify(scratchpadData);
+    try { localStorage.setItem('aeroglass_scratchpad', raw); } catch (e) {}
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.save_setting) {
+        try { window.pywebview.api.save_setting('efb_scratchpad', raw); } catch (e) {}
+    }
+}
+
+function insertScratchpadTemplate(preset) {
+    if (preset === 'VFR 7000') document.getElementById('spInpXpdr').value = '7000';
+    else if (preset === 'IFR 1000') document.getElementById('spInpXpdr').value = '1000';
+    else if (preset === 'STD 1013') document.getElementById('spInpQnh').value = '1013';
+    onScratchpadInputChange();
+}
+
+function syncScratchpadFromSim() {
+    const tel = window.lastTelemetry || {};
+    if (tel.qnh_mb) document.getElementById('spInpQnh').value = String(Math.round(Number(tel.qnh_mb)));
+    if (tel.alt_ft) document.getElementById('spInpFl').value = `${Math.round(Number(tel.alt_ft) / 100) * 100}`;
+    if (tel.hdg_deg) document.getElementById('spInpHdg').value = `${String(Math.round(Number(tel.hdg_deg))).padStart(3, '0')}°`;
+    if (tel.gs_kt) document.getElementById('spInpSpd').value = String(Math.round(Number(tel.gs_kt)));
+    onScratchpadInputChange();
+}
+
+function clearScratchpadAtc() {
+    ['spInpXpdr', 'spInpQnh', 'spInpFl', 'spInpHdg', 'spInpSpd', 'spInpFreq', 'spInpNotes'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    onScratchpadInputChange();
+}
+
+function setScratchpadPen(color, dotEl) {
+    _spPenColor = color;
+    _spEraser = false;
+    const erBtn = document.getElementById('btnSpEraser');
+    if (erBtn) erBtn.style.borderColor = 'rgba(148, 163, 184, 0.3)';
+    document.querySelectorAll('.sp-color-dot').forEach(d => d.classList.remove('active'));
+    if (dotEl) dotEl.classList.add('active');
+}
+
+function toggleScratchpadEraser() {
+    _spEraser = !_spEraser;
+    const erBtn = document.getElementById('btnSpEraser');
+    if (erBtn) erBtn.style.borderColor = _spEraser ? '#00d2ff' : 'rgba(148, 163, 184, 0.3)';
+}
+
+function clearScratchpadCanvas() {
+    const canvas = document.getElementById('spDrawCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    scratchpadData.drawing = '';
+    persistScratchpadData();
+}
+
+function initScratchpadCanvas() {
+    const canvas = document.getElementById('spDrawCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    if (scratchpadData.drawing) {
+        const img = new Image();
+        img.onload = () => ctx.drawImage(img, 0, 0);
+        img.src = scratchpadData.drawing;
+    }
+
+    let drawing = false;
+    const getPos = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return {
+            x: (clientX - rect.left) * (canvas.width / rect.width),
+            y: (clientY - rect.top) * (canvas.height / rect.height)
+        };
+    };
+
+    const startDraw = (e) => {
+        e.preventDefault();
+        drawing = true;
+        const p = getPos(e);
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+    };
+
+    const moveDraw = (e) => {
+        if (!drawing) return;
+        e.preventDefault();
+        const p = getPos(e);
+        ctx.globalCompositeOperation = _spEraser ? 'destination-out' : 'source-over';
+        ctx.strokeStyle = _spPenColor;
+        ctx.lineWidth = _spEraser ? 16 : 2.4;
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+    };
+
+    const endDraw = () => {
+        if (!drawing) return;
+        drawing = false;
+        ctx.globalCompositeOperation = 'source-over';
+        try {
+            scratchpadData.drawing = canvas.toDataURL('image/png');
+            persistScratchpadData();
+        } catch (e) {}
+    };
+
+    canvas.addEventListener('mousedown', startDraw);
+    canvas.addEventListener('mousemove', moveDraw);
+    window.addEventListener('mouseup', endDraw);
+    canvas.addEventListener('touchstart', startDraw, { passive: false });
+    canvas.addEventListener('touchmove', moveDraw, { passive: false });
+    canvas.addEventListener('touchend', endDraw);
+}
+
+function initScratchpadDraggable(panel, handle) {
+    if (!panel || !handle) return;
+    let isDragging = false, startX = 0, startY = 0, origLeft = 0, origTop = 0;
+
+    const onStart = (e) => {
+        if (e.target.closest('button')) return;
+        isDragging = true;
+        const rect = panel.getBoundingClientRect();
+        origLeft = rect.left;
+        origTop = rect.top;
+        startX = e.touches ? e.touches[0].clientX : e.clientX;
+        startY = e.touches ? e.touches[0].clientY : e.clientY;
+        panel.style.right = 'auto';
+        panel.style.left = `${origLeft}px`;
+        panel.style.top = `${origTop}px`;
+    };
+
+    const onMove = (e) => {
+        if (!isDragging) return;
+        const cx = e.touches ? e.touches[0].clientX : e.clientX;
+        const cy = e.touches ? e.touches[0].clientY : e.clientY;
+        const nx = Math.max(8, Math.min(window.innerWidth - panel.offsetWidth - 8, origLeft + (cx - startX)));
+        const ny = Math.max(48, Math.min(window.innerHeight - 80, origTop + (cy - startY)));
+        panel.style.left = `${nx}px`;
+        panel.style.top = `${ny}px`;
+    };
+
+    const onEnd = () => { isDragging = false; };
+
+    handle.addEventListener('mousedown', onStart);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onEnd);
+    handle.addEventListener('touchstart', onStart, { passive: true });
+    window.addEventListener('touchmove', onMove, { passive: true });
+    window.addEventListener('touchend', onEnd);
+}
+
+function renderScratchpadFrequencies() {
+    const box = document.getElementById('spFreqListContainer');
+    if (!box) return;
+
+    const items = [
+        { label: 'UNICOM (VATSIM / IVAO)', freq: '122.800', note: 'Traffico non controllato' },
+        { label: 'GUARD / EMERGENZA', freq: '121.500', note: 'VHF Internazionale Emergenze' },
+        { label: 'ITALIA VFR FIC / INFO', freq: '124.150', note: 'Padova / Roma Informazioni VFR' },
+        { label: 'AVIOSUPERFICI / ULTRALEGGERI', freq: '130.000', note: 'Frequenza nazionale aviosuperfici IT' }
+    ];
+
+    if (Array.isArray(vorsData) && vorsData.length > 0 && typeof map !== 'undefined' && map) {
+        const c = map.getCenter();
+        const nearVors = [...vorsData]
+            .filter(v => v.freq && v.lat !== undefined)
+            .sort((a, b) => Math.hypot(a.lat - c.lat, a.lon - c.lng) - Math.hypot(b.lat - c.lat, b.lon - c.lng))
+            .slice(0, 3);
+        nearVors.forEach(v => {
+            items.push({ label: `VOR ${v.ident} (${v.name || ''})`, freq: String(v.freq), note: 'Radioassistenza vicina' });
+        });
+    }
+
+    if (Array.isArray(ilsData) && ilsData.length > 0 && typeof map !== 'undefined' && map) {
+        const c = map.getCenter();
+        const nearIls = [...ilsData]
+            .filter(i => i.freq && i.lat !== undefined)
+            .sort((a, b) => Math.hypot(a.lat - c.lat, a.lon - c.lng) - Math.hypot(b.lat - c.lat, b.lon - c.lng))
+            .slice(0, 2);
+        nearIls.forEach(i => {
+            items.push({ label: `ILS ${i.apt_icao || ''} RWY ${i.rwy || i.ident || ''}`, freq: String(i.freq), note: `CRS ${i.course || '---'}°` });
+        });
+    }
+
+    box.innerHTML = items.map(it => `
+        <div class="sp-freq-item">
+            <div>
+                <div style="font-size:10.5px;font-weight:700;color:#e2e8f0;">${it.label}</div>
+                <div style="font-size:9px;color:#94a3b8;">${it.note}</div>
+            </div>
+            <span class="sp-freq-val" onclick="sendFreqToScratchpad('${it.freq}')" title="Clicca per copiare in NEXT FREQ">${it.freq}</span>
+        </div>
+    `).join('');
+}
+
+function sendFreqToScratchpad(freqVal) {
+    const inp = document.getElementById('spInpFreq');
+    if (inp) inp.value = freqVal;
+    onScratchpadInputChange();
+    switchScratchpadTab('atc');
+}
+
 // --- HOOKS DI COLLEGAMENTO UI (VNAV ToD, NAVLOG, TOUCH) ---
 function installTodAndTouchHooks() {
     if (window._todHooksInstalled) return;
@@ -1677,6 +2058,14 @@ async function initAeroGlassApp() {
             if (netRes && netRes.success && netRes.value !== null && netRes.value !== undefined) {
                 networkOverlayMode = String(netRes.value);
                 updateNetworkOverlayButtonUI();
+            }
+
+            const spRes = await window.pywebview.api.get_setting('efb_scratchpad');
+            if (spRes && spRes.success && spRes.value) {
+                try {
+                    scratchpadData = { ...scratchpadData, ...JSON.parse(spRes.value) };
+                    populateScratchpadInputs();
+                } catch (e) {}
             }
         }
 
