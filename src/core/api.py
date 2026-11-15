@@ -566,6 +566,60 @@ class AeroGlassAPI:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    def get_airport_ground_layout(self, icao):
+        """Genera automaticamente il layout geometrico delle piste dal database per qualsiasi aeroporto ICAO."""
+        import math
+        ident = str(icao or "").strip().upper()
+        try:
+            with self._db_lock:
+                with get_connection() as conn:
+                    apt = conn.execute("SELECT * FROM world_airports WHERE icao = ?", (ident,)).fetchone()
+                    if not apt:
+                        return {"success": False, "error": "Airport not found"}
+                    
+                    db_rwys = conn.execute("SELECT * FROM world_runways WHERE apt_icao = ?", (ident,)).fetchall()
+                    runways = []
+                    for r in db_rwys:
+                        le_lat = r["le_lat"]
+                        le_lon = r["le_lon"]
+                        he_lat = r["he_lat"]
+                        he_lon = r["he_lon"]
+                        
+                        # Fallback geometrico se le soglie esatte non sono presenti ma abbiamo heading e lunghezza
+                        if (le_lat is None or le_lon is None or he_lat is None or he_lon is None) and apt["lat"] and apt["lon"]:
+                            hdg = float(r["le_hdg"] or 0)
+                            length_m = float(r["length_ft"] or 3000) * 0.3048
+                            rad = math.radians(hdg)
+                            d_lat = (length_m / 2.0) * math.cos(rad) / 111111.0
+                            d_lon = (length_m / 2.0) * math.sin(rad) / (111111.0 * math.cos(math.radians(apt["lat"])))
+                            le_lat = apt["lat"] - d_lat
+                            le_lon = apt["lon"] - d_lon
+                            he_lat = apt["lat"] + d_lat
+                            he_lon = apt["lon"] + d_lon
+
+                        if le_lat and le_lon and he_lat and he_lon:
+                            runways.append({
+                                "ref": f"{r['le_ident']}/{r['he_ident']}",
+                                "width": int((r["width_ft"] or 100) * 0.3048),
+                                "surface": str(r["surface"] or "asphalt").lower(),
+                                "coords": [[le_lat, le_lon], [he_lat, he_lon]]
+                            })
+
+                    return {
+                        "success": True,
+                        "layout": {
+                            "name": apt["name"],
+                            "lat": apt["lat"],
+                            "lon": apt["lon"],
+                            "runways": runways,
+                            "taxiways": [],
+                            "aprons": [],
+                            "stands": []
+                        }
+                    }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     def save_simbrief_id(self, simbrief_id):
         """Metodo ponte chiamato da flightplan.js per salvare il SimBrief User ID."""
         return self.save_setting("simbrief_id", simbrief_id)

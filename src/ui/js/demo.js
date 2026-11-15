@@ -36,6 +36,7 @@ function closeAllModalsForDemo() {
     if (typeof closeEfbNetworkModal === 'function') closeEfbNetworkModal();
     if (typeof closeCreateFplModal === 'function') closeCreateFplModal();
     if (typeof closeFlightHistoryModal === 'function') closeFlightHistoryModal();
+    if (typeof toggleScratchpad === 'function') toggleScratchpad(false);
 }
 
 function simulateDemoAircraftInFlight(lat, lon, hdg) {
@@ -110,20 +111,53 @@ const DEMO_TOUR_STEPS = [
         }
     },
     {
-        title: "✈️ Importazione SimBrief & File .PLN (Drag & Drop)",
-        desc: "Con un clic scarichi l'ultimo OFP generato su <strong>SimBrief</strong> (salvando l'ID in SQLite), oppure puoi importare/esportare file <code>.pln</code> di MSFS 2024 anche trascinandoli direttamente sulla finestra.",
-        targetSelector: "#sidebarPanel",
-        placement: "right",
-        action: () => closeAllModalsForDemo()
-    },
-    {
-        title: "📐 Cono ILS & Rubber Banding Elastico",
-        desc: "Sulla pista <strong>27L di Heathrow (EGLL)</strong> vedi il cono di avvicinamento strumentale <strong>ILS</strong>. Trascinando qualsiasi tratto della rotta col mouse (o col dito sul tablet) modifichi il piano con aggancio magnetico <em>Snap</em> e <strong>Undo (Ctrl+Z)</strong>.",
-        targetSelector: "#map",
-        placement: "center",
+        title: "📏 Righello Tattico & Misura Distanza/Prua (Measure Tool)",
+        desc: "Cliccando sul pulsante <strong>Righello</strong> (o usando il <strong>clic destro sulla mappa</strong>), puoi tracciare linee di misura per calcolare istantaneamente distanza in <strong>NM</strong>, prua magnetica/vera (<strong>HDG</strong>) e tempo stimato (<strong>ETE</strong>) alla Ground Speed attuale.",
+        targetSelector: "#btnToggleMeasure",
+        placement: "bottom",
         action: () => {
             closeAllModalsForDemo();
-            if (typeof map !== 'undefined' && map) map.flyTo([51.38, 0.15], 9, { duration: 1.1 });
+            if (typeof clearMeasureTool === 'function') clearMeasureTool(true);
+        }
+    },
+    {
+        title: "📝 Scratchpad EFB & Frequenze Comuni",
+        desc: "Il pannello a scomparsa <strong>Note EFB</strong> ti permette di annotare al volo autorizzazioni ATC (Squawk, QNH, FL, vettori), disegnare a mano libera su canvas touch e consultare le frequenze radio d'emergenza, UNICOM e VOR/ILS vicine.",
+        targetSelector: "#btnToggleScratchpad",
+        placement: "bottom",
+        action: () => {
+            closeAllModalsForDemo();
+            if (typeof toggleScratchpad === 'function') toggleScratchpad(true);
+        }
+    },
+    {
+        title: "🌍 Database Aeroporti Mondiali & Piste (Ground Map)",
+        desc: "La mappa carica dinamicamente oltre 40.000 aeroporti mondiali in base al livello di zoom e al bounding box. Avvicinandosi agli scali (o cercando un ICAO), vengono generate automaticamente le geometrie vettoriali delle piste, dei raccordi e dei parcheggi.",
+        targetSelector: "#btnToggleGroundMap",
+        placement: "bottom",
+        action: () => {
+            closeAllModalsForDemo();
+            if (typeof toggleScratchpad === 'function') toggleScratchpad(false);
+            if (typeof map !== 'undefined' && map) map.setView([45.5053, 12.3519], 15, { duration: 1.0 });
+        }
+    },
+    {
+        title: "☁️ Copertura Nuvolosa & VNAV Cloud Scan",
+        desc: "Il selettore <strong>Clouds</strong> nel cassetto altimetrico ti permette di analizzare gli strati nuvolosi METAR (FEW, SCT, BKN, OVC) alla quota dell'aereo o a livelli di volo fissi, evidenziando le celle IMC e proiettando la linea di scansione sul profilo VNAV.",
+        targetSelector: "#vnavCloudSelector",
+        placement: "top",
+        action: () => {
+            closeAllModalsForDemo();
+            if (!drawerOpen) toggleDrawer();
+        }
+    },
+    {
+        title: "🌐 Traffico Online Live (VATSIM / IVAO)",
+        desc: "Attivando l'overlay di rete puoi visualizzare in tempo reale i piloti connessi su <strong>VATSIM</strong> (in giallo) e <strong>IVAO</strong> (in ciano) direttamente sulla mappa, con callsign, quota e velocità.",
+        targetSelector: "#btnToggleNetwork",
+        placement: "bottom",
+        action: () => {
+            closeAllModalsForDemo();
         }
     },
     {
@@ -141,7 +175,7 @@ const DEMO_TOUR_STEPS = [
         title: "📋 Tabella Operativa NavLog (ETE, ETA & Consumi)",
         desc: "Aprendo il <strong>NavLog</strong> ottieni il registro completo di navigazione per ogni Waypoint: prua, distanza parziale e residua, tempi stimati (ETE / ETA UTC), consumo di tratta e carburante residuo a bordo (EFOB), esportabile in CSV.",
         targetSelector: "#navlogModal .modal-content",
-        placement: "top",
+        placement: "center",
         action: () => {
             closeAllModalsForDemo();
             openNavlogModal();
@@ -151,7 +185,7 @@ const DEMO_TOUR_STEPS = [
         title: "⛽ Calcolatore Carburante & Performance Velivolo",
         desc: "Il modulo <strong>Fuel & Perf</strong> (qui impostato su <em>Airbus A320neo</em> con 3.200 Gal a bordo) calcola Taxi, Trip Fuel per le 790 NM di rotta, Contingency, Riserva di 45 min e verifica con un semaforo la copertura del <strong>Block Fuel</strong>.",
         targetSelector: "#fuelPerfModal .modal-content",
-        placement: "top",
+        placement: "center",
         action: () => {
             closeAllModalsForDemo();
             onFuelPresetChange('a320');
@@ -165,7 +199,7 @@ const DEMO_TOUR_STEPS = [
         title: "📱 Modalità EFB di Rete Wi-Fi (Sincronizzazione Tablet)",
         desc: "Inquadrando questo <strong>QR Code</strong> col tablet apri AeroGlass Nav via Wi-Fi sulla porta dedicata <code>8339</code>: qualsiasi modifica alla rotta fatta sul PC o col tocco sul tablet si sincronizza istantaneamente su entrambi gli schermi.",
         targetSelector: "#efbNetworkModal .modal-content",
-        placement: "right",
+        placement: "center",
         action: () => {
             closeAllModalsForDemo();
             openEfbNetworkModal();
@@ -221,8 +255,8 @@ function positionDemoCallout(targetSelector, placement) {
     spot.style.height = `${Math.min(window.innerHeight - 4, rect.height + pad * 2)}px`;
 
     bub.style.display = 'block';
-    const bw = bub.offsetWidth || 350;
-    const bh = bub.offsetHeight || 200;
+    const bw = bub.offsetWidth || 480;
+    const bh = bub.offsetHeight || 260;
     const margin = 16;
 
     let top = rect.bottom + margin;
@@ -232,16 +266,16 @@ function positionDemoCallout(targetSelector, placement) {
         left = rect.right + margin;
         top = rect.top + Math.min(80, rect.height / 4);
     } else if (placement === 'left') {
-        left = rect.left - bw - margin;
-        top = rect.top + (rect.height / 2) - (bh / 2);
+        left = rect.left - bub.offsetWidth - margin;
+        top = rect.top + (rect.height / 2) - (bub.offsetHeight / 2);
     } else if (placement === 'top') {
         top = rect.top - bh - margin;
         left = rect.left + (rect.width / 2) - (bw / 2);
         if (top < 55) top = Math.min(window.innerHeight - bh - 16, rect.bottom + margin);
     }
 
-    left = Math.max(14, Math.min(window.innerWidth - bw - 14, left));
-    top = Math.max(54, Math.min(window.innerHeight - bh - 14, top));
+    left = Math.max(14, Math.min(window.innerWidth - bub.offsetWidth - 14, left));
+    top = Math.max(54, Math.min(window.innerHeight - bub.offsetHeight - 14, top));
 
     bub.style.left = `${left}px`;
     bub.style.top = `${top}px`;
@@ -263,27 +297,38 @@ function renderDemoStep(index) {
     if (bub) {
         const total = DEMO_TOUR_STEPS.length;
         const pct = Math.round(((index + 1) / total) * 100);
+        bub.style.width = '480px';
+        bub.style.maxWidth = '92vw';
+        bub.style.background = 'rgba(13, 17, 23, 0.97)';
+        bub.style.border = '2px solid rgba(56, 189, 248, 0.65)';
+        bub.style.borderRadius = '14px';
+        bub.style.boxShadow = '0 16px 48px rgba(0, 0, 0, 0.85)';
+        bub.style.padding = '20px 22px';
+        bub.style.zIndex = '99999';
+        bub.style.position = 'fixed';
+        bub.style.backdropFilter = 'blur(16px)';
+
         bub.innerHTML = `
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                <span style="background:rgba(56,189,248,0.18);border:1px solid rgba(56,189,248,0.5);color:#38bdf8;font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;letter-spacing:0.4px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <span style="background:rgba(56,189,248,0.22);border:1px solid rgba(56,189,248,0.6);color:#38bdf8;font-size:11.5px;font-weight:800;padding:3px 10px;border-radius:999px;letter-spacing:0.5px;">
                     🎬 DEMO LIRF ➔ EGLL • ${index + 1}/${total}
                 </span>
-                <span style="font-size:10px;color:#94a3b8;">Tasto <strong>F1</strong> / <strong>Esc</strong></span>
+                <span style="font-size:11px;color:#94a3b8;font-family:Consolas,monospace;">Tasto <strong>F1</strong> / <strong>Esc</strong></span>
             </div>
-            <div style="font-size:13.5px;font-weight:700;color:#fbbf24;margin-bottom:6px;line-height:1.3;">${step.title}</div>
-            <div style="font-size:12px;color:#e2e8f0;line-height:1.5;margin-bottom:10px;">${step.desc}</div>
-            <div style="width:100%;height:4px;background:rgba(148,163,184,0.2);border-radius:999px;overflow:hidden;margin-bottom:10px;">
+            <div style="font-size:16px;font-weight:800;color:#fbbf24;margin-bottom:8px;line-height:1.35;">${step.title}</div>
+            <div style="font-size:13.5px;color:#e2e8f0;line-height:1.6;margin-bottom:14px;">${step.desc}</div>
+            <div style="width:100%;height:6px;background:rgba(148,163,184,0.25);border-radius:999px;overflow:hidden;margin-bottom:14px;">
                 <div style="width:${pct}%;height:100%;background:linear-gradient(90deg,#38bdf8,#34d399);transition:width 0.3s ease;"></div>
             </div>
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
-                <div style="display:flex;gap:5px;">
-                    <button class="aero-demo-btn" onclick="prevDemoTourStep()" ${index === 0 ? 'disabled style="opacity:0.4;cursor:default;"' : ''}>◀ Indietro</button>
-                    <button class="aero-demo-btn amber" onclick="toggleDemoAutoPlay()">${demoState.autoPlay ? '⏸️ Pausa' : '▶️ Auto'}</button>
-                    <button class="aero-demo-btn primary" onclick="nextDemoTourStep()">${index === total - 1 ? '✅ Fine' : 'Avanti ▶'}</button>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+                <div style="display:flex;gap:6px;">
+                    <button class="aero-demo-btn" style="padding:6px 12px;font-size:12px;" onclick="prevDemoTourStep()" ${index === 0 ? 'disabled style="opacity:0.4;cursor:default;"' : ''}>◀ Indietro</button>
+                    <button class="aero-demo-btn amber" style="padding:6px 12px;font-size:12px;" onclick="toggleDemoAutoPlay()">${demoState.autoPlay ? '⏸️ Pausa' : '▶️ Auto'}</button>
+                    <button class="aero-demo-btn primary" style="padding:6px 14px;font-size:12px;" onclick="nextDemoTourStep()">${index === total - 1 ? '✅ Fine' : 'Avanti ▶'}</button>
                 </div>
-                <div style="display:flex;gap:5px;">
-                    <button class="aero-demo-btn" style="border-color:rgba(52,211,153,0.45);color:#34d399;" onclick="stopInteractiveDemoTour(true)" title="Termina il tour ma mantieni il piano di volo LIRF - EGLL">📌 Tieni Rotta</button>
-                    <button class="aero-demo-btn" style="border-color:rgba(244,63,94,0.45);color:#f43f5e;" onclick="stopInteractiveDemoTour(false)" title="Chiudi Demo e ripristina il piano di volo precedente">✕ Esci</button>
+                <div style="display:flex;gap:6px;">
+                    <button class="aero-demo-btn" style="padding:6px 10px;font-size:11.5px;border-color:rgba(52,211,153,0.45);color:#34d399;" onclick="stopInteractiveDemoTour(true)" title="Termina il tour ma mantieni il piano di volo LIRF - EGLL">📌 Tieni Rotta</button>
+                    <button class="aero-demo-btn" style="padding:6px 10px;font-size:11.5px;border-color:rgba(244,63,94,0.45);color:#f43f5e;" onclick="stopInteractiveDemoTour(false)" title="Chiudi Demo e ripristina il piano di volo precedente">✕ Esci</button>
                 </div>
             </div>
         `;
@@ -306,7 +351,7 @@ function scheduleNextDemoAutoStep() {
             } else {
                 stopInteractiveDemoTour(false);
             }
-        }, 6500);
+        }, 7500);
     }
 }
 
@@ -376,6 +421,7 @@ function initDemoKeyboardShortcuts() {
     window._demoKeysInstalled = true;
 
     window.addEventListener('keydown', (e) => {
+        e.stopPropagation();
         if (e.key === 'F1' || ((e.altKey || e.ctrlKey) && e.key.toLowerCase() === 'd')) {
             e.preventDefault();
             startInteractiveDemoTour();
@@ -386,7 +432,7 @@ function initDemoKeyboardShortcuts() {
         if (e.key === 'Escape') { e.preventDefault(); stopInteractiveDemoTour(false); }
         else if (e.key === 'ArrowRight') { e.preventDefault(); nextDemoTourStep(); }
         else if (e.key === 'ArrowLeft') { e.preventDefault(); prevDemoTourStep(); }
-        else if (e.key === ' ') { e.preventDefault(); toggleDemoAutoPlay(); }
+        else if (e.key === 'Space' || e.key === ' ') { e.preventDefault(); toggleDemoAutoPlay(); }
     });
 
     window.addEventListener('resize', () => {

@@ -526,33 +526,6 @@ let groundLayerGroup = null;
 let lastRenderedGroundKey = null;
 
 const CUSTOM_APT_LAYOUTS = {
-    LIPZ: {
-        name: "Venezia Marco Polo (LIPZ)",
-        lat: 45.5053, lon: 12.3519,
-        runways: [
-            { ref: "04R/22L", width: 45, surface: "asphalt", coords: [[45.4912, 12.3325], [45.5186, 12.3654]] },
-            { ref: "04L/22R", width: 45, surface: "asphalt", coords: [[45.4954, 12.3278], [45.5228, 12.3607]] }
-        ],
-        taxiways: [
-            { ref: "A", coords: [[45.5012, 12.3390], [45.5100, 12.3480]] },
-            { ref: "B", coords: [[45.4980, 12.3350], [45.5050, 12.3430]] },
-            { ref: "C", coords: [[45.5030, 12.3410], [45.5080, 12.3450]] },
-            { ref: "M", coords: [[45.4940, 12.3300], [45.5150, 12.3600]] }
-        ],
-        aprons: [
-            [[45.5035, 12.3410], [45.5035, 12.3460], [45.5085, 12.3460], [45.5085, 12.3410]]
-        ],
-        stands: [
-            { ref: "114", lat: 45.5065, lon: 12.3438 },
-            { ref: "115", lat: 45.5069, lon: 12.3442 },
-            { ref: "116", lat: 45.5073, lon: 12.3446 },
-            { ref: "117", lat: 45.5077, lon: 12.3450 },
-            { ref: "118", lat: 45.5081, lon: 12.3454 },
-            { ref: "501", lat: 45.5042, lon: 12.3421 },
-            { ref: "502", lat: 45.5046, lon: 12.3425 },
-            { ref: "503", lat: 45.5050, lon: 12.3429 }
-        ]
-    },
     LIKL: {
         name: "Aviosuperficie La Comina (Pordenone)",
         lat: 46.0019, lon: 12.6978,
@@ -702,6 +675,20 @@ function findNearestAirportAtCenter(lat, lon) {
             return { icao, name: data.name, lat: data.lat, lon: data.lon, custom: data };
         }
     }
+    // Cerca tra gli aeroporti caricati in memoria nell'area circostante
+    if (typeof airportsData !== 'undefined' && Array.isArray(airportsData)) {
+        let closest = null;
+        let minDist = 0.05; // ~3 miglia nautiche
+        for (const apt of airportsData) {
+            if (!apt.icao || apt.lat === undefined || apt.lon === undefined) continue;
+            const dist = Math.hypot(lat - apt.lat, lon - apt.lon);
+            if (dist < minDist) {
+                minDist = dist;
+                closest = { icao: apt.icao, name: apt.name || apt.icao, lat: apt.lat, lon: apt.lon, custom: null };
+            }
+        }
+        if (closest) return closest;
+    }
     return null;
 }
 
@@ -724,7 +711,7 @@ function evaluateAirportGroundMap() {
     const center = map.getCenter();
     const nearApt = findNearestAirportAtCenter(center.lat, center.lng);
 
-    if (!nearApt || !nearApt.custom) {
+    if (!nearApt) {
         if (lastRenderedGroundKey !== null) {
             groundLayerGroup.clearLayers();
             lastRenderedGroundKey = null;
@@ -741,7 +728,22 @@ function evaluateAirportGroundMap() {
         badgeName.innerText = `${nearApt.icao} - ${nearApt.name || 'GROUND CHART'}`;
     }
 
-    renderCustomAirportLayout(nearApt.custom);
+    if (nearApt.custom) {
+        renderCustomAirportLayout(nearApt.custom);
+    } else {
+        // Genera automaticamente il layout interrogando il database SQLite in tempo reale
+        if (window.pywebview && window.pywebview.api && window.pywebview.api.get_airport_ground_layout) {
+            window.pywebview.api.get_airport_ground_layout(nearApt.icao).then(res => {
+                if (res && res.success && res.layout) {
+                    renderCustomAirportLayout(res.layout);
+                } else {
+                    if (groundLayerGroup) groundLayerGroup.clearLayers();
+                }
+            }).catch(() => {
+                if (groundLayerGroup) groundLayerGroup.clearLayers();
+            });
+        }
+    }
 }
 
 function renderCustomAirportLayout(layout) {

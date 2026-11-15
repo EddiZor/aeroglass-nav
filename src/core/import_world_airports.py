@@ -20,10 +20,10 @@ CUSTOM_ITALIAN_FIELDS = [
 ]
 
 CUSTOM_RUNWAYS = [
-    ("LIKL", "18R", "36L", 3280, 98, "GRS", 0, 180, 360),
-    ("LIKL", "18L", "36R", 3280, 98, "GRS", 0, 180, 360),
-    ("LITY", "12", "30", 2132, 65, "ASP", 0, 120, 300),
-    ("LIPD", "09", "27", 3937, 115, "GRS", 0, 90, 270),
+    ("LIKL", "18R", "36L", 3280, 98, "GRS", 0, 180, 360, None, None, None, None),
+    ("LIKL", "18L", "36R", 3280, 98, "GRS", 0, 180, 360, None, None, None, None),
+    ("LITY", "12", "30", 2132, 65, "ASP", 0, 120, 300, None, None, None, None),
+    ("LIPD", "09", "27", 3937, 115, "GRS", 0, 90, 270, None, None, None, None),
 ]
 
 CUSTOM_FREQS = [
@@ -47,7 +47,11 @@ def init_and_populate_db(db_path=DB_PATH):
         PRAGMA journal_mode = WAL;
         PRAGMA synchronous = NORMAL;
 
-        CREATE TABLE IF NOT EXISTS world_airports (
+        DROP TABLE IF EXISTS world_airports;
+        DROP TABLE IF EXISTS world_runways;
+        DROP TABLE IF EXISTS world_frequencies;
+
+        CREATE TABLE world_airports (
             icao TEXT PRIMARY KEY,
             type TEXT,
             name TEXT,
@@ -58,7 +62,7 @@ def init_and_populate_db(db_path=DB_PATH):
             municipality TEXT
         );
 
-        CREATE TABLE IF NOT EXISTS world_runways (
+        CREATE TABLE world_runways (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             apt_icao TEXT,
             le_ident TEXT,
@@ -68,20 +72,20 @@ def init_and_populate_db(db_path=DB_PATH):
             surface TEXT,
             lighted INTEGER,
             le_hdg REAL,
-            he_hdg REAL
+            he_hdg REAL,
+            le_lat REAL,
+            le_lon REAL,
+            he_lat REAL,
+            he_lon REAL
         );
 
-        CREATE TABLE IF NOT EXISTS world_frequencies (
+        CREATE TABLE world_frequencies (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             apt_icao TEXT,
             type TEXT,
             description TEXT,
             freq_mhz REAL
         );
-
-        DELETE FROM world_airports;
-        DELETE FROM world_runways;
-        DELETE FROM world_frequencies;
     """)
 
     # 1. Importazione Aeroporti
@@ -145,6 +149,13 @@ def init_and_populate_db(db_path=DB_PATH):
             he_hdg = float(r["he_heading_degT"]) if r.get("he_heading_degT") else 0.0
         except ValueError:
             he_hdg = 0.0
+        try:
+            le_lat = float(r["le_latitude_deg"]) if r.get("le_latitude_deg") else None
+            le_lon = float(r["le_longitude_deg"]) if r.get("le_longitude_deg") else None
+            he_lat = float(r["he_latitude_deg"]) if r.get("he_latitude_deg") else None
+            he_lon = float(r["he_longitude_deg"]) if r.get("he_longitude_deg") else None
+        except ValueError:
+            le_lat, le_lon, he_lat, he_lon = None, None, None, None
 
         rwy_rows.append((
             apt_ident,
@@ -155,13 +166,17 @@ def init_and_populate_db(db_path=DB_PATH):
             (r.get("surface") or "UNK").strip().upper()[:12],
             lighted,
             le_hdg,
-            he_hdg
+            he_hdg,
+le_lat,
+            le_lon,
+            he_lat,
+            he_lon
         ))
 
     rwy_rows.extend(CUSTOM_RUNWAYS)
     cur.executemany("""
-        INSERT INTO world_runways (apt_icao, le_ident, he_ident, length_ft, width_ft, surface, lighted, le_hdg, he_hdg)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO world_runways (apt_icao, le_ident, he_ident, length_ft, width_ft, surface, lighted, le_hdg, he_hdg, le_lat, le_lon, he_lat, he_lon)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, rwy_rows)
     print(f"✅ Importate {len(rwy_rows)} piste.")
 

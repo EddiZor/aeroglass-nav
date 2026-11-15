@@ -97,7 +97,11 @@ def init_db():
                 surface TEXT,
                 lighted INTEGER,
                 le_hdg REAL,
-                he_hdg REAL
+                he_hdg REAL,
+                le_lat REAL,
+                le_lon REAL,
+                he_lat REAL,
+                he_lon REAL
             );
 
             CREATE TABLE IF NOT EXISTS world_frequencies (
