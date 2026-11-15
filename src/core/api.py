@@ -275,7 +275,7 @@ class AeroGlassAPI:
 
         result = None
 
-        # 1. Controlla prima se l'aeroporto è già presente nel database SQLite
+        # 1. Controlla prima se l'aeroporto è già presente nel database SQLite (cached_airports o world_airports)
         try:
             with self._db_lock:
                 with get_connection() as conn:
@@ -293,6 +293,20 @@ class AeroGlassAPI:
                             "metar": row["metar"] or "",
                             "is_airport": True
                         }
+                    else:
+                        cursor.execute("SELECT icao, name, lat, lon, elev_ft FROM world_airports WHERE icao = ?", (code,))
+                        w_row = cursor.fetchone()
+                        if w_row:
+                            result = {
+                                "success": True,
+                                "icao": w_row["icao"],
+                                "name": w_row["name"],
+                                "lat": float(w_row["lat"]),
+                                "lon": float(w_row["lon"]),
+                                "elev": int(w_row["elev_ft"] or 0),
+                                "metar": "",
+                                "is_airport": True
+                            }
         except Exception:
             pass
 
@@ -443,6 +457,114 @@ class AeroGlassAPI:
     def set_setting(self, key, value):
         """Alias compatibile per save_setting."""
         return self.save_setting(key, value)
+
+    def get_airports_in_bounds(self, min_lat, max_lat, min_lon, max_lon, zoom=8):
+        """Restituisce gli aeroporti mondiali visibili nel riquadro mappa filtrati per livello di zoom."""
+        try:
+            z = float(zoom)
+            if z < 6.5:
+                allowed = ("large_airport",)
+                limit = 120
+            elif z < 9.0:
+                allowed = ("large_airport", "medium_airport")
+                limit = 220
+            else:
+                allowed = ("large_airport", "medium_airport", "small_airport")
+                limit = 350
+
+            placeholders = ",".join("?" for _ in allowed)
+            query = f"""
+                SELECT icao, type, name, lat, lon, elev_ft, municipality
+                FROM world_airports
+                WHERE lat BETWEEN ? AND ?
+                  AND lon BETWEEN ? AND ?
+                  AND type IN ({placeholders})
+                ORDER BY CASE type
+                    WHEN 'large_airport' THEN 1
+                    WHEN 'medium_airport' THEN 2
+                    ELSE 3
+                END
+                LIMIT ?
+            """
+            params = [float(min_lat), float(max_lat), float(min_lon), float(max_lon), *allowed, limit]
+            with self._db_lock:
+                with get_connection() as conn:
+                    rows = conn.execute(query, params).fetchall()
+                    return {"success": True, "airports": [dict(r) for r in rows]}
+        except Exception as e:
+            return {"success": False, "error": str(e), "airports": []}
+
+    def search_world_airports(self, query_str):
+        """Ricerca istantanea su 42.000 aeroporti per codice ICAO, nome o città."""
+        q = str(query_str or "").strip().upper()
+        if len(q) < 2:
+            return {"success": True, "results": []}
+        try:
+            with self._db_lock:
+                with get_connection() as conn:
+                    rows = conn.execute("""
+                        SELECT icao, type, name, lat, lon, elev_ft, country, municipality
+                        FROM world_airports
+                        WHERE icao LIKE ? OR UPPER(name) LIKE ? OR UPPER(municipality) LIKE ?
+                        ORDER BY CASE
+                            WHEN icao = ? THEN 0
+                            WHEN icao LIKE ? THEN 1
+                            WHEN type = 'large_airport' THEN 2
+                            WHEN type = 'medium_airport' THEN 3
+                            ELSE 4
+                        END
+                        LIMIT 25
+                    """, (f"{q}%", f"%{q}%", f"%{q}%", q, f"{q}%")).fetchall()
+                    return {"success": True, "results": [dict(r) for r in rows]}
+        except Exception as e:
+            return {"success": False, "error": str(e), "results": []}
+
+    def get_airport_details(self, icao, wind_dir=None, wind_spd=None):
+        """Restituisce dettagli aeroporto, piste, frequenze radio e pista consigliata per il vento."""
+        import math
+        ident = str(icao or "").strip().upper()
+        try:
+            with self._db_lock:
+                with get_connection() as conn:
+                    apt = conn.execute("SELECT * FROM world_airports WHERE icao = ?", (ident,)).fetchone()
+                    rwys = [dict(r) for r in conn.execute("SELECT * FROM world_runways WHERE apt_icao = ?", (ident,)).fetchall()]
+                    freqs = [dict(f) for r_f in [conn.execute("SELECT * FROM world_frequencies WHERE apt_icao = ? ORDER BY type", (ident,)).fetchall()] for f in r_f]
+
+            best_rwy = None
+            if wind_dir is not None and wind_spd is not None and float(wind_spd) > 0 and rwys:
+                w_dir = float(wind_dir)
+                w_spd = float(wind_spd)
+                best_hw = -999.0
+                for r in rwys:
+                    for end_key, hdg_key in (("le_ident", "le_hdg"), ("he_ident", "he_hdg")):
+                        r_ident = r.get(end_key)
+                        r_hdg = float(r.get(hdg_key) or 0)
+                        if not r_ident:
+                            continue
+                        if r_hdg == 0 and r_ident[:2].isdigit():
+                            r_hdg = float(int(r_ident[:2]) * 10)
+                        rad = math.radians(w_dir - r_hdg)
+                        hw = round(w_spd * math.cos(rad), 1)
+                        xw = round(abs(w_spd * math.sin(rad)), 1)
+                        if hw > best_hw:
+                            best_hw = hw
+                            best_rwy = {
+                                "ident": r_ident,
+                                "headwind_kt": hw,
+                                "crosswind_kt": xw,
+                                "surface": r.get("surface"),
+                                "length_ft": r.get("length_ft")
+                            }
+
+            return {
+                "success": True,
+                "airport": dict(apt) if apt else None,
+                "runways": rwys,
+                "frequencies": freqs,
+                "recommended_runway": best_rwy
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     def save_simbrief_id(self, simbrief_id):
         """Metodo ponte chiamato da flightplan.js per salvare il SimBrief User ID."""

@@ -1033,12 +1033,47 @@ async function openQuickMetarPopup(icao, lat, lon, fallbackName, cachedMetar) {
     const qnhTxt = parsed ? parsed.qnh : '---';
     const elevTxt = elevFt !== null ? ` | ELEV: ${elevFt} ft` : '';
 
+    let extraHtml = '';
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.get_airport_details) {
+        try {
+            const wNum = parseMetarWindNumbers(metarRaw);
+            const det = await window.pywebview.api.get_airport_details(icao, wNum ? wNum.dir : null, wNum ? wNum.spd : null);
+            if (det && det.success) {
+                if (det.airport && elevFt === null && det.airport.elev_ft !== undefined) {
+                    elevFt = det.airport.elev_ft;
+                }
+                if (det.recommended_runway) {
+                    const br = det.recommended_runway;
+                    extraHtml += `<div style="margin-top:6px;background:rgba(46,160,67,0.15);border:1px solid rgba(46,160,67,0.5);border-radius:5px;padding:4px 6px;font-size:10px;color:#34d399;font-weight:700;">
+                        🛬 Pista Consigliata: <b>RWY ${br.ident}</b> (HW ${br.headwind_kt}kt | XW ${br.crosswind_kt}kt)
+                    </div>`;
+                }
+                if (Array.isArray(det.runways) && det.runways.length > 0) {
+                    const rwyBadges = det.runways.slice(0, 4).map(r => {
+                        const lenM = Math.round((r.length_ft || 0) * 0.3048);
+                        return `<span class="wx-pill" style="font-size:9.5px;">🛣️ ${r.le_ident}/${r.he_ident} (${lenM}m ${r.surface || ''})</span>`;
+                    }).join(' ');
+                    extraHtml += `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;">${rwyBadges}</div>`;
+                }
+                if (Array.isArray(det.frequencies) && det.frequencies.length > 0) {
+                    const freqBadges = det.frequencies.slice(0, 5).map(f => {
+                        const fStr = Number(f.freq_mhz).toFixed(3);
+                        return `<span class="wx-pill" style="cursor:pointer;border-color:rgba(0,210,255,0.4);color:#38bdf8;" onclick="sendFreqToScratchpad('${fStr}'); toggleScratchpad(true);" title="Clicca per inviare a Scratchpad NEXT FREQ">📻 ${f.type}: <b>${fStr}</b></span>`;
+                    }).join(' ');
+                    extraHtml += `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;">${freqBadges}</div>`;
+                }
+            }
+        } catch (e) {}
+    }
+
+    const finalElevTxt = elevFt !== null ? ` | ELEV: ${elevFt} ft` : '';
+
     popup.setContent(`
         <div>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid rgba(148,163,184,0.2);padding-bottom:5px;margin-bottom:6px;">
                 <div>
                     <strong style="color:#00d2ff;font-size:12.5px;">✈️ ${icao}</strong>
-                    <div style="color:#94a3b8;font-size:10px;">${aptName}${elevTxt}</div>
+                    <div style="color:#94a3b8;font-size:10px;">${aptName}${finalElevTxt}</div>
                 </div>
                 <span style="background:${catInfo.color}22;border:1px solid ${catInfo.color};color:${catInfo.color};padding:1px 6px;border-radius:4px;font-size:10px;font-weight:800;">
                     ${catInfo.cat}
@@ -1052,6 +1087,7 @@ async function openQuickMetarPopup(icao, lat, lon, fallbackName, cachedMetar) {
             <div style="background:rgba(9,13,19,0.85);border:1px solid rgba(148,163,184,0.2);border-radius:5px;padding:6px;color:#e2e8f0;font-size:10.5px;word-break:break-word;">
                 ${metarRaw || 'Nessun bollettino METAR attivo per questo scalo.'}
             </div>
+            ${extraHtml}
         </div>
     `);
 }

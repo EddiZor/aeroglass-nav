@@ -73,4 +73,44 @@ def init_db():
                 metar TEXT DEFAULT ''
             )
         """)
+
+        # 5. Tabelle Database Mondiale Aeroporti, Piste e Frequenze (OurAirports)
+        cursor.executescript("""
+            CREATE TABLE IF NOT EXISTS world_airports (
+                icao TEXT PRIMARY KEY,
+                type TEXT,
+                name TEXT,
+                lat REAL,
+                lon REAL,
+                elev_ft INTEGER,
+                country TEXT,
+                municipality TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS world_runways (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                apt_icao TEXT,
+                le_ident TEXT,
+                he_ident TEXT,
+                length_ft INTEGER,
+                width_ft INTEGER,
+                surface TEXT,
+                lighted INTEGER,
+                le_hdg REAL,
+                he_hdg REAL
+            );
+
+            CREATE TABLE IF NOT EXISTS world_frequencies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                apt_icao TEXT,
+                type TEXT,
+                description TEXT,
+                freq_mhz REAL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_world_apt_coords ON world_airports (lat, lon, type);
+            CREATE INDEX IF NOT EXISTS idx_world_apt_name ON world_airports (name);
+            CREATE INDEX IF NOT EXISTS idx_world_rwy_apt ON world_runways (apt_icao);
+            CREATE INDEX IF NOT EXISTS idx_world_freq_apt ON world_frequencies (apt_icao);
+        """)
         conn.commit()
