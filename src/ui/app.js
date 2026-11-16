@@ -1546,6 +1546,24 @@ let networkOverlayMode = localStorage.getItem('aeroglass_net_overlay') || 'off';
 let networkLayerGroup = null;
 let networkPollInterval = null;
 
+let atcCoverageSettings = {
+    radiusScale: 100,   // % scala raggio (0% = nasconde i cerchi, 100% = standard, fino a 250%)
+    opacityScale: 100,  // % scala opacità (10% - 200%)
+    pilotRangeNm: 160,  // Raggio max aerei vicini in NM (20 - 300 NM)
+    showTWR: true,
+    showAPP: true,
+    showCTR: true
+};
+
+try {
+    const savedAtcCfg = localStorage.getItem('aeroglass_atc_cfg');
+    if (savedAtcCfg) atcCoverageSettings = { ...atcCoverageSettings, ...JSON.parse(savedAtcCfg) };
+} catch (e) {}
+
+function saveAtcCoverageSettings() {
+    try { localStorage.setItem('aeroglass_atc_cfg', JSON.stringify(atcCoverageSettings)); } catch (e) {}
+}
+
 function ensureNetworkOverlayUI() {
     if (typeof map !== 'undefined' && map && !networkLayerGroup && typeof L !== 'undefined') {
         networkLayerGroup = L.layerGroup().addTo(map);
@@ -1558,16 +1576,189 @@ function ensureNetworkOverlayUI() {
             btn.id = 'btnToggleNetwork';
             btn.className = 'top-btn';
             btn.onclick = () => cycleNetworkOverlayMode();
+            btn.oncontextmenu = (e) => {
+                e.preventDefault();
+                toggleAtcRadarPopover();
+            };
+
+            const cfgBtn = document.createElement('button');
+            cfgBtn.id = 'btnAtcRadarCfg';
+            cfgBtn.className = 'top-btn';
+            cfgBtn.innerHTML = '🎚️';
+            cfgBtn.title = 'Regola raggio e opacità cerchi ATC (TWR / APP / CTR)';
+            cfgBtn.style.padding = '4px 7px';
+            cfgBtn.onclick = (e) => {
+                e.stopPropagation();
+                toggleAtcRadarPopover();
+            };
 
             const wxBtn = document.getElementById('btnToggleWeather') || document.getElementById('btnToggleNavaids');
             if (wxBtn && wxBtn.parentNode === pillsGroup) {
                 pillsGroup.insertBefore(btn, wxBtn.nextSibling);
+                pillsGroup.insertBefore(cfgBtn, btn.nextSibling);
             } else {
                 pillsGroup.appendChild(btn);
+                pillsGroup.appendChild(cfgBtn);
             }
             updateNetworkOverlayButtonUI();
         }
     }
+
+    ensureAtcRadarPopoverDOM();
+}
+
+function ensureAtcRadarPopoverDOM() {
+    if (document.getElementById('aeroAtcRadarPopover')) return;
+
+    const pop = document.createElement('div');
+    pop.id = 'aeroAtcRadarPopover';
+    pop.className = 'glass-panel';
+    pop.style.cssText = 'position:fixed;top:52px;left:50%;transform:translateX(-50%);width:290px;background:rgba(13,17,23,0.96);border:1px solid rgba(0,210,255,0.45);border-radius:10px;padding:12px;z-index:2500;display:none;flex-direction:column;gap:10px;box-shadow:0 10px 28px rgba(0,0,0,0.75);backdrop-filter:blur(14px);font-family:Consolas,monospace;color:#e2e8f0;';
+
+    pop.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(148,163,184,0.2);padding-bottom:6px;">
+            <span style="font-size:11.5px;font-weight:800;color:#00d2ff;">🎚️ RADAR ATC & TRAFFICO</span>
+            <div style="display:flex;gap:5px;">
+                <button id="btnAtcCfgReset" style="background:rgba(148,163,184,0.15);border:1px solid rgba(148,163,184,0.3);color:#cbd5e1;border-radius:4px;font-size:9.5px;padding:1px 6px;cursor:pointer;">↺ Reset</button>
+                <button id="btnAtcCfgClose" style="background:none;border:none;color:#94a3b8;font-size:12px;cursor:pointer;">✕</button>
+            </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:3px;">
+            <div style="display:flex;justify-content:space-between;font-size:10.5px;">
+                <span>⭕ Raggio Cerchi ATC</span>
+                <b id="lblAtcRadiusVal" style="color:#00d2ff;">100%</b>
+            </div>
+            <input type="range" id="rngAtcRadius" min="0" max="250" step="5" value="${atcCoverageSettings.radiusScale}" style="width:100%;accent-color:#00d2ff;cursor:pointer;">
+            <div id="lblAtcRadiusNmInfo" style="font-size:9px;color:#94a3b8;text-align:right;">TWR: 5 NM | APP: 18 NM | CTR: 35 NM</div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:3px;">
+            <div style="display:flex;justify-content:space-between;font-size:10.5px;">
+                <span>🔆 Opacità Copertura ATC</span>
+                <b id="lblAtcOpacityVal" style="color:#34d399;">100%</b>
+            </div>
+            <input type="range" id="rngAtcOpacity" min="0" max="200" step="5" value="${atcCoverageSettings.opacityScale}" style="width:100%;accent-color:#34d399;cursor:pointer;">
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:3px;">
+            <div style="display:flex;justify-content:space-between;font-size:10.5px;">
+                <span>✈️ Raggio Aerei Vicini</span>
+                <b id="lblPilotRangeVal" style="color:#fbbf24;">160 NM</b>
+            </div>
+            <input type="range" id="rngPilotRange" min="20" max="300" step="10" value="${atcCoverageSettings.pilotRangeNm}" style="width:100%;accent-color:#fbbf24;cursor:pointer;">
+        </div>
+
+        <div style="display:flex;justify-content:space-between;gap:5px;padding-top:4px;border-top:1px solid rgba(148,163,184,0.15);">
+            <button id="btnFilterTWR" style="flex:1;padding:4px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;border:1px solid #34d399;background:rgba(52,211,153,0.18);color:#34d399;">🗼 TWR</button>
+            <button id="btnFilterAPP" style="flex:1;padding:4px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;border:1px solid #00d2ff;background:rgba(0,210,255,0.18);color:#00d2ff;">📡 APP</button>
+            <button id="btnFilterCTR" style="flex:1;padding:4px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;border:1px solid #c084fc;background:rgba(192,132,252,0.18);color:#c084fc;">🕸️ CTR</button>
+        </div>
+    `;
+
+    document.body.appendChild(pop);
+
+    const syncUI = () => {
+        const rScale = atcCoverageSettings.radiusScale;
+        const oScale = atcCoverageSettings.opacityScale;
+        const pRange = atcCoverageSettings.pilotRangeNm;
+
+        document.getElementById('rngAtcRadius').value = rScale;
+        document.getElementById('rngAtcOpacity').value = oScale;
+        document.getElementById('rngPilotRange').value = pRange;
+
+        document.getElementById('lblAtcRadiusVal').textContent = rScale === 0 ? 'OFF (Solo Badge)' : `${rScale}%`;
+        document.getElementById('lblAtcOpacityVal').textContent = `${oScale}%`;
+        document.getElementById('lblPilotRangeVal').textContent = `${pRange} NM`;
+
+        const twrNm = (5 * rScale / 100).toFixed(1);
+        const appNm = Math.round(18 * rScale / 100);
+        const ctrNm = Math.round(35 * rScale / 100);
+        document.getElementById('lblAtcRadiusNmInfo').textContent = `TWR: ${twrNm} NM | APP: ${appNm} NM | CTR: ${ctrNm} NM`;
+
+        const styleRoleBtn = (id, active, col) => {
+            const b = document.getElementById(id);
+            if (!b) return;
+            b.style.opacity = active ? '1' : '0.35';
+            b.style.borderColor = active ? col : 'rgba(148,163,184,0.3)';
+        };
+        styleRoleBtn('btnFilterTWR', atcCoverageSettings.showTWR, '#34d399');
+        styleRoleBtn('btnFilterAPP', atcCoverageSettings.showAPP, '#00d2ff');
+        styleRoleBtn('btnFilterCTR', atcCoverageSettings.showCTR, '#c084fc');
+    };
+
+    document.getElementById('rngAtcRadius').addEventListener('input', (e) => {
+        atcCoverageSettings.radiusScale = parseInt(e.target.value, 10) || 0;
+        syncUI();
+        saveAtcCoverageSettings();
+        if (typeof redrawCachedNetworkTraffic === 'function') redrawCachedNetworkTraffic();
+    });
+
+    document.getElementById('rngAtcOpacity').addEventListener('input', (e) => {
+        atcCoverageSettings.opacityScale = parseInt(e.target.value, 10) || 0;
+        syncUI();
+        saveAtcCoverageSettings();
+        if (typeof redrawCachedNetworkTraffic === 'function') redrawCachedNetworkTraffic();
+    });
+
+    document.getElementById('rngPilotRange').addEventListener('input', (e) => {
+        atcCoverageSettings.pilotRangeNm = parseInt(e.target.value, 10) || 160;
+        syncUI();
+        saveAtcCoverageSettings();
+        if (typeof redrawCachedNetworkTraffic === 'function') redrawCachedNetworkTraffic();
+    });
+
+    document.getElementById('btnFilterTWR').onclick = () => {
+        atcCoverageSettings.showTWR = !atcCoverageSettings.showTWR;
+        syncUI();
+        saveAtcCoverageSettings();
+        if (typeof redrawCachedNetworkTraffic === 'function') redrawCachedNetworkTraffic();
+    };
+    document.getElementById('btnFilterAPP').onclick = () => {
+        atcCoverageSettings.showAPP = !atcCoverageSettings.showAPP;
+        syncUI();
+        saveAtcCoverageSettings();
+        if (typeof redrawCachedNetworkTraffic === 'function') redrawCachedNetworkTraffic();
+    };
+    document.getElementById('btnFilterCTR').onclick = () => {
+        atcCoverageSettings.showCTR = !atcCoverageSettings.showCTR;
+        syncUI();
+        saveAtcCoverageSettings();
+        if (typeof redrawCachedNetworkTraffic === 'function') redrawCachedNetworkTraffic();
+    };
+
+    document.getElementById('btnAtcCfgReset').onclick = () => {
+        atcCoverageSettings = { radiusScale: 100, opacityScale: 100, pilotRangeNm: 160, showTWR: true, showAPP: true, showCTR: true };
+        syncUI();
+        saveAtcCoverageSettings();
+        if (typeof redrawCachedNetworkTraffic === 'function') redrawCachedNetworkTraffic();
+    };
+
+    document.getElementById('btnAtcCfgClose').onclick = () => {
+        pop.style.display = 'none';
+    };
+
+    syncUI();
+}
+
+function toggleAtcRadarPopover() {
+    ensureAtcRadarPopoverDOM();
+    const pop = document.getElementById('aeroAtcRadarPopover');
+    const btn = document.getElementById('btnAtcRadarCfg') || document.getElementById('btnToggleNetwork');
+    if (!pop) return;
+
+    if (pop.style.display === 'flex') {
+        pop.style.display = 'none';
+        return;
+    }
+
+    if (btn) {
+        const rect = btn.getBoundingClientRect();
+        const leftPos = Math.max(150, Math.min(window.innerWidth - 160, rect.left + rect.width / 2));
+        pop.style.left = leftPos + 'px';
+        pop.style.top = (rect.bottom + 8) + 'px';
+    }
+    pop.style.display = 'flex';
 }
 
 function updateNetworkOverlayButtonUI() {
@@ -1672,6 +1863,8 @@ function ensureNetAtcBadgeStyles() {
     document.head.appendChild(st);
 }
 
+window._lastNetworkTrafficRes = null;
+
 async function fetchAndRenderNetworkTraffic() {
     if (networkOverlayMode === 'off' || !window.pywebview || !window.pywebview.api) return;
     if (!networkLayerGroup || typeof map === 'undefined' || !map) return;
@@ -1684,124 +1877,142 @@ async function fetchAndRenderNetworkTraffic() {
         const res = await apiFn();
         if (!res || !res.success) return;
 
-        networkLayerGroup.clearLayers();
-        const bounds = map.getBounds().pad(0.35);
-        const refPos = (typeof lastAcftLatLng !== 'undefined' && lastAcftLatLng) ? lastAcftLatLng : map.getCenter();
-
-        // 1. TORRI E CENTRI RADAR ONLINE (TWR, APP, CTR) CON FREQUENZA RADIO
-        const activeAtcs = [];
-        (res.controllers || []).forEach(c => {
-            if (c.lat === undefined || c.lon === undefined) return;
-            const isVatsim = (c.network === 'vatsim');
-            if (networkOverlayMode === 'ivao' && isVatsim) return;
-            if (networkOverlayMode === 'vatsim' && !isVatsim) return;
-
-            const distNm = computeDistanceNm(refPos.lat, refPos.lng, c.lat, c.lon);
-            activeAtcs.push({ ...c, distNm });
-
-            if (!bounds.contains([c.lat, c.lon]) && distNm > 180) return;
-
-            let roleColor = '#34d399'; // TWR Verde
-            let radiusM = 9000;        // ~5 NM
-            let roleIcon = '🗼';
-            if (c.role === 'APP') {
-                roleColor = '#00d2ff'; // APP Ciano
-                radiusM = 38000;       // ~20 NM
-                roleIcon = '📡';
-            } else if (c.role === 'CTR') {
-                roleColor = '#c084fc'; // CTR Viola
-                radiusM = 95000;       // ~50 NM
-                roleIcon = '🕸️';
-            }
-
-            L.circle([c.lat, c.lon], {
-                radius: radiusM,
-                color: roleColor,
-                weight: 1.2,
-                dashArray: c.role === 'CTR' ? '6, 6' : null,
-                opacity: 0.45,
-                fillColor: roleColor,
-                fillOpacity: c.role === 'CTR' ? 0.04 : 0.08,
-                interactive: false
-            }).addTo(networkLayerGroup);
-
-            const netTag = isVatsim ? 'VAT' : 'IVAO';
-            const atcMarker = L.marker([c.lat, c.lon], {
-                icon: L.divIcon({
-                    className: '',
-                    html: `
-                        <div class="net-atc-badge" style="border-color:${roleColor};">
-                            <span class="net-atc-role" style="background:${roleColor};color:#090d13;">${roleIcon} ${c.role}</span>
-                            <span class="net-atc-cs">${c.callsign}</span>
-                            <span class="net-atc-freq">📻 ${c.freq}</span>
-                        </div>
-                    `,
-                    iconSize: null
-                }),
-                zIndexOffset: 850
-            }).addTo(networkLayerGroup);
-
-            atcMarker.bindTooltip(
-                `<b>[${netTag}] ${c.callsign}</b> (${c.name || ''})<br>` +
-                `Frequenza: <b style="color:#00d2ff;">${c.freq} MHz</b> | Dist: ${distNm.toFixed(0)} NM<br>` +
-                `<span style="font-size:9.5px;color:#34d399;">🖱️ Clicca per inviare frequenza a Note EFB</span>`,
-                { direction: 'top', className: 'vnav-route-tooltip' }
-            );
-
-            atcMarker.on('click', () => {
-                if (typeof sendFreqToScratchpad === 'function') {
-                    sendFreqToScratchpad(c.freq);
-                    toggleScratchpad(true);
-                }
-            });
-        });
-
-        window._lastOnlineControllers = activeAtcs.sort((a, b) => a.distNm - b.distNm);
-        if (scratchpadOpen && typeof renderScratchpadFrequencies === 'function') {
-            renderScratchpadFrequencies();
-        }
-
-        // 2. AEREI NELLE IMMEDIATE VICINANZE (ordinati per distanza)
-        const nearbyPilots = [];
-        (res.pilots || []).forEach(p => {
-            if (p.lat === undefined || p.lon === undefined) return;
-            const isVatsim = (p.network === 'vatsim');
-            if (networkOverlayMode === 'ivao' && isVatsim) return;
-            if (networkOverlayMode === 'vatsim' && !isVatsim) return;
-
-            const distNm = computeDistanceNm(refPos.lat, refPos.lng, p.lat, p.lon);
-            if (!bounds.contains([p.lat, p.lon]) || distNm > 160) return;
-            nearbyPilots.push({ ...p, distNm });
-        });
-
-        nearbyPilots.sort((a, b) => a.distNm - b.distNm);
-
-        nearbyPilots.slice(0, 80).forEach(p => {
-            const isVatsim = (p.network === 'vatsim');
-            const planeColor = isVatsim ? '#fbbf24' : '#00d2ff';
-            const netLabel = isVatsim ? 'VATSIM' : 'IVAO';
-            const hdg = p.hdg || 0;
-
-            const pilotIcon = L.divIcon({
-                className: '',
-                html: `<div class="net-pilot-marker" style="transform: rotate(${hdg}deg);">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="${planeColor}">
-                        <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
-                    </svg>
-                </div>`,
-                iconSize: [20, 20],
-                iconAnchor: [10, 10]
-            });
-
-            const m = L.marker([p.lat, p.lon], { icon: pilotIcon, zIndexOffset: 700 }).addTo(networkLayerGroup);
-            m.bindTooltip(
-                `<b>[${netLabel}] ${p.callsign}</b> (${p.distNm.toFixed(1)} NM)<br>Alt: ${p.alt} ft | GS: ${p.gs} kt | HDG: ${hdg}°`,
-                { direction: 'top', className: 'vnav-route-tooltip' }
-            );
-        });
+        window._lastNetworkTrafficRes = res;
+        redrawCachedNetworkTraffic();
     } catch (err) {
         console.error("Errore caricamento traffico online:", err);
     }
+}
+
+function redrawCachedNetworkTraffic() {
+    const res = window._lastNetworkTrafficRes;
+    if (networkOverlayMode === 'off' || !res || !networkLayerGroup || typeof map === 'undefined' || !map) return;
+
+    ensureNetAtcBadgeStyles();
+    networkLayerGroup.clearLayers();
+
+    const bounds = map.getBounds().pad(0.35);
+    const refPos = (typeof lastAcftLatLng !== 'undefined' && lastAcftLatLng) ? lastAcftLatLng : map.getCenter();
+
+    const rMult = (atcCoverageSettings.radiusScale || 0) / 100;
+    const oMult = (atcCoverageSettings.opacityScale || 0) / 100;
+    const maxPilotNm = atcCoverageSettings.pilotRangeNm || 160;
+
+    const BASE_ATC_CFG = {
+        TWR: { color: '#34d399', icon: '🗼', radiusNm: 5,  strokeOpacity: 0.55, fillOpacity: 0.09, weight: 1.3, dash: null },
+        APP: { color: '#00d2ff', icon: '📡', radiusNm: 18, strokeOpacity: 0.45, fillOpacity: 0.05, weight: 1.2, dash: null },
+        CTR: { color: '#c084fc', icon: '🕸️', radiusNm: 35, strokeOpacity: 0.35, fillOpacity: 0.025, weight: 1.1, dash: '6, 6' }
+    };
+
+    // 1. TORRI E CENTRI RADAR ONLINE (TWR, APP, CTR)
+    const activeAtcs = [];
+    (res.controllers || []).forEach(c => {
+        if (c.lat === undefined || c.lon === undefined) return;
+        const isVatsim = (c.network === 'vatsim');
+        if (networkOverlayMode === 'ivao' && isVatsim) return;
+        if (networkOverlayMode === 'vatsim' && !isVatsim) return;
+
+        if (c.role === 'TWR' && !atcCoverageSettings.showTWR) return;
+        if (c.role === 'APP' && !atcCoverageSettings.showAPP) return;
+        if (c.role === 'CTR' && !atcCoverageSettings.showCTR) return;
+
+        const distNm = computeDistanceNm(refPos.lat, refPos.lng, c.lat, c.lon);
+        activeAtcs.push({ ...c, distNm });
+
+        if (!bounds.contains([c.lat, c.lon]) && distNm > 180) return;
+
+        const cfg = BASE_ATC_CFG[c.role] || BASE_ATC_CFG.TWR;
+        const roleColor = cfg.color;
+        const roleIcon = cfg.icon;
+        const radiusM = cfg.radiusNm * rMult * 1852;
+
+        if (radiusM > 50 && oMult > 0) {
+            L.circle([c.lat, c.lon], {
+                radius: radiusM,
+                color: roleColor,
+                weight: cfg.weight,
+                dashArray: cfg.dash,
+                opacity: Math.min(1, cfg.strokeOpacity * oMult),
+                fillColor: roleColor,
+                fillOpacity: Math.min(0.85, cfg.fillOpacity * oMult),
+                interactive: false
+            }).addTo(networkLayerGroup);
+        }
+
+        const netTag = isVatsim ? 'VAT' : 'IVAO';
+        const atcMarker = L.marker([c.lat, c.lon], {
+            icon: L.divIcon({
+                className: '',
+                html: `
+                    <div class="net-atc-badge" style="border-color:${roleColor};">
+                        <span class="net-atc-role" style="background:${roleColor};color:#090d13;">${roleIcon} ${c.role}</span>
+                        <span class="net-atc-cs">${c.callsign}</span>
+                        <span class="net-atc-freq">📻 ${c.freq}</span>
+                    </div>
+                `,
+                iconSize: null
+            }),
+            zIndexOffset: 850
+        }).addTo(networkLayerGroup);
+
+        atcMarker.bindTooltip(
+            `<b>[${netTag}] ${c.callsign}</b> (${c.name || ''})<br>` +
+            `Frequenza: <b style="color:#00d2ff;">${c.freq} MHz</b> | Dist: ${distNm.toFixed(0)} NM<br>` +
+            `<span style="font-size:9.5px;color:#34d399;">🖱️ Clicca per inviare frequenza a Note EFB</span>`,
+            { direction: 'top', className: 'vnav-route-tooltip' }
+        );
+
+        atcMarker.on('click', () => {
+            if (typeof sendFreqToScratchpad === 'function') {
+                sendFreqToScratchpad(c.freq);
+                toggleScratchpad(true);
+            }
+        });
+    });
+
+    window._lastOnlineControllers = activeAtcs.sort((a, b) => a.distNm - b.distNm);
+    if (scratchpadOpen && typeof renderScratchpadFrequencies === 'function') {
+        renderScratchpadFrequencies();
+    }
+
+    // 2. AEREI NELLE IMMEDIATE VICINANZE
+    const nearbyPilots = [];
+    (res.pilots || []).forEach(p => {
+        if (p.lat === undefined || p.lon === undefined) return;
+        const isVatsim = (p.network === 'vatsim');
+        if (networkOverlayMode === 'ivao' && isVatsim) return;
+        if (networkOverlayMode === 'vatsim' && !isVatsim) return;
+
+        const distNm = computeDistanceNm(refPos.lat, refPos.lng, p.lat, p.lon);
+        if (!bounds.contains([p.lat, p.lon]) || distNm > maxPilotNm) return;
+        nearbyPilots.push({ ...p, distNm });
+    });
+
+    nearbyPilots.sort((a, b) => a.distNm - b.distNm);
+
+    nearbyPilots.slice(0, 80).forEach(p => {
+        const isVatsim = (p.network === 'vatsim');
+        const planeColor = isVatsim ? '#fbbf24' : '#00d2ff';
+        const netLabel = isVatsim ? 'VATSIM' : 'IVAO';
+        const hdg = p.hdg || 0;
+
+        const pilotIcon = L.divIcon({
+            className: '',
+            html: `<div class="net-pilot-marker" style="transform: rotate(${hdg}deg);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="${planeColor}">
+                    <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+                </svg>
+            </div>`,
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
+        });
+
+        const m = L.marker([p.lat, p.lon], { icon: pilotIcon, zIndexOffset: 700 }).addTo(networkLayerGroup);
+        m.bindTooltip(
+            `<b>[${netLabel}] ${p.callsign}</b> (${p.distNm.toFixed(1)} NM)<br>Alt: ${p.alt} ft | GS: ${p.gs} kt | HDG: ${hdg}°`,
+            { direction: 'top', className: 'vnav-route-tooltip' }
+        );
+    });
 }
 
 // --- 📝 SCRATCHPAD EFB (ATC CLEARANCE PAD, FREEHAND CANVAS & FREQUENZE) ---
