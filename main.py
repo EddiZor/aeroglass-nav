@@ -265,7 +265,6 @@ def main():
 
     threading.Thread(target=auto_resize_monitor_watcher, daemon=True).start()
 
-<<<<<<< HEAD
     def on_closed():
         try:
             api._telemetry.shutdown()
@@ -274,10 +273,6 @@ def main():
 
     window.events.closed += on_closed
     webview.start(debug=False)
-=======
-    window.events.closed += lambda: api._telemetry.shutdown()
-    webview.start(debug=True)
->>>>>>> 7d0deddcc1a0487a43ae9f8bb57fd9a9f9a01f49
 
 
 if __name__ == "__main__":

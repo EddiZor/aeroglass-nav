@@ -3,6 +3,8 @@ let currentThemeMode = localStorage.getItem('aeroglass_theme_mode') || 'dark';
 let tooltipsEnabled = (localStorage.getItem('aeroglass_tooltips') !== 'false');
 let currentUIMode = localStorage.getItem('aeroglass_ui_mode') || 'extended';
 
+// (Nota: sidebarOpen, drawerOpen e initialized sono già dichiarati in state.js, non vanno ridefiniti qui)
+
 window.currentLang = window.currentLang || 'it';
 window.followState = window.followState !== undefined ? window.followState : 1;
 window.showNavaids = window.showNavaids !== undefined ? window.showNavaids : true;
@@ -13,26 +15,10 @@ window.EXTRA_AIRPORTS = window.EXTRA_AIRPORTS || [];
 window.flightPlan = window.flightPlan || [];
 window.currentAlternate = window.currentAlternate || null;
 
-// --- GESTIONE CONTENITORE PULSANTI SUPERIORI ---
-function ensurePillsGroup() {
-    let pillsGroup = document.querySelector('.top-pills-group');
-    if (!pillsGroup) {
-        let controlsBar = document.querySelector('.top-controls-bar') || document.querySelector('.top-controls');
-        if (!controlsBar) {
-            controlsBar = document.createElement('div');
-            controlsBar.className = 'top-controls';
-            document.body.appendChild(controlsBar);
-        }
-        pillsGroup = document.createElement('div');
-        pillsGroup.className = 'top-pills-group';
-        controlsBar.appendChild(pillsGroup);
-    }
-    return pillsGroup;
-}
-
 function ensureUIModeButton() {
     if (document.getElementById('btnToggleUIMode')) return;
-    const pillsGroup = ensurePillsGroup();
+    const pillsGroup = document.querySelector('.top-pills-group');
+    if (!pillsGroup) return;
 
     const btn = document.createElement('button');
     btn.id = 'btnToggleUIMode';
@@ -55,7 +41,7 @@ function updateUIModeButtonUI() {
     const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
 
     if (currentUIMode === 'simple') {
-        btn.innerHTML = isEn ? '✈️ <span>FLY Mode</span>' : '✈️ <span>FLY (Semplice)</span>';
+        btn.innerHTML = isEn ? '🎛️ <span>Simple</span>' : '🎛️ <span>Semplice</span>';
         btn.style.borderColor = 'rgba(0, 210, 255, 0.65)';
         btn.style.color = '#00d2ff';
     } else {
@@ -70,18 +56,16 @@ async function applyUIMode(mode, persist = true) {
     currentUIMode = mode;
 
     ensureUIModeButton();
-    ensureFlyHudStrip();
     document.body.classList.toggle('mode-simple', mode === 'simple');
     updateUIModeButtonUI();
-    updateFlyHudStrip();
 
     if (persist) {
         if (mode === 'simple') {
-            if (typeof sidebarOpen !== 'undefined' && sidebarOpen) toggleSidebar();
-            if (typeof drawerOpen !== 'undefined' && drawerOpen) toggleDrawer();
+            if (sidebarOpen) toggleSidebar();
+            if (drawerOpen) toggleDrawer();
         } else {
-            if (typeof sidebarOpen !== 'undefined' && !sidebarOpen) toggleSidebar();
-            if (typeof drawerOpen !== 'undefined' && !drawerOpen) toggleDrawer();
+            if (!sidebarOpen) toggleSidebar();
+            if (!drawerOpen) toggleDrawer();
         }
     }
 
@@ -97,148 +81,6 @@ function toggleUIMode() {
     applyUIMode(nextMode, true);
 }
 
-// --- MINI-STRIP HUD FLY MODE ---
-function ensureFlyHudStrip() {
-    if (document.getElementById('flyHudStrip')) return;
-    const strip = document.createElement('div');
-    strip.id = 'flyHudStrip';
-    strip.className = 'fly-hud-strip glass-panel';
-    strip.innerHTML = `
-        <div class="fly-hud-block">
-            <span class="fly-hud-lbl">NXT</span>
-            <span id="hudNextWpt" class="fly-hud-val magenta">---</span>
-        </div>
-        <span class="fly-hud-sep">|</span>
-        <div class="fly-hud-block">
-            <span class="fly-hud-lbl">DST</span>
-            <span id="hudNextDist" class="fly-hud-val cyan">--.- NM</span>
-        </div>
-        <span class="fly-hud-sep">|</span>
-        <div class="fly-hud-block">
-            <span class="fly-hud-lbl">ETE</span>
-            <span id="hudNextEte" class="fly-hud-val emerald">--:--</span>
-        </div>
-        <span class="fly-hud-sep">|</span>
-        <div class="fly-hud-block">
-            <span class="fly-hud-lbl">WND</span>
-            <span id="hudWindArrow" class="fly-hud-wind-arrow">↓</span>
-            <span id="hudWindVal" class="fly-hud-val amber">---°/--kt</span>
-        </div>
-    `;
-    document.body.appendChild(strip);
-}
-
-function computeGreatCircleNm(lat1, lon1, lat2, lon2) {
-    const R = 3440.065;
-    const toRad = Math.PI / 180;
-    const dLat = (lat2 - lat1) * toRad;
-    const dLon = (lon2 - lon1) * toRad;
-    const a = Math.sin(dLat / 2) ** 2 +
-              Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.sin(dLon / 2) ** 2;
-    return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function updateFlyHudStrip() {
-    ensureFlyHudStrip();
-    const elWpt = document.getElementById('hudNextWpt');
-    const elDist = document.getElementById('hudNextDist');
-    const elEte = document.getElementById('hudNextEte');
-    const elWnd = document.getElementById('hudWindVal');
-    const elArr = document.getElementById('hudWindArrow');
-    if (!elWpt || !elDist || !elEte || !elWnd) return;
-
-    const tel = window.lastTelemetry || window.currentTelemetry || window.telemetryData || {};
-    const acLat = tel.lat ?? tel.latitude ?? window.acftLat ?? (typeof lastAcftLat !== 'undefined' ? lastAcftLat : null);
-    const acLon = tel.lon ?? tel.lng ?? tel.longitude ?? window.acftLon ?? (typeof lastAcftLon !== 'undefined' ? lastAcftLon : null);
-
-    let gs = parseFloat(tel.gs ?? tel.ground_speed ?? tel.groundSpeed ?? window.currentGs ?? NaN);
-    if (isNaN(gs)) {
-        const gsDom = document.getElementById('valGs');
-        if (gsDom) gs = parseFloat(gsDom.innerText);
-    }
-
-    let hdg = parseFloat(tel.hdg ?? tel.heading ?? window.currentHdg ?? 0);
-    if (isNaN(hdg)) {
-        const hdgDom = document.getElementById('valHdg');
-        if (hdgDom) hdg = parseFloat(hdgDom.innerText) || 0;
-    }
-
-    const fpl = (typeof flightPlan !== 'undefined' && Array.isArray(flightPlan)) ? flightPlan : [];
-    if (fpl.length === 0) {
-        elWpt.innerText = 'NO FPL';
-        elDist.innerText = '--.- NM';
-        elEte.innerText = '--:--';
-    } else {
-        let idx = (typeof activeWaypointIndex !== 'undefined' && activeWaypointIndex >= 0 && activeWaypointIndex < fpl.length)
-            ? activeWaypointIndex
-            : (fpl.length > 1 ? 1 : 0);
-
-        const activeCard = document.querySelector('.wpt-card.active-wpt .wpt-icao');
-        if (activeCard) {
-            const foundIdx = fpl.findIndex(w => (w.icao || w.id || w.ident) === activeCard.innerText.trim());
-            if (foundIdx !== -1) idx = foundIdx;
-        } else if (acLat !== null && acLon !== null && fpl.length > 1) {
-            let minD = Infinity;
-            for (let i = 1; i < fpl.length; i++) {
-                const d = computeGreatCircleNm(acLat, acLon, fpl[i].lat, fpl[i].lon);
-                if (d < minD) { minD = d; idx = i; }
-            }
-        }
-
-        const wp = fpl[idx] || fpl[fpl.length - 1];
-        elWpt.innerText = wp.icao || wp.id || wp.ident || wp.name || 'WPT';
-
-        let distNm = null;
-        if (acLat !== null && acLon !== null && wp.lat !== undefined && wp.lon !== undefined) {
-            distNm = computeGreatCircleNm(acLat, acLon, wp.lat, wp.lon);
-        } else if (wp.dist !== undefined) {
-            distNm = parseFloat(wp.dist);
-        }
-
-        if (distNm !== null && !isNaN(distNm)) {
-            elDist.innerText = `${distNm.toFixed(1)} NM`;
-            const effGs = (!isNaN(gs) && gs > 25) ? gs : 140;
-            const totalMin = Math.round((distNm / effGs) * 60);
-            const hh = Math.floor(totalMin / 60);
-            const mm = totalMin % 60;
-            elEte.innerText = hh > 0
-                ? `${hh}h${String(mm).padStart(2, '0')}m`
-                : `${String(mm).padStart(2, '0')} min`;
-        } else {
-            elDist.innerText = '--.- NM';
-            elEte.innerText = '--:--';
-        }
-    }
-
-    let wDir = tel.wind_dir ?? tel.windDir ?? tel.ambient_wind_direction ?? window.windDir ?? null;
-    let wSpd = tel.wind_spd ?? tel.windSpd ?? tel.wind_vel ?? tel.ambient_wind_velocity ?? window.windSpd ?? null;
-
-    if (wDir === null || wSpd === null) {
-        const wxPills = document.querySelectorAll('.wx-pill');
-        for (const pill of wxPills) {
-            const m = pill.innerText.match(/(\d{3})°?\s*\/\s*(\d+)\s*kt/i);
-            if (m) {
-                wDir = parseInt(m[1], 10);
-                wSpd = parseInt(m[2], 10);
-                break;
-            }
-        }
-    }
-
-    if (wDir !== null && wSpd !== null && !isNaN(wDir) && !isNaN(wSpd)) {
-        const dRound = Math.round((Number(wDir) % 360 + 360) % 360);
-        const sRound = Math.round(Number(wSpd));
-        elWnd.innerText = `${String(dRound).padStart(3, '0')}°/${String(sRound).padStart(2, '0')}kt`;
-        if (elArr) {
-            const relRot = (dRound + 180 - (hdg || 0)) % 360;
-            elArr.style.transform = `rotate(${relRot}deg)`;
-        }
-    } else {
-        elWnd.innerText = '---°/--kt';
-    }
-}
-
-// --- SYNTHETIC TOOLTIPS ---
 const SYNTHETIC_TOOLTIPS = {
     btnEfbNet: {
         it: "📱 EFB Wi-Fi: Mostra QR Code e indirizzo IP per aprire l'app sul tablet",
@@ -296,7 +138,6 @@ const SYNTHETIC_TOOLTIPS = {
         it: "🧭 Rosa dei Venti: Indica il Nord geografico (Clicca per orientamento North Up 360°)",
         en: "🧭 Compass Rose: Points to True North (Click to reset North Up 360°)"
     },
-<<<<<<< HEAD
     btnToggleGroundMap: {
         it: "🛫 Mappa Aeroporto (Taxiway & Parcheggi): Mostra/nascondi layout interno o zooma sull'aeroporto",
         en: "🛫 Airport Ground Map (Taxiways & Parking): Toggle internal layout or zoom to active airport"
@@ -316,15 +157,6 @@ const SYNTHETIC_TOOLTIPS = {
     btnToggleMeasure: {
         it: "📏 Righello Tattico: Misura distanza (NM), prua (MAG/TRUE) e tempo ETE tra due punti (oppure usa il Clic Destro sulla mappa)",
         en: "📏 Measure Tool: Measure distance (NM), heading (MAG/TRUE) and ETE between two points (or Right-Click on map)"
-=======
-    btnOnlineTraffic: {
-        it: "🌐 Traffico Online: Cicla tra OFF, rete VATSIM e rete IVAO in tempo reale sulla mappa",
-        en: "🌐 Online Traffic: Cycle between OFF, live VATSIM and live IVAO network aircraft"
-    },
-    btnSettingsModal: {
-        it: "⚙️ Impostazioni: Configura SimBrief ID, raggio traffico VATSIM/IVAO, tema e preferenze",
-        en: "⚙️ Settings: Configure SimBrief ID, online traffic radius, theme and preferences"
->>>>>>> 7d0deddcc1a0487a43ae9f8bb57fd9a9f9a01f49
     }
 };
 
@@ -346,6 +178,8 @@ function resolveSyntheticTooltip(el) {
     if (onclickStr.includes('filter')) return lang === 'en' ? '⚙️ Filter airports, SID/STAR procedures and map layers' : '⚙️ Filtra visibilità aeroporti, procedure SID/STAR e livelli mappa';
     if (onclickStr.includes('follow')) return SYNTHETIC_TOOLTIPS.btnFollowAcft[lang];
     if (onclickStr.includes('togglelanguage')) return lang === 'en' ? '🌐 Switch interface language (IT / EN)' : '🌐 Cambia lingua dell\'interfaccia (Italiano / Inglese)';
+    if (onclickStr.includes('pick') || onclickStr.includes('mappa')) return lang === 'en' ? '📍 Click directly on the map to pick Waypoint coordinates' : '📍 Clicca sulla mappa per catturare automaticamente Latitudine e Longitudine';
+    if (onclickStr.includes('adduserwaypoint') || onclickStr.includes('aggiungi')) return lang === 'en' ? '➕ Save custom Waypoint in SQLite database' : '➕ Salva il Waypoint utente nel database SQLite e aggiungilo in mappa';
 
     if (el.dataset && el.dataset.origTitle) return el.dataset.origTitle;
     if (el.getAttribute('title')) {
@@ -358,7 +192,8 @@ function resolveSyntheticTooltip(el) {
 
 function ensureTooltipToggleButton() {
     if (document.getElementById('btnToggleTooltips')) return;
-    const pillsGroup = ensurePillsGroup();
+    const pillsGroup = document.querySelector('.top-pills-group');
+    if (!pillsGroup) return;
 
     const btn = document.createElement('button');
     btn.id = 'btnToggleTooltips';
@@ -480,7 +315,7 @@ function ensureDrawerToggleTab() {
             toggleDrawer();
         };
         tab.style.cssText = 'position:absolute;top:-24px;left:50%;transform:translateX(-50%);background:var(--glass-bg);border:1px solid var(--glass-border);border-bottom:none;border-radius:8px 8px 0 0;padding:3px 16px;font-size:10px;font-weight:700;color:var(--cyan);cursor:pointer;display:flex;align-items:center;gap:5px;box-shadow:0 -4px 12px rgba(0,0,0,0.4);';
-        tab.innerHTML = `<span id="drawerArrow">${(typeof drawerOpen !== 'undefined' && drawerOpen) ? '▼' : '▲'}</span> <span>ALT</span>`;
+        tab.innerHTML = `<span id="drawerArrow">${drawerOpen ? '▼' : '▲'}</span> <span>ALT</span>`;
         drawer.appendChild(tab);
     }
 }
@@ -562,7 +397,8 @@ function ensureCompassRoseWidget() {
 
 function ensureThemeToggleButton() {
     if (document.getElementById('btnThemeMode')) return;
-    const pillsGroup = ensurePillsGroup();
+    const pillsGroup = document.querySelector('.top-pills-group');
+    if (!pillsGroup) return;
 
     const btn = document.createElement('button');
     btn.id = 'btnThemeMode';
@@ -607,18 +443,14 @@ async function applyThemeMode(mode, persist = true) {
     ensureThemeToggleButton();
     ensureTooltipToggleButton();
     ensureUIModeButton();
-    ensureOnlineTrafficAndSettingsUI();
     ensureDrawerToggleTab();
     ensureCompassRoseWidget();
-<<<<<<< HEAD
     ensureGroundMapUI();
     ensureWorldAirportsLayerUI();
     ensureWeatherOverlayUI();
     ensureNetworkOverlayUI();
     ensureScratchpadUI();
     ensureMeasureToolUI();
-=======
->>>>>>> 7d0deddcc1a0487a43ae9f8bb57fd9a9f9a01f49
     applyUIMode(currentUIMode, false);
     initSyntheticTooltipsEngine();
 
@@ -639,7 +471,6 @@ function toggleThemeMode() {
     applyThemeMode(order[nextIdx], true);
 }
 
-<<<<<<< HEAD
 // --- 🔍 RICERCA RAPIDA AEROPORTO & CENTRATURA MAPPA ---
 async function searchAndCenterAirport(query) {
     const q = (query || '').trim().toUpperCase();
@@ -755,92 +586,95 @@ const CUSTOM_APT_LAYOUTS = {
         ]
     }
 };
-=======
-// --- 🌐 TRAFFICO ONLINE LIVE (VATSIM / IVAO) & ⚙️ MODALE IMPOSTAZIONI ---
-let onlineNetworkMode = localStorage.getItem('aeroglass_online_net') || 'off'; // 'off' | 'vatsim' | 'ivao'
-let onlineTrafficRadiusNm = parseInt(localStorage.getItem('aeroglass_traffic_radius') || '180', 10);
-let onlineTrafficLayer = null;
-let onlineTrafficTimer = null;
-let onlineTrafficFetching = false;
 
-function ensureOnlineTrafficAndSettingsUI() {
-    const pillsGroup = document.querySelector('.top-pills-group');
-    if (!pillsGroup) return;
->>>>>>> 7d0deddcc1a0487a43ae9f8bb57fd9a9f9a01f49
+function ensureGroundMapUI() {
+    if (typeof map === 'undefined' || !map) return;
 
-    // 1. Pulsante Toggle VATSIM / IVAO
-    if (!document.getElementById('btnOnlineTraffic')) {
-        const netBtn = document.createElement('button');
-        netBtn.id = 'btnOnlineTraffic';
-        netBtn.className = 'top-btn';
-        netBtn.onclick = cycleOnlineNetworkMode;
-        netBtn.style.justifyContent = 'center';
+    if (!groundLayerGroup && typeof L !== 'undefined') {
+        groundLayerGroup = L.layerGroup().addTo(map);
+    }
 
-        const navaidsBtn = document.getElementById('btnToggleNavaids');
-        if (navaidsBtn && navaidsBtn.parentNode === pillsGroup) {
-            pillsGroup.insertBefore(netBtn, navaidsBtn.nextSibling);
-        } else {
-            pillsGroup.appendChild(netBtn);
+    if (!document.getElementById('aptGroundBadge')) {
+        const badge = document.createElement('div');
+        badge.id = 'aptGroundBadge';
+        badge.className = 'apt-ground-status-badge glass-panel';
+        badge.innerHTML = '<span>🛫 GROUND MAP</span> <span id="aptGroundName" style="color:#00d2ff;">---</span>';
+        document.body.appendChild(badge);
+    }
+
+    if (!document.getElementById('btnToggleGroundMap')) {
+        const pillsGroup = document.querySelector('.top-pills-group');
+        if (pillsGroup) {
+            const btn = document.createElement('button');
+            btn.id = 'btnToggleGroundMap';
+            btn.className = 'top-btn active';
+            btn.innerHTML = '🛫 <span>Taxi/Gate: ON</span>';
+            btn.onclick = (e) => {
+                if (e.shiftKey) {
+                    groundMapEnabled = !groundMapEnabled;
+                    btn.classList.toggle('active', groundMapEnabled);
+                    btn.innerHTML = groundMapEnabled ? '🛫 <span>Taxi/Gate: ON</span>' : '🛫 <span>Taxi/Gate: OFF</span>';
+                    if (!groundMapEnabled && groundLayerGroup) {
+                        groundLayerGroup.clearLayers();
+                        lastRenderedGroundKey = null;
+                        const b = document.getElementById('aptGroundBadge');
+                        if (b) b.style.display = 'none';
+                    } else {
+                        evaluateAirportGroundMap();
+                    }
+                    return;
+                }
+                zoomToClosestOrActiveAirport();
+            };
+            const navaidsBtn = document.getElementById('btnToggleNavaids');
+            if (navaidsBtn && navaidsBtn.parentNode === pillsGroup) {
+                pillsGroup.insertBefore(btn, navaidsBtn.nextSibling);
+            } else {
+                pillsGroup.appendChild(btn);
+            }
         }
     }
 
-    // 2. Pulsante Icona Impostazioni (⚙️)
-    if (!document.getElementById('btnSettingsModal')) {
-        const setBtn = document.createElement('button');
-        setBtn.id = 'btnSettingsModal';
-        setBtn.className = 'top-btn';
-        setBtn.onclick = openSettingsModal;
-        setBtn.style.justifyContent = 'center';
-        setBtn.style.padding = '5px 10px';
-        setBtn.innerHTML = '⚙️';
-        pillsGroup.appendChild(setBtn);
-    }
-
-    ensureSettingsModalDOM();
-    updateOnlineTrafficButtonUI();
-
-    if (typeof map !== 'undefined' && map && !onlineTrafficLayer && typeof L !== 'undefined') {
-        onlineTrafficLayer = L.layerGroup().addTo(map);
-        map.on('moveend', () => {
-            if (onlineNetworkMode !== 'off' && window._lastOnlinePilotsCache) {
-                renderOnlineTrafficMarkers(window._lastOnlinePilotsCache, onlineNetworkMode);
-            }
+    if (!map._groundMapHooked) {
+        map._groundMapHooked = true;
+        map.on('moveend zoomend', () => {
+            evaluateAirportGroundMap();
         });
+        setTimeout(evaluateAirportGroundMap, 600);
     }
 }
 
-function updateOnlineTrafficButtonUI() {
-    const btn = document.getElementById('btnOnlineTraffic');
-    if (!btn) return;
-    if (onlineNetworkMode === 'vatsim') {
-        btn.innerHTML = '🌐 <span>VATSIM</span>';
-        btn.style.borderColor = 'rgba(16, 185, 129, 0.65)';
-        btn.style.color = '#34d399';
-    } else if (onlineNetworkMode === 'ivao') {
-        btn.innerHTML = '🌐 <span>IVAO</span>';
-        btn.style.borderColor = 'rgba(56, 189, 248, 0.65)';
-        btn.style.color = '#38bdf8';
-    } else {
-        btn.innerHTML = '🌐 <span>NET: OFF</span>';
-        btn.style.borderColor = 'rgba(139, 148, 158, 0.3)';
-        btn.style.color = '#8b949e';
+function zoomToClosestOrActiveAirport() {
+    if (typeof map === 'undefined' || !map) return;
+    groundMapEnabled = true;
+    const btn = document.getElementById('btnToggleGroundMap');
+    if (btn) {
+        btn.classList.add('active');
+        btn.innerHTML = '🛫 <span>Taxi/Gate: ON</span>';
+    }
+
+    if (Array.isArray(flightPlan) && flightPlan.length > 0) {
+        const dep = flightPlan[0];
+        const arr = flightPlan[flightPlan.length - 1];
+        const c = map.getCenter();
+        const dDep = Math.hypot(c.lat - dep.lat, c.lng - dep.lon);
+        const dArr = Math.hypot(c.lat - arr.lat, c.lng - arr.lon);
+        const target = (dDep < 0.03 && arr) ? arr : dep;
+        map.setView([target.lat, target.lon], 15, { animate: true });
+        return;
+    }
+
+    if (map.getZoom() < 15) {
+        map.setZoom(15);
     }
 }
 
-async function applyOnlineNetworkMode(mode, persist = true) {
-    if (!['off', 'vatsim', 'ivao'].includes(mode)) mode = 'off';
-    onlineNetworkMode = mode;
-    ensureOnlineTrafficAndSettingsUI();
-    updateOnlineTrafficButtonUI();
-
-    const sel = document.getElementById('settingsNetSelect');
-    if (sel) sel.value = onlineNetworkMode;
-
-    if (onlineTrafficTimer) {
-        clearInterval(onlineTrafficTimer);
-        onlineTrafficTimer = null;
+function findNearestAirportAtCenter(lat, lon) {
+    for (const [icao, data] of Object.entries(CUSTOM_APT_LAYOUTS)) {
+        if (Math.hypot(lat - data.lat, lon - data.lon) < 0.045) {
+            return { icao, name: data.name, lat: data.lat, lon: data.lon, custom: data };
+        }
     }
-<<<<<<< HEAD
     // Cerca tra gli aeroporti caricati in memoria nell'area circostante
     if (typeof airportsData !== 'undefined' && Array.isArray(airportsData)) {
         let closest = null;
@@ -854,24 +688,10 @@ async function applyOnlineNetworkMode(mode, persist = true) {
             }
         }
         if (closest) return closest;
-=======
-
-    if (onlineNetworkMode === 'off') {
-        if (onlineTrafficLayer) onlineTrafficLayer.clearLayers();
-        window._lastOnlinePilotsCache = null;
-    } else {
-        await fetchAndRenderOnlineTraffic();
-        onlineTrafficTimer = setInterval(fetchAndRenderOnlineTraffic, 15000);
     }
-
-    try { localStorage.setItem('aeroglass_online_net', onlineNetworkMode); } catch (e) {}
-    if (persist && window.pywebview && window.pywebview.api && window.pywebview.api.save_setting) {
-        try { await window.pywebview.api.save_setting('online_network', onlineNetworkMode); } catch (e) {}
->>>>>>> 7d0deddcc1a0487a43ae9f8bb57fd9a9f9a01f49
-    }
+    return null;
 }
 
-<<<<<<< HEAD
 function evaluateAirportGroundMap() {
     if (!groundMapEnabled || typeof map === 'undefined' || !map || !groundLayerGroup) return;
 
@@ -923,109 +743,89 @@ function evaluateAirportGroundMap() {
                 if (groundLayerGroup) groundLayerGroup.clearLayers();
             });
         }
-=======
-function cycleOnlineNetworkMode() {
-    const order = ['off', 'vatsim', 'ivao'];
-    const next = order[(order.indexOf(onlineNetworkMode) + 1) % order.length];
-    applyOnlineNetworkMode(next, true);
+    }
 }
 
-async function fetchAndRenderOnlineTraffic() {
-    if (onlineNetworkMode === 'off' || onlineTrafficFetching) return;
-    if (typeof map === 'undefined' || !map || typeof L === 'undefined') return;
-    if (!onlineTrafficLayer) onlineTrafficLayer = L.layerGroup().addTo(map);
+function renderCustomAirportLayout(layout) {
+    if (!groundLayerGroup || !layout) return;
+    groundLayerGroup.clearLayers();
 
-    onlineTrafficFetching = true;
-    try {
-        let pilots = [];
-        if (onlineNetworkMode === 'vatsim') {
-            const res = await fetch('https://data.vatsim.net/v3/vatsim-data.json');
-            if (res.ok) {
-                const data = await res.json();
-                pilots = (data.pilots || []).map(p => ({
-                    callsign: p.callsign || 'N/A',
-                    lat: p.latitude,
-                    lon: p.longitude,
-                    alt: p.altitude || 0,
-                    gs: p.groundspeed || 0,
-                    hdg: p.heading || 0,
-                    dep: p.flight_plan?.departure || '---',
-                    arr: p.flight_plan?.arrival || '---',
-                    acft: p.flight_plan?.aircraft_short || p.flight_plan?.aircraft_faa || 'ACFT'
-                }));
-            }
-        } else if (onlineNetworkMode === 'ivao') {
-            const res = await fetch('https://api.ivao.aero/v2/tracker/whazzup');
-            if (res.ok) {
-                const data = await res.json();
-                const rawPilots = data.clients?.pilots || [];
-                pilots = rawPilots.map(p => ({
-                    callsign: p.callsign || 'N/A',
-                    lat: p.lastTrack?.latitude,
-                    lon: p.lastTrack?.longitude,
-                    alt: p.lastTrack?.altitude || 0,
-                    gs: p.lastTrack?.groundSpeed || 0,
-                    hdg: p.lastTrack?.heading || 0,
-                    dep: p.flightPlan?.departureId || '---',
-                    arr: p.flightPlan?.arrivalId || '---',
-                    acft: p.flightPlan?.aircraftId || 'ACFT'
-                }));
+    (layout.aprons || []).forEach(poly => {
+        L.polygon(poly, {
+            color: '#475569',
+            weight: 1,
+            fillColor: '#1e293b',
+            fillOpacity: 0.55,
+            interactive: false
+        }).addTo(groundLayerGroup);
+    });
+
+    (layout.taxiways || []).forEach(twy => {
+        L.polyline(twy.coords, {
+            color: '#f59e0b',
+            weight: 4,
+            opacity: 0.85
+        }).addTo(groundLayerGroup);
+
+        if (twy.ref && twy.coords.length >= 2) {
+            const mid = twy.coords[Math.floor(twy.coords.length / 2)];
+            L.marker(mid, {
+                icon: L.divIcon({
+                    className: 'apt-twy-label',
+                    html: twy.ref,
+                    iconSize: null
+                }),
+                interactive: false
+            }).addTo(groundLayerGroup);
+        }
+    });
+
+    (layout.runways || []).forEach(rwy => {
+        const isGrass = rwy.surface === 'grass';
+        L.polyline(rwy.coords, {
+            color: isGrass ? '#15803d' : '#334155',
+            weight: 14,
+            opacity: 0.92,
+            lineCap: 'butt'
+        }).addTo(groundLayerGroup);
+
+        L.polyline(rwy.coords, {
+            color: isGrass ? '#86efac' : '#f8fafc',
+            weight: 1.5,
+            dashArray: '8, 8',
+            opacity: 0.85
+        }).addTo(groundLayerGroup);
+
+        if (rwy.ref && rwy.coords.length >= 2) {
+            const parts = rwy.ref.split('/');
+            L.marker(rwy.coords[0], {
+                icon: L.divIcon({ className: 'apt-rwy-thr-label', html: parts[0] || rwy.ref, iconSize: null }),
+                interactive: false
+            }).addTo(groundLayerGroup);
+            if (parts[1]) {
+                L.marker(rwy.coords[rwy.coords.length - 1], {
+                    icon: L.divIcon({ className: 'apt-rwy-thr-label', html: parts[1], iconSize: null }),
+                    interactive: false
+                }).addTo(groundLayerGroup);
             }
         }
-        window._lastOnlinePilotsCache = pilots;
-        renderOnlineTrafficMarkers(pilots, onlineNetworkMode);
-    } catch (e) {
-    } finally {
-        onlineTrafficFetching = false;
->>>>>>> 7d0deddcc1a0487a43ae9f8bb57fd9a9f9a01f49
-    }
-}
+    });
 
-function renderOnlineTrafficMarkers(pilots, netMode) {
-    if (!onlineTrafficLayer || typeof map === 'undefined' || !map) return;
-    onlineTrafficLayer.clearLayers();
-    if (!Array.isArray(pilots) || pilots.length === 0) return;
-
-    const c = map.getCenter();
-    const color = netMode === 'vatsim' ? '#34d399' : '#38bdf8';
-    const netBadge = netMode.toUpperCase();
-    let count = 0;
-
-    for (const p of pilots) {
-        if (p.lat === undefined || p.lon === undefined || isNaN(p.lat) || isNaN(p.lon)) continue;
-        const distNm = computeGreatCircleNm(c.lat, c.lng, p.lat, p.lon);
-        if (distNm > onlineTrafficRadiusNm) continue;
-
-        const rot = ((Number(p.hdg) || 0) - 45);
-        const fl = p.alt >= 5000 ? `FL${String(Math.round(p.alt / 100)).padStart(3, '0')}` : `${Math.round(p.alt)}ft`;
-
-        const m = L.marker([p.lat, p.lon], {
+    (layout.stands || []).forEach(st => {
+        const m = L.marker([st.lat, st.lon], {
             icon: L.divIcon({
-                className: 'online-traffic-icon',
-                html: `
-                    <div class="online-acft-glyph" style="color:${color};transform:rotate(${rot}deg);">✈️</div>
-                    <div class="online-acft-tag" style="border-color:${color}66;">${p.callsign}</div>
-                `,
-                iconSize: [56, 30],
-                iconAnchor: [28, 15]
+                className: 'apt-stand-marker',
+                html: st.ref,
+                iconSize: [24, 24]
             })
-        }).addTo(onlineTrafficLayer);
-
-        m.bindTooltip(
-            `<div style="font-family:Consolas,monospace;font-size:11px;line-height:1.45;">
-                <b style="color:${color};">[${netBadge}] ${p.callsign}</b> <span style="color:#94a3b8;">(${p.acft})</span><br>
-                🛫 <b>${p.dep}</b> ➔ 🛬 <b>${p.arr}</b><br>
-                ALT: <b>${fl}</b> | GS: <b>${Math.round(p.gs)} kt</b> | HDG: <b>${String(Math.round(p.hdg)).padStart(3, '0')}°</b>
-            </div>`,
-            { direction: 'top', className: 'vnav-route-tooltip' }
-        );
-
-        count++;
-        if (count >= 160) break;
-    }
+        }).addTo(groundLayerGroup);
+        m.bindTooltip(`🅿️ Parcheggio / Stand <b>${st.ref}</b><br><span style="font-size:10px;color:#94a3b8;">Lat: ${st.lat.toFixed(5)} Lon: ${st.lon.toFixed(5)}</span>`, {
+            direction: 'top',
+            className: 'vnav-route-tooltip'
+        });
+    });
 }
 
-<<<<<<< HEAD
 // --- 🌍 LAYER AEROPORTI MONDIALI DINAMICI (BOUNDING BOX + RITENZIONE IN VISTA) ---
 let worldAirportsLayerGroup = null;
 const _renderedWorldAirports = new Map(); // icao -> { marker, data }
@@ -1541,279 +1341,10 @@ function updateVnavCloudButtonsUI() {
             } else {
                 btn.innerHTML = cloudAltMode === 'auto' ? `AUTO (${flStr})` : 'AUTO (ACFT)';
                 btn.classList.remove('imc-alert');
-=======
-function ensureSettingsModalDOM() {
-    if (document.getElementById('aeroSettingsModal')) return;
-    const modal = document.createElement('div');
-    modal.id = 'aeroSettingsModal';
-    modal.className = 'custom-modal';
-    modal.style.display = 'none';
-    modal.innerHTML = `
-        <div class="modal-content glass-panel" style="max-width:440px;width:92%;padding:18px 20px;border:1px solid rgba(0,210,255,0.45);border-radius:12px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid rgba(148,163,184,0.2);">
-                <h3 style="margin:0;font-size:14px;color:#00d2ff;display:flex;align-items:center;gap:8px;">⚙️ <span id="settingsModalTitle">IMPOSTAZIONI AEROGLASS NAV</span></h3>
-                <button class="top-btn" onclick="closeSettingsModal()" style="padding:2px 8px;font-size:12px;">✕</button>
-            </div>
-
-            <div class="settings-modal-row">
-                <div>
-                    <span class="settings-modal-lbl">SimBrief Pilot ID / Username</span>
-                    <span class="settings-modal-sub">ID predefinito per importazione rapida OFP</span>
-                </div>
-                <input id="settingsSimbriefInput" type="text" placeholder="es. 312844" style="width:120px;padding:5px 8px;background:rgba(9,13,19,0.9);border:1px solid rgba(148,163,184,0.35);border-radius:6px;color:#f0f6fc;font-family:Consolas,monospace;font-size:12px;text-align:center;">
-            </div>
-
-            <div class="settings-modal-row">
-                <div>
-                    <span class="settings-modal-lbl">Rete Traffico Online</span>
-                    <span class="settings-modal-sub">Mostra aerei live VATSIM o IVAO intorno alla mappa</span>
-                </div>
-                <select id="settingsNetSelect" onchange="applyOnlineNetworkMode(this.value, true)" style="padding:5px 8px;background:#0d1117;border:1px solid rgba(0,210,255,0.4);border-radius:6px;color:#f0f6fc;font-size:12px;">
-                    <option value="off">Disattivato (OFF)</option>
-                    <option value="vatsim">VATSIM Live</option>
-                    <option value="ivao">IVAO Whazzup</option>
-                </select>
-            </div>
-
-            <div class="settings-modal-row">
-                <div>
-                    <span class="settings-modal-lbl">Raggio Filtro Traffico (NM)</span>
-                    <span class="settings-modal-sub">Distanza massima dal centro mappa</span>
-                </div>
-                <select id="settingsTrafficRadius" onchange="updateTrafficRadiusSetting(this.value)" style="padding:5px 8px;background:#0d1117;border:1px solid rgba(148,163,184,0.35);border-radius:6px;color:#f0f6fc;font-size:12px;">
-                    <option value="80">80 NM</option>
-                    <option value="180">180 NM</option>
-                    <option value="350">350 NM</option>
-                    <option value="600">600 NM</option>
-                </select>
-            </div>
-
-            <div class="settings-modal-row">
-                <div>
-                    <span class="settings-modal-lbl">Modalità Interfaccia</span>
-                    <span class="settings-modal-sub">Estesa (Pianificazione) o FLY (Mini-HUD)</span>
-                </div>
-                <button class="top-btn" onclick="toggleUIMode()" style="min-width:110px;justify-content:center;">Cambia Vista</button>
-            </div>
-
-            <div class="settings-modal-row">
-                <div>
-                    <span class="settings-modal-lbl">Tema Cockpit & Suggerimenti</span>
-                    <span class="settings-modal-sub">Cicla tema visivo o attiva/disattiva i tooltip</span>
-                </div>
-                <div style="display:flex;gap:6px;">
-                    <button class="top-btn" onclick="toggleThemeMode()">🌙 Tema</button>
-                    <button class="top-btn" onclick="applyTooltipsMode(!tooltipsEnabled, true)">💬 Info</button>
-                </div>
-            </div>
-
-            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
-                <button class="top-btn" onclick="saveSettingsFromModal()" style="border-color:#00d2ff;color:#00d2ff;padding:6px 16px;font-weight:700;">💾 Salva & Chiudi</button>
-            </div>
-        </div>
-    `;
-    document.body.appendChild(modal);
-}
-
-function updateTrafficRadiusSetting(val) {
-    onlineTrafficRadiusNm = parseInt(val, 10) || 180;
-    try { localStorage.setItem('aeroglass_traffic_radius', String(onlineTrafficRadiusNm)); } catch (e) {}
-    if (onlineNetworkMode !== 'off' && window._lastOnlinePilotsCache) {
-        renderOnlineTrafficMarkers(window._lastOnlinePilotsCache, onlineNetworkMode);
-    }
-}
-
-function openSettingsModal() {
-    ensureSettingsModalDOM();
-    const modal = document.getElementById('aeroSettingsModal');
-    if (!modal) return;
-
-    const sbMain = document.getElementById('simbriefIdInput');
-    const sbSet = document.getElementById('settingsSimbriefInput');
-    if (sbSet && sbMain) sbSet.value = sbMain.value || '';
-
-    const netSel = document.getElementById('settingsNetSelect');
-    if (netSel) netSel.value = onlineNetworkMode;
-
-    const radSel = document.getElementById('settingsTrafficRadius');
-    if (radSel) radSel.value = String(onlineTrafficRadiusNm);
-
-    modal.style.display = 'flex';
-}
-
-function closeSettingsModal() {
-    const modal = document.getElementById('aeroSettingsModal');
-    if (modal) modal.style.display = 'none';
-}
-
-async function saveSettingsFromModal() {
-    const sbSet = document.getElementById('settingsSimbriefInput');
-    const sbMain = document.getElementById('simbriefIdInput');
-    if (sbSet && sbSet.value.trim()) {
-        const val = sbSet.value.trim();
-        if (sbMain) sbMain.value = val;
-        if (window.pywebview && window.pywebview.api && window.pywebview.api.save_setting) {
-            try { await window.pywebview.api.save_setting('simbrief_id', val); } catch (e) {}
-        }
-    }
-    closeSettingsModal();
-}
-
-// --- HOOKS DI COLLEGAMENTO UI (VNAV ToD, NAVLOG, TOUCH) ---
-
-// --- TRAFFICO ONLINE LIVE (VATSIM / IVAO) & MODALE IMPOSTAZIONI ---
-let onlineNetworkMode = localStorage.getItem('aeroglass_online_net') || 'off';
-let onlineTrafficRadiusNm = parseInt(localStorage.getItem('aeroglass_traffic_radius') || '180', 10);
-let onlineTrafficLayer = null;
-let onlineTrafficTimer = null;
-let onlineTrafficFetching = false;
-
-function ensureOnlineTrafficAndSettingsUI() {
-    const pillsGroup = ensurePillsGroup();
-
-    if (!document.getElementById('btnOnlineTraffic')) {
-        const netBtn = document.createElement('button');
-        netBtn.id = 'btnOnlineTraffic';
-        netBtn.className = 'top-btn';
-        netBtn.onclick = cycleOnlineNetworkMode;
-        netBtn.style.justifyContent = 'center';
-
-        const navaidsBtn = document.getElementById('btnToggleNavaids');
-        if (navaidsBtn && navaidsBtn.parentNode === pillsGroup) {
-            pillsGroup.insertBefore(netBtn, navaidsBtn.nextSibling);
-        } else {
-            pillsGroup.appendChild(netBtn);
-        }
-    }
-
-    if (!document.getElementById('btnSettingsModal')) {
-        const setBtn = document.createElement('button');
-        setBtn.id = 'btnSettingsModal';
-        setBtn.className = 'top-btn';
-        setBtn.onclick = openSettingsModal;
-        setBtn.style.justifyContent = 'center';
-        setBtn.style.padding = '5px 10px';
-        setBtn.innerHTML = '⚙️';
-        pillsGroup.appendChild(setBtn);
-    }
-
-    ensureSettingsModalDOM();
-    updateOnlineTrafficButtonUI();
-
-    if (typeof map !== 'undefined' && map && !onlineTrafficLayer && typeof L !== 'undefined') {
-        onlineTrafficLayer = L.layerGroup().addTo(map);
-        map.on('moveend', () => {
-            if (onlineNetworkMode !== 'off' && window._lastOnlinePilotsCache) {
-                renderOnlineTrafficMarkers(window._lastOnlinePilotsCache, onlineNetworkMode);
-            }
-        });
-    }
-}
-
-function updateOnlineTrafficButtonUI() {
-    const btn = document.getElementById('btnOnlineTraffic');
-    if (!btn) return;
-    if (onlineNetworkMode === 'vatsim') {
-        btn.innerHTML = '🌐 <span>VATSIM</span>';
-        btn.style.borderColor = 'rgba(16, 185, 129, 0.65)';
-        btn.style.color = '#34d399';
-    } else if (onlineNetworkMode === 'ivao') {
-        btn.innerHTML = '🌐 <span>IVAO</span>';
-        btn.style.borderColor = 'rgba(56, 189, 248, 0.65)';
-        btn.style.color = '#38bdf8';
-    } else {
-        btn.innerHTML = '🌐 <span>NET: OFF</span>';
-        btn.style.borderColor = 'rgba(139, 148, 158, 0.3)';
-        btn.style.color = '#8b949e';
-    }
-}
-
-async function applyOnlineNetworkMode(mode, persist = true) {
-    if (!['off', 'vatsim', 'ivao'].includes(mode)) mode = 'off';
-    onlineNetworkMode = mode;
-    ensureOnlineTrafficAndSettingsUI();
-    updateOnlineTrafficButtonUI();
-
-    const sel = document.getElementById('settingsNetSelect');
-    if (sel) sel.value = onlineNetworkMode;
-
-    if (onlineTrafficTimer) {
-        clearInterval(onlineTrafficTimer);
-        onlineTrafficTimer = null;
-    }
-
-    if (onlineNetworkMode === 'off') {
-        if (onlineTrafficLayer) onlineTrafficLayer.clearLayers();
-        window._lastOnlinePilotsCache = null;
-    } else {
-        await fetchAndRenderOnlineTraffic();
-        onlineTrafficTimer = setInterval(fetchAndRenderOnlineTraffic, 15000);
-    }
-
-    try { localStorage.setItem('aeroglass_online_net', onlineNetworkMode); } catch (e) {}
-    if (persist && window.pywebview && window.pywebview.api && window.pywebview.api.save_setting) {
-        try { await window.pywebview.api.save_setting('online_network', onlineNetworkMode); } catch (e) {}
-    }
-}
-
-function cycleOnlineNetworkMode() {
-    const order = ['off', 'vatsim', 'ivao'];
-    const next = order[(order.indexOf(onlineNetworkMode) + 1) % order.length];
-    applyOnlineNetworkMode(next, true);
-}
-
-async function fetchAndRenderOnlineTraffic() {
-    if (onlineNetworkMode === 'off' || onlineTrafficFetching) return;
-    if (typeof map === 'undefined' || !map || typeof L === 'undefined') return;
-    if (!onlineTrafficLayer) onlineTrafficLayer = L.layerGroup().addTo(map);
-
-    onlineTrafficFetching = true;
-    try {
-        let pilots = [];
-        if (onlineNetworkMode === 'vatsim') {
-            const res = await fetch('https://data.vatsim.net/v3/vatsim-data.json');
-            if (res.ok) {
-                const data = await res.json();
-                pilots = (data.pilots || []).map(p => ({
-                    callsign: p.callsign || 'N/A',
-                    lat: p.latitude,
-                    lon: p.longitude,
-                    alt: p.altitude || 0,
-                    gs: p.groundspeed || 0,
-                    hdg: p.heading || 0,
-                    dep: p.flight_plan?.departure || '---',
-                    arr: p.flight_plan?.arrival || '---',
-                    acft: p.flight_plan?.aircraft_short || p.flight_plan?.aircraft_faa || 'ACFT'
-                }));
-            }
-        } else if (onlineNetworkMode === 'ivao') {
-            const res = await fetch('https://api.ivao.aero/v2/tracker/whazzup');
-            if (res.ok) {
-                const data = await res.json();
-                const rawPilots = data.clients?.pilots || [];
-                pilots = rawPilots.map(p => ({
-                    callsign: p.callsign || 'N/A',
-                    lat: p.lastTrack?.latitude,
-                    lon: p.lastTrack?.longitude,
-                    alt: p.lastTrack?.altitude || 0,
-                    gs: p.lastTrack?.groundSpeed || 0,
-                    hdg: p.lastTrack?.heading || 0,
-                    dep: p.flightPlan?.departureId || '---',
-                    arr: p.flightPlan?.arrivalId || '---',
-                    acft: p.flightPlan?.aircraftId || 'ACFT'
-                }));
->>>>>>> 7d0deddcc1a0487a43ae9f8bb57fd9a9f9a01f49
             }
         }
-        window._lastOnlinePilotsCache = pilots;
-        renderOnlineTrafficMarkers(pilots, onlineNetworkMode);
-    } catch (e) {
-    } finally {
-        onlineTrafficFetching = false;
-    }
-}
+    });
 
-<<<<<<< HEAD
     updateVnavCloudLevelLine(targetAlt);
 }
 
@@ -2779,170 +2310,6 @@ function renderMeasureOverlay() {
         _measureBadgeMarker.setLatLng(mid);
         _measureBadgeMarker.setIcon(L.divIcon({ className: '', html: badgeHtml, iconSize: null }));
     }
-=======
-function renderOnlineTrafficMarkers(pilots, netMode) {
-    if (!onlineTrafficLayer || typeof map === 'undefined' || !map) return;
-    onlineTrafficLayer.clearLayers();
-    if (!Array.isArray(pilots) || pilots.length === 0) return;
-
-    const c = map.getCenter();
-    const color = netMode === 'vatsim' ? '#34d399' : '#38bdf8';
-    const netBadge = netMode.toUpperCase();
-    let count = 0;
-
-    for (const p of pilots) {
-        if (p.lat === undefined || p.lon === undefined || isNaN(p.lat) || isNaN(p.lon)) continue;
-        const distNm = computeGreatCircleNm(c.lat, c.lng, p.lat, p.lon);
-        if (distNm > onlineTrafficRadiusNm) continue;
-
-        const rot = ((Number(p.hdg) || 0) - 45);
-        const fl = p.alt >= 5000 ? `FL${String(Math.round(p.alt / 100)).padStart(3, '0')}` : `${Math.round(p.alt)}ft`;
-
-        const m = L.marker([p.lat, p.lon], {
-            icon: L.divIcon({
-                className: 'online-traffic-icon',
-                html: `
-                    <div class="online-acft-glyph" style="color:${color};transform:rotate(${rot}deg);">✈️</div>
-                    <div class="online-acft-tag" style="border-color:${color}66;">${p.callsign}</div>
-                `,
-                iconSize: [56, 30],
-                iconAnchor: [28, 15]
-            })
-        }).addTo(onlineTrafficLayer);
-
-        m.bindTooltip(
-            `<div style="font-family:Consolas,monospace;font-size:11px;line-height:1.45;">
-                <b style="color:${color};">[${netBadge}] ${p.callsign}</b> <span style="color:#94a3b8;">(${p.acft})</span><br>
-                🛫 <b>${p.dep}</b> ➔ 🛬 <b>${p.arr}</b><br>
-                ALT: <b>${fl}</b> | GS: <b>${Math.round(p.gs)} kt</b> | HDG: <b>${String(Math.round(p.hdg)).padStart(3, '0')}°</b>
-            </div>`,
-            { direction: 'top', className: 'vnav-route-tooltip' }
-        );
-
-        count++;
-        if (count >= 160) break;
-    }
-}
-
-function ensureSettingsModalDOM() {
-    if (document.getElementById('aeroSettingsModal')) return;
-    const modal = document.createElement('div');
-    modal.id = 'aeroSettingsModal';
-    modal.className = 'custom-modal';
-    modal.style.display = 'none';
-    modal.innerHTML = `
-        <div class="modal-content glass-panel" style="max-width:440px;width:92%;padding:18px 20px;border:1px solid rgba(0,210,255,0.45);border-radius:12px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid rgba(148,163,184,0.2);">
-                <h3 style="margin:0;font-size:14px;color:#00d2ff;display:flex;align-items:center;gap:8px;">⚙️ <span id="settingsModalTitle">IMPOSTAZIONI AEROGLASS NAV</span></h3>
-                <button class="top-btn" onclick="closeSettingsModal()" style="padding:2px 8px;font-size:12px;">✕</button>
-            </div>
-
-            <div class="settings-modal-row">
-                <div>
-                    <span class="settings-modal-lbl">SimBrief Pilot ID / Username</span>
-                    <span class="settings-modal-sub">ID predefinito per importazione rapida OFP</span>
-                </div>
-                <input id="settingsSimbriefInput" type="text" placeholder="es. 312844" style="width:120px;padding:5px 8px;background:rgba(9,13,19,0.9);border:1px solid rgba(148,163,184,0.35);border-radius:6px;color:#f0f6fc;font-family:Consolas,monospace;font-size:12px;text-align:center;">
-            </div>
-
-            <div class="settings-modal-row">
-                <div>
-                    <span class="settings-modal-lbl">Rete Traffico Online</span>
-                    <span class="settings-modal-sub">Mostra aerei live VATSIM o IVAO intorno alla mappa</span>
-                </div>
-                <select id="settingsNetSelect" onchange="applyOnlineNetworkMode(this.value, true)" style="padding:5px 8px;background:#0d1117;border:1px solid rgba(0,210,255,0.4);border-radius:6px;color:#f0f6fc;font-size:12px;">
-                    <option value="off">Disattivato (OFF)</option>
-                    <option value="vatsim">VATSIM Live</option>
-                    <option value="ivao">IVAO Whazzup</option>
-                </select>
-            </div>
-
-            <div class="settings-modal-row">
-                <div>
-                    <span class="settings-modal-lbl">Raggio Filtro Traffico (NM)</span>
-                    <span class="settings-modal-sub">Distanza massima dal centro mappa</span>
-                </div>
-                <select id="settingsTrafficRadius" onchange="updateTrafficRadiusSetting(this.value)" style="padding:5px 8px;background:#0d1117;border:1px solid rgba(148,163,184,0.35);border-radius:6px;color:#f0f6fc;font-size:12px;">
-                    <option value="80">80 NM</option>
-                    <option value="180">180 NM</option>
-                    <option value="350">350 NM</option>
-                    <option value="600">600 NM</option>
-                </select>
-            </div>
-
-            <div class="settings-modal-row">
-                <div>
-                    <span class="settings-modal-lbl">Modalità Interfaccia</span>
-                    <span class="settings-modal-sub">Estesa (Pianificazione) o FLY (Mini-HUD)</span>
-                </div>
-                <button class="top-btn" onclick="toggleUIMode()" style="min-width:110px;justify-content:center;">Cambia Vista</button>
-            </div>
-
-            <div class="settings-modal-row">
-                <div>
-                    <span class="settings-modal-lbl">Tema Cockpit & Suggerimenti</span>
-                    <span class="settings-modal-sub">Cicla tema visivo o attiva/disattiva i tooltip</span>
-                </div>
-                <div style="display:flex;gap:6px;">
-                    <button class="top-btn" onclick="toggleThemeMode()">🌙 Tema</button>
-                    <button class="top-btn" onclick="applyTooltipsMode(!tooltipsEnabled, true)">💬 Info</button>
-                </div>
-            </div>
-
-            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
-                <button class="top-btn" onclick="saveSettingsFromModal()" style="border-color:#00d2ff;color:#00d2ff;padding:6px 16px;font-weight:700;">💾 Salva & Chiudi</button>
-            </div>
-        </div>
-    `;
-    document.body.appendChild(modal);
-}
-
-async function updateTrafficRadiusSetting(val, persist = true) {
-    onlineTrafficRadiusNm = parseInt(val, 10) || 180;
-    try { localStorage.setItem('aeroglass_traffic_radius', String(onlineTrafficRadiusNm)); } catch (e) {}
-    if (persist && window.pywebview && window.pywebview.api && window.pywebview.api.save_setting) {
-        try { await window.pywebview.api.save_setting('online_traffic_radius', String(onlineTrafficRadiusNm)); } catch (e) {}
-    }
-    if (onlineNetworkMode !== 'off' && window._lastOnlinePilotsCache) {
-        renderOnlineTrafficMarkers(window._lastOnlinePilotsCache, onlineNetworkMode);
-    }
-}
-
-function openSettingsModal() {
-    ensureSettingsModalDOM();
-    const modal = document.getElementById('aeroSettingsModal');
-    if (!modal) return;
-
-    const sbMain = document.getElementById('simbriefIdInput');
-    const sbSet = document.getElementById('settingsSimbriefInput');
-    if (sbSet && sbMain) sbSet.value = sbMain.value || '';
-
-    const netSel = document.getElementById('settingsNetSelect');
-    if (netSel) netSel.value = onlineNetworkMode;
-
-    const radSel = document.getElementById('settingsTrafficRadius');
-    if (radSel) radSel.value = String(onlineTrafficRadiusNm);
-
-    modal.style.display = 'flex';
-}
-
-function closeSettingsModal() {
-    const modal = document.getElementById('aeroSettingsModal');
-    if (modal) modal.style.display = 'none';
-}
-
-async function saveSettingsFromModal() {
-    const sbSet = document.getElementById('settingsSimbriefInput');
-    const sbMain = document.getElementById('simbriefIdInput');
-    if (sbSet && sbSet.value.trim()) {
-        const val = sbSet.value.trim();
-        if (sbMain) sbMain.value = val;
-        if (window.pywebview && window.pywebview.api && window.pywebview.api.save_setting) {
-            try { await window.pywebview.api.save_setting('simbrief_id', val); } catch (e) {}
-        }
-    }
-    closeSettingsModal();
->>>>>>> 7d0deddcc1a0487a43ae9f8bb57fd9a9f9a01f49
 }
 
 // --- HOOKS DI COLLEGAMENTO UI (VNAV ToD, NAVLOG, TOUCH) ---
@@ -3115,34 +2482,18 @@ function initDragAndDropPln() {
     });
 }
 
-function extractSettingVal(res) {
-    if (res === null || res === undefined) return null;
-    if (typeof res === 'string' || typeof res === 'number' || typeof res === 'boolean') return String(res);
-    if (typeof res === 'object' && res.value !== undefined && res.value !== null) return String(res.value);
-    return null;
-}
-
 // --- INIZIALIZZAZIONE APPLICAZIONE E DATI PYWEBVIEW / EFB ---
-<<<<<<< HEAD
 let _telemetryBusy = false;
 let _efbBadgeRetries = 0;
 
 async function initAeroGlassApp() {
-=======
-async function initAeroGlassApp(forceReload = false) {
->>>>>>> 7d0deddcc1a0487a43ae9f8bb57fd9a9f9a01f49
     installTodAndTouchHooks();
     applyThemeMode(currentThemeMode, false);
     applyTooltipsMode(tooltipsEnabled, false);
 
-    // Forza immediata creazione UI se non presente
-    ensureOnlineTrafficAndSettingsUI();
-    ensureThemeToggleButton();
-    ensureTooltipToggleButton();
-    ensureUIModeButton();
-
     if (!window.pywebview || !window.pywebview.api || typeof window.pywebview.api.get_initial_data !== 'function') return;
-    if (initialized && !forceReload) return;
+    if (initialized) return;
+    initialized = true;
 
     if (typeof updateFlightInfoBar === 'function') updateFlightInfoBar(43.5, 12.0);
     if (typeof setFollowState === 'function') setFollowState(followState);
@@ -3150,7 +2501,6 @@ async function initAeroGlassApp(forceReload = false) {
     if (typeof updateMapScale === 'function') updateMapScale();
 
     try {
-<<<<<<< HEAD
         if (window.pywebview.api.get_setting) {
             const themeRes = await window.pywebview.api.get_setting('theme_mode');
             if (themeRes && themeRes.success && themeRes.value) await applyThemeMode(themeRes.value, false);
@@ -3191,12 +2541,8 @@ async function initAeroGlassApp(forceReload = false) {
             }
         }
 
-=======
->>>>>>> 7d0deddcc1a0487a43ae9f8bb57fd9a9f9a01f49
         const initData = await window.pywebview.api.get_initial_data();
-        if (initData && !initData.error) {
-            initialized = true;
-
+        if (initData) {
             if (initData.fpl_ts) window._lastFplTs = initData.fpl_ts;
             if (initData.efb_info && typeof updateEfbTopBarBadge === 'function') updateEfbTopBarBadge(initData.efb_info);
             else if (typeof refreshEfbBadgeFromBackend === 'function') await refreshEfbBadgeFromBackend();
@@ -3217,37 +2563,7 @@ async function initAeroGlassApp(forceReload = false) {
             }
             if (typeof renderNavAids === 'function') renderNavAids(vorsData, ilsData);
         }
-
-        if (window.pywebview.api.get_setting) {
-            const themeVal = extractSettingVal(await window.pywebview.api.get_setting('theme_mode'));
-            if (themeVal) await applyThemeMode(themeVal, false);
-
-            const tipVal = extractSettingVal(await window.pywebview.api.get_setting('show_tooltips'));
-            if (tipVal !== null) await applyTooltipsMode(tipVal !== 'false', false);
-
-            const uiVal = extractSettingVal(await window.pywebview.api.get_setting('ui_mode'));
-            if (uiVal) await applyUIMode(uiVal, false);
-
-            const fpVal = extractSettingVal(await window.pywebview.api.get_setting('fuel_perf_config'));
-            if (fpVal) {
-                try { fuelPerfConfig = { ...fuelPerfConfig, ...JSON.parse(fpVal) }; } catch (e) {}
-            }
-
-            const radVal = extractSettingVal(await window.pywebview.api.get_setting('online_traffic_radius'));
-            if (radVal) {
-                onlineTrafficRadiusNm = parseInt(radVal, 10) || 180;
-                const radSel = document.getElementById('settingsTrafficRadius');
-                if (radSel) radSel.value = String(onlineTrafficRadiusNm);
-            }
-
-            const netVal = extractSettingVal(await window.pywebview.api.get_setting('online_network'));
-            if (netVal) {
-                await applyOnlineNetworkMode(netVal, false);
-            }
-        }
-
         if (typeof loadUserWaypoints === 'function') await loadUserWaypoints();
-<<<<<<< HEAD
         ensureGroundMapUI();
         ensureWorldAirportsLayerUI();
         fetchAndRenderWorldAirportsInView();
@@ -3260,15 +2576,12 @@ async function initAeroGlassApp(forceReload = false) {
                 networkPollInterval = setInterval(fetchAndRenderNetworkTraffic, 60000);
             }
         }
-=======
->>>>>>> 7d0deddcc1a0487a43ae9f8bb57fd9a9f9a01f49
     } catch (e) {}
 
     if (typeof updateTopOfDescentOverlay === 'function') setTimeout(updateTopOfDescentOverlay, 250);
 
     if (!window._aeroLoopsStarted) {
         window._aeroLoopsStarted = true;
-<<<<<<< HEAD
 
         // Semaforo _telemetryBusy: impedisce l'accumulo di chiamate IPC se MSFS 2024 è impegnato in un caricamento
         setInterval(async () => {
@@ -3295,18 +2608,6 @@ async function initAeroGlassApp(forceReload = false) {
                 refreshEfbBadgeFromBackend();
             } else {
                 clearInterval(efbTimer);
-=======
-        setInterval(() => {
-            if (!window._demoTourActive && typeof pollTelemetry === 'function') pollTelemetry();
-            if (typeof updateTodHeaderStatus === 'function') updateTodHeaderStatus();
-            if (typeof updateFlyHudStrip === 'function') updateFlyHudStrip();
-        }, 1000);
-
-        setInterval(() => {
-            const lbl = document.getElementById('lblEfbNet');
-            if (lbl && lbl.innerText.includes('...') && typeof refreshEfbBadgeFromBackend === 'function') {
-                refreshEfbBadgeFromBackend();
->>>>>>> 7d0deddcc1a0487a43ae9f8bb57fd9a9f9a01f49
             }
         }, 1500);
     }
@@ -3318,16 +2619,10 @@ document.addEventListener('DOMContentLoaded', () => {
     installTodAndTouchHooks();
     applyThemeMode(currentThemeMode, false);
     applyTooltipsMode(tooltipsEnabled, false);
-    
-    // Assicura immediata iniezione dei pulsanti all'avvio del DOM
-    ensureOnlineTrafficAndSettingsUI();
-    ensureThemeToggleButton();
-    ensureTooltipToggleButton();
-    ensureUIModeButton();
-
     if (typeof updateFlightInfoBar === 'function') updateFlightInfoBar(43.5, 12.0);
     if (typeof setFollowState === 'function') setFollowState(followState);
     if (typeof renderNavAids === 'function') renderNavAids(vorsData, ilsData);
+    ensureGroundMapUI();
     if (typeof updateMapScale === 'function') updateMapScale();
 
     window.addEventListener('click', (event) => {
@@ -3336,7 +2631,6 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (event.target.id === 'efbNetworkModal' && typeof closeEfbNetworkModal === 'function') closeEfbNetworkModal();
         else if (event.target.id === 'navlogModal' && typeof closeNavlogModal === 'function') closeNavlogModal();
         else if (event.target.id === 'fuelPerfModal' && typeof closeFuelPerfModal === 'function') closeFuelPerfModal();
-        else if (event.target.id === 'aeroSettingsModal' && typeof closeSettingsModal === 'function') closeSettingsModal();
     });
 
     if (window.pywebview && window.pywebview.api) {
@@ -3344,10 +2638,4 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-<<<<<<< HEAD
 window.addEventListener('pywebviewready', initAeroGlassApp);
-=======
-window.addEventListener('pywebviewready', () => {
-    initAeroGlassApp(true);
-});
->>>>>>> 7d0deddcc1a0487a43ae9f8bb57fd9a9f9a01f49

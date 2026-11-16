@@ -123,7 +123,6 @@ const AIRSPACES_DATA = {
     ]
 };
 
-<<<<<<< HEAD
 // --- PONTE EFB DI RETE (ESCLUSIVO PER BROWSER ESTERNO / TABLET WI-FI) ---
 // In Edge WebView2 Desktop (pywebview) window.chrome.webview è sempre definito:
 // non sovrascriviamo mai window.pywebview sul Desktop per lasciare agire il bridge nativo Python.
@@ -131,24 +130,9 @@ const isDesktopWebView = Boolean(window.chrome && window.chrome.webview);
 
 if (!isDesktopWebView && !window.pywebview && window.location.protocol.startsWith('http')) {
     const efbApiProxy = new Proxy({}, {
-=======
-// --- PONTE EFB DI RETE & BRIDGE NATIVO ---
-window.addEventListener('pywebviewready', () => {
-    if (window.pywebview && window.pywebview.api) {
-        window._nativePywebviewApi = window.pywebview.api;
-    }
-});
-
-if (!window.pywebview || !window.pywebview.api) {
-    window.pywebview = window.pywebview || {};
-    window.pywebview.api = new Proxy({}, {
->>>>>>> 7d0deddcc1a0487a43ae9f8bb57fd9a9f9a01f49
         get: function(target, prop) {
             if (prop === 'then' || typeof prop === 'symbol') return undefined;
             return async function(...args) {
-                if (window._nativePywebviewApi && typeof window._nativePywebviewApi[prop] === 'function') {
-                    return await window._nativePywebviewApi[prop](...args);
-                }
                 const response = await fetch(`/api/${prop}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -159,6 +143,12 @@ if (!window.pywebview || !window.pywebview.api) {
                 return data.result;
             };
         }
+    });
+    window.pywebview = { api: efbApiProxy, isNetworkEfb: true };
+    window.addEventListener('DOMContentLoaded', () => {
+        setTimeout(() => {
+            window.dispatchEvent(new Event('pywebviewready'));
+        }, 60);
     });
 }
 
