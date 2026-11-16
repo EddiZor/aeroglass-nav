@@ -1920,11 +1920,40 @@ function ensureNetAtcBadgeStyles() {
             border-radius: 3px;
         }
 
-        /* Barra superiore compatta su una sola riga */
+        /* Barra superiore dinamica, estesa a tutta larghezza e reattiva alla chiusura della sidebar */
+        .top-bar, header, .top-navigation-bar, div[class*="top"], div[class*="header"] {
+            transition: all 0.25s ease !important;
+        }
+        body.sidebar-collapsed .top-bar,
+        body.sidebar-collapsed header,
+        body.sidebar-collapsed .top-navigation-bar,
+        body.sidebar-collapsed div[class*="top-nav"],
+        body.sidebar-collapsed div[class*="header"] {
+            left: 45px !important;
+            margin-left: 45px !important;
+            width: calc(100% - 45px) !important;
+            max-width: none !important;
+        }
+        .top-pills-group {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            flex: 1 1 auto !important;
+            width: 100% !important;
+            max-width: none !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow-y: visible !important;
+            row-gap: 5px !important;
+            column-gap: 6px !important;
+            padding: 4px 10px !important;
+            justify-content: flex-start !important;
+            align-items: center !important;
+        }
         .top-pills-group .top-btn {
-            padding: 3px 7px !important;
+            padding: 4px 8px !important;
             font-size: 10.5px !important;
             white-space: nowrap !important;
+            flex-shrink: 0 !important;
         }
         #btnToggleTooltips span,
         #btnToggleUIMode span,
@@ -1936,7 +1965,7 @@ function ensureNetAtcBadgeStyles() {
         }
     `;
     document.head.appendChild(st);
-    setupErgonomicSidebarAndTopBar();
+    setupErgonomicSpatialBar();
 }
 
 function setupErgonomicSidebarAndTopBar() {
@@ -2851,8 +2880,16 @@ function toggleSidebar() {
 
     sidebarOpen = !sidebarOpen;
     sidebar.classList.toggle('collapsed', !sidebarOpen);
+    document.body.classList.toggle('sidebar-collapsed', !sidebarOpen);
     if (arrow) arrow.innerText = sidebarOpen ? '◀' : '▶';
     if (label) label.style.display = sidebarOpen ? 'none' : 'block';
+
+    setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+        if (typeof map !== 'undefined' && map && map.invalidateSize) {
+            map.invalidateSize();
+        }
+    }, 200);
 }
 
 function toggleDrawer() {

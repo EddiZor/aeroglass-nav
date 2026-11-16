@@ -96,8 +96,13 @@ body, html {
     justify-content: flex-end;
     align-items: center;
     gap: 8px;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     pointer-events: none;
+    transition: left 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+body.sidebar-collapsed .top-controls-bar {
+    left: 48px;
 }
 
 .top-pills-group {
@@ -105,11 +110,10 @@ body, html {
     display: flex;
     align-items: center;
     gap: 6px;
-    flex-wrap: nowrap;
-    overflow-x: auto;
+    flex-wrap: wrap;
+    overflow-x: visible;
     max-width: 100%;
     min-width: 0;
-    scrollbar-width: none;
 }
 
 .top-pills-group::-webkit-scrollbar {
