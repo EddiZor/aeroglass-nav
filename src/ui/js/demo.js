@@ -187,6 +187,35 @@ function getDemoSteps() {
                         <li><b>📱 EFB Wi-Fi:</b> Click the top-left EFB badge to scan the QR Code and open AeroGlass-Nav live on your iPad or Android tablet!</li>
                     </ul>
                 `
+            },
+            {
+                target: "#orwillChatWidget",
+                badge: "STEP 12 • AI CO-PILOT",
+                title: "🤖 Orwill: Virtual Co-Pilot & Dispatcher",
+                body: `
+                    <p>Your local heuristic AI assistant located in the bottom-left corner:</p>
+                    <ul>
+                        <li><b>💬 Aviation Expert:</b> Answers questions on airspace (ATZ, CTR, TMA), QNH, weather, and VNAV calculations.</li>
+                        <li><b>🌦️ ICAO Parser:</b> Automatically detects airport codes in your questions (e.g., "METAR LIPZ") and retrieves live weather.</li>
+                        <li><b>🌐 Gemini Bridge:</b> If a query is outside local rules, Orwill automatically opens Gemini in your browser and copies your question to clipboard!</li>
+                    </ul>
+                `,
+                onEnter: () => {
+                    const body = document.getElementById('orwillBody');
+                    const arrow = document.getElementById('orwillToggleArrow');
+                    if (body && body.style.display !== 'flex') {
+                        body.style.display = 'flex';
+                        if (arrow) arrow.innerText = '▼';
+                    }
+                },
+                onLeave: () => {
+                    const body = document.getElementById('orwillBody');
+                    const arrow = document.getElementById('orwillToggleArrow');
+                    if (body && body.style.display === 'flex') {
+                        body.style.display = 'none';
+                        if (arrow) arrow.innerText = '▲';
+                    }
+                }
             }
         ];
     }
@@ -366,6 +395,35 @@ function getDemoSteps() {
                     <li><b>📱 EFB Wi-Fi:</b> Clicca sul primo pulsante in alto a sinistra per mostrare il <b>QR Code</b> e usare AeroGlass-Nav in diretta sul tuo iPad o tablet Android!</li>
                 </ul>
             `
+        },
+        {
+            target: "#orwillChatWidget",
+            badge: "PASSO 12 • CO-PILOTA IA",
+            title: "🤖 Orwill: Co-Pilota & Dispatcher Virtuale",
+            body: `
+                <p>Il tuo assistente IA euristico locale posizionato in basso a sinistra:</p>
+                <ul>
+                    <li><b>💬 Esperto Aeronautico:</b> Risponde a domande su spazi aerei (ATZ, CTR, TMA), QNH, meteo e calcoli di discesa.</li>
+                    <li><b>🌦️ Parser ICAO:</b> Estrae automaticamente i codici aeroportuali dalle tue frasi (es. "metar di lipz") e recupera il meteo live.</li>
+                    <li><b>🌐 Ponte con Gemini:</b> Se una domanda esce dalle regole locali, Orwill apre automaticamente il browser su Gemini e copia la domanda negli appunti!</li>
+                </ul>
+            `,
+            onEnter: () => {
+                const body = document.getElementById('orwillBody');
+                const arrow = document.getElementById('orwillToggleArrow');
+                if (body && body.style.display !== 'flex') {
+                    body.style.display = 'flex';
+                    if (arrow) arrow.innerText = '▼';
+                }
+            },
+            onLeave: () => {
+                const body = document.getElementById('orwillBody');
+                const arrow = document.getElementById('orwillToggleArrow');
+                if (body && body.style.display === 'flex') {
+                    body.style.display = 'none';
+                    if (arrow) arrow.innerText = '▲';
+                }
+            }
         }
     ];
 }
@@ -673,14 +731,11 @@ function positionSpotlightAndCard(selector) {
     let top = (window.innerHeight - cRect.height) / 2;
 
     if (r.width > window.innerWidth * 0.5 && r.top > window.innerHeight * 0.6) {
-        // Elemento largo in basso (es. cassetto VNAV) -> posiziona la card sopra
         top = Math.max(60, r.top - cRect.height - margin);
     } else if (r.height > window.innerHeight * 0.5 && r.left < 350) {
-        // Sidebar sinistra -> posiziona la card a destra della sidebar
         left = Math.min(window.innerWidth - cRect.width - 20, r.right + margin);
         top = Math.max(64, (window.innerHeight - cRect.height) / 2);
     } else if (r.top < 110) {
-        // Pulsante nella barra superiore -> posiziona la card al centro-basso per lasciare liberi anche i popover
         top = Math.min(window.innerHeight - cRect.height - 28, Math.max(r.bottom + 24, window.innerHeight * 0.44));
         left = Math.max(20, Math.min(window.innerWidth - cRect.width - 20, r.left + r.width / 2 - cRect.width / 2));
     }
@@ -751,7 +806,6 @@ function nextDemoStep(fromAutoTimer = false) {
     runLeaveHook(_demoStepIndex);
     if (_demoStepIndex >= steps.length - 1) {
         if (_demoAutoPlay) {
-            // Ciclo continuo: ricomincia dal passo 0
             _demoStepIndex = 0;
             if (!fromAutoTimer) startDemoAutoTimer();
             renderCurrentDemoStep();
@@ -832,6 +886,13 @@ function initDemoKeyboardShortcuts() {
         }
     });
 }
+
+// ============================================================================
+// ⚡ AUTOMATISMO DI ESECUZIONE ALL'AVVIO
+// ============================================================================
+document.addEventListener('DOMContentLoaded', () => {
+    initDemoKeyboardShortcuts();
+});
 
 // Esporta tutte le funzioni e gli alias globali per compatibilità con index.html e app.js
 window.startDemoTour = startDemoTour;
