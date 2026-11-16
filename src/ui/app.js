@@ -854,27 +854,50 @@ function scheduleWorldAirportsUpdate() {
     }, 180);
 }
 
+function shouldShowWorldAirportAtZoom(apt, zoom, fplSet) {
+    if (!apt || !apt.icao) return false;
+    if (fplSet.has(apt.icao) || CUSTOM_APT_LAYOUTS[apt.icao]) return true;
+
+    // I codici locali OurAirports col trattino (es. AT-0084, FR-0123) compaiono solo a zoom molto alto (>= 11)
+    if (apt.icao.includes('-') && zoom < 11) return false;
+
+    if (apt.type === 'large_airport') return true;
+    if (apt.type === 'medium_airport') return zoom >= 6.5;
+    if (apt.type === 'small_airport') return zoom >= 9.5;
+    return zoom >= 10.5;
+}
+
 async function fetchAndRenderWorldAirportsInView() {
     if (typeof map === 'undefined' || !map || typeof L === 'undefined') return;
     if (!worldAirportsLayerGroup) {
         worldAirportsLayerGroup = L.layerGroup().addTo(map);
     }
 
-    // Area visibile + 25% di margine attorno ai bordi
-    const paddedBounds = map.getBounds().pad(0.25);
+    const paddedBounds = map.getBounds().pad(0.20);
     const zoom = map.getZoom();
+    const fplSet = new Set((Array.isArray(flightPlan) ? flightPlan : []).map(w => w.ident || w.icao));
 
-    // 1. Rimuove solo i marker che sono usciti dall'area visibile allargata:
-    //    restringendo la mappa (zoom out), quelli già caricati e ancora in vista restano visibili!
+    // 1. Rimuove i marker usciti dall'inquadratura OPPURE troppo piccoli per il livello di zoom attuale
     for (const [icao, entry] of _renderedWorldAirports.entries()) {
-        if (!paddedBounds.contains([entry.data.lat, entry.data.lon])) {
+        const inView = paddedBounds.contains([entry.data.lat, entry.data.lon]);
+        const allowedByZoom = shouldShowWorldAirportAtZoom(entry.data, zoom, fplSet);
+        if (!inView || !allowedByZoom) {
             worldAirportsLayerGroup.removeLayer(entry.marker);
             _renderedWorldAirports.delete(icao);
+            continue;
+        }
+        const el = entry.marker.getElement();
+        const pin = el ? el.querySelector('.world-apt-pin') : null;
+        if (pin) {
+            pin.classList.toggle('apt-dot-only', zoom < 8 && !fplSet.has(icao));
         }
     }
 
-    // 2. Richiede al database SQLite gli aeroporti presenti nella nuova inquadratura
+    // 2. Richiede al database SQLite gli aeroporti per la vista corrente
+    //    (passa uno zoom calibrato per evitare che i micro-campi saturino il LIMIT SQL a zoom bassi)
     if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.get_airports_in_bounds) return;
+
+    const queryZoom = zoom < 9.5 ? Math.min(zoom, 7.5) : zoom;
 
     try {
         const res = await window.pywebview.api.get_airports_in_bounds(
@@ -882,12 +905,11 @@ async function fetchAndRenderWorldAirportsInView() {
             paddedBounds.getNorth(),
             paddedBounds.getWest(),
             paddedBounds.getEast(),
-            zoom
+            queryZoom
         );
 
         if (!res || !res.success || !Array.isArray(res.airports)) return;
 
-        // Sincronizza anche l'array globale airportsData per ricerca rapida e layer meteo
         const knownIcaos = new Set(airportsData.map(a => a.icao));
 
         res.airports.forEach(apt => {
@@ -906,25 +928,28 @@ async function fetchAndRenderWorldAirportsInView() {
                 });
             }
 
-            // Se l'aeroporto è già disegnato sulla mappa, lo mantiene senza ricrearlo
+            if (!shouldShowWorldAirportAtZoom(apt, zoom, fplSet)) return;
             if (_renderedWorldAirports.has(apt.icao)) return;
 
             let sizeClass = 'apt-small';
             if (apt.type === 'large_airport') sizeClass = 'apt-large';
             else if (apt.type === 'medium_airport') sizeClass = 'apt-medium';
 
+            const isRouteApt = fplSet.has(apt.icao);
+            const dotOnlyClass = (zoom < 8 && !isRouteApt) ? 'apt-dot-only' : '';
+
             const marker = L.marker([apt.lat, apt.lon], {
                 icon: L.divIcon({
                     className: '',
                     html: `
-                        <div class="world-apt-pin ${sizeClass}">
+                        <div class="world-apt-pin ${sizeClass} ${dotOnlyClass}">
                             <span class="world-apt-dot"></span>
-                            <span>${apt.icao}</span>
+                            <span class="world-apt-lbl">${apt.icao}</span>
                         </div>
                     `,
                     iconSize: null
                 }),
-                zIndexOffset: apt.type === 'large_airport' ? 520 : (apt.type === 'medium_airport' ? 480 : 440)
+                zIndexOffset: isRouteApt ? 620 : (apt.type === 'large_airport' ? 520 : (apt.type === 'medium_airport' ? 480 : 440))
             }).addTo(worldAirportsLayerGroup);
 
             const elevStr = apt.elev_ft !== undefined && apt.elev_ft !== null ? ` (${apt.elev_ft} ft)` : '';
@@ -1072,12 +1097,17 @@ function renderWeatherOverlay() {
     const fpl = Array.isArray(flightPlan) ? flightPlan : [];
     const shownApts = new Set();
 
-    // 1. Etichette Vettori Vento lungo la rotta (con indicazione Headwind / Tailwind)
+    const zoom = map.getZoom();
+
+    // 1. Etichette Vettori Vento lungo la rotta (a zoom < 7 mostra solo Partenza, Metà rotta e Arrivo)
     if (fpl.length >= 2) {
-        const step = fpl.length > 8 ? 2 : 1;
+        const midIdx = Math.floor(fpl.length / 2);
+        const step = zoom < 7 ? Math.max(1, midIdx) : (fpl.length > 8 ? 2 : 1);
         for (let i = 0; i < fpl.length; i++) {
             const isEndpoint = (i === 0 || i === fpl.length - 1);
-            if (!isEndpoint && (i % step !== 0)) continue;
+            const isMid = (i === midIdx);
+            if (zoom < 7 && !isEndpoint && !isMid) continue;
+            if (zoom >= 7 && !isEndpoint && (i % step !== 0)) continue;
 
             const wp = fpl[i];
             if (wp.lat === undefined || wp.lon === undefined) continue;
@@ -1130,7 +1160,8 @@ function renderWeatherOverlay() {
         }
     }
 
-    // 2. Pillole cliccabili METAR sugli aeroporti visibili nell'inquadratura mappa
+    // 2. Pillole cliccabili METAR sugli aeroporti fuori rotta (visibili solo da zoom >= 8 per non affollare la mappa)
+    if (zoom < 8) return;
     const bounds = map.getBounds();
     const allApts = Array.isArray(airportsData) ? airportsData : [];
     let aptCount = 0;
@@ -1822,33 +1853,62 @@ function ensureNetAtcBadgeStyles() {
     const st = document.createElement('style');
     st.id = 'aeroNetAtcStyles';
     st.textContent = `
+        /* Aeroporti mondiali: a zoom < 8 mostra solo il pallino radar, rivela ICAO al passaggio mouse */
+        .world-apt-pin.apt-dot-only {
+            background: transparent !important;
+            border-color: transparent !important;
+            box-shadow: none !important;
+            padding: 2px !important;
+        }
+        .world-apt-pin.apt-dot-only .world-apt-lbl {
+            display: none;
+        }
+        .world-apt-pin.apt-dot-only:hover {
+            background: rgba(13, 17, 23, 0.94) !important;
+            border: 1px solid rgba(0, 210, 255, 0.6) !important;
+            padding: 1px 6px !important;
+            z-index: 1800 !important;
+        }
+        .world-apt-pin.apt-dot-only:hover .world-apt-lbl {
+            display: inline !important;
+        }
+
+        /* Badge ATC compatti a zoom basso: mostra icona + ICAO, espande callsign e frequenza al hover */
         .net-atc-badge {
             display: inline-flex;
             align-items: center;
-            gap: 5px;
-            background: rgba(13, 17, 23, 0.94);
+            gap: 4px;
+            background: rgba(13, 17, 23, 0.92);
             border: 1.5px solid #00d2ff;
             border-radius: 6px;
-            padding: 2px 7px 2px 3px;
+            padding: 1px 6px 1px 3px;
             font-family: Consolas, monospace;
-            font-size: 10.5px;
+            font-size: 10px;
             font-weight: 700;
             color: #e2e8f0;
             white-space: nowrap;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.7);
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.65);
             cursor: pointer;
             transform: translate(-50%, -50%);
             transition: transform 0.15s ease, box-shadow 0.15s ease;
         }
+        .net-atc-badge.atc-compact .net-atc-freq,
+        .net-atc-badge.atc-compact .net-atc-role-txt {
+            display: none;
+        }
         .net-atc-badge:hover {
             transform: translate(-50%, -50%) scale(1.08);
             box-shadow: 0 0 14px rgba(0, 210, 255, 0.65);
-            z-index: 2000;
+            z-index: 2500 !important;
+        }
+        .net-atc-badge.atc-compact:hover .net-atc-freq,
+        .net-atc-badge.atc-compact:hover .net-atc-role-txt {
+            display: inline;
         }
         .net-atc-role {
-            padding: 1px 5px;
+            padding: 1px 4px;
             border-radius: 4px;
-            font-size: 9.5px;
+            font-size: 9px;
             font-weight: 900;
             letter-spacing: 0.3px;
         }
@@ -1859,8 +1919,63 @@ function ensureNetAtcBadgeStyles() {
             padding: 0 4px;
             border-radius: 3px;
         }
+
+        /* Barra superiore compatta su una sola riga */
+        .top-pills-group .top-btn {
+            padding: 3px 7px !important;
+            font-size: 10.5px !important;
+            white-space: nowrap !important;
+        }
+        #btnToggleTooltips span,
+        #btnToggleUIMode span,
+        #btnThemeMode span {
+            display: none !important;
+        }
+        #btnThemeMode {
+            min-width: 32px !important;
+        }
     `;
     document.head.appendChild(st);
+    setupErgonomicSidebarAndTopBar();
+}
+
+function setupErgonomicSidebarAndTopBar() {
+    // 1. Rende la sezione "WAYPOINTS UTENTE (CUSTOM)" nella sidebar richiudibile a fisarmonica
+    const wpNameInp = document.getElementById('customWpName');
+    if (wpNameInp && !wpNameInp._accordionHooked) {
+        wpNameInp._accordionHooked = true;
+        const container = wpNameInp.closest('.sidebar-section') || wpNameInp.parentElement?.parentElement;
+        if (container) {
+            const titleEl = Array.from(container.parentElement.children).find(el =>
+                el !== container && el.innerText && el.innerText.toUpperCase().includes('WAYPOINTS UTENTE')
+            ) || container.querySelector('.section-title');
+
+            if (titleEl) {
+                titleEl.style.cssText += ';cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center;padding:5px 8px;background:rgba(30,41,59,0.55);border:1px solid rgba(148,163,184,0.2);border-radius:6px;margin-bottom:6px;';
+                const origTxt = titleEl.innerText.replace(/[▸▾➕]/g, '').trim();
+                let isOpen = false;
+                const formNodes = Array.from(container.children).filter(c => c !== titleEl);
+
+                const applyAcc = () => {
+                    titleEl.innerHTML = `<span>➕ ${origTxt}</span> <span style="color:#00d2ff;font-size:11px;">${isOpen ? '▾' : '▸'}</span>`;
+                    formNodes.forEach(n => { n.style.display = isOpen ? '' : 'none'; });
+                };
+                titleEl.onclick = () => { isOpen = !isOpen; applyAcc(); };
+                applyAcc();
+            }
+        }
+    }
+
+    // 2. Accorcia l'etichetta IP EFB e Filtri nella barra superiore per evitare l'andata a capo
+    const efbLbl = document.getElementById('lblEfbNet');
+    if (efbLbl && efbLbl.innerText.includes(':')) {
+        efbLbl.dataset.fullIp = efbLbl.innerText;
+        efbLbl.innerText = 'EFB Wi-Fi';
+    }
+    const fltLbl = document.getElementById('lblFilters');
+    if (fltLbl && fltLbl.innerText.length > 8) {
+        fltLbl.innerText = 'Filtri';
+    }
 }
 
 window._lastNetworkTrafficRes = null;
@@ -1870,6 +1985,15 @@ async function fetchAndRenderNetworkTraffic() {
     if (!networkLayerGroup || typeof map === 'undefined' || !map) return;
 
     ensureNetAtcBadgeStyles();
+
+    if (!map._netZoomHooked) {
+        map._netZoomHooked = true;
+        map.on('zoomend moveend', () => {
+            if (networkOverlayMode !== 'off' && window._lastNetworkTrafficRes) {
+                redrawCachedNetworkTraffic();
+            }
+        });
+    }
 
     try {
         const apiFn = window.pywebview.api.get_online_network_traffic_atc || window.pywebview.api.get_online_network_traffic;
@@ -1891,8 +2015,10 @@ function redrawCachedNetworkTraffic() {
     ensureNetAtcBadgeStyles();
     networkLayerGroup.clearLayers();
 
-    const bounds = map.getBounds().pad(0.35);
+    const zoom = map.getZoom();
+    const bounds = map.getBounds().pad(0.25);
     const refPos = (typeof lastAcftLatLng !== 'undefined' && lastAcftLatLng) ? lastAcftLatLng : map.getCenter();
+    const fplIcaos = new Set((Array.isArray(flightPlan) ? flightPlan : []).map(w => w.ident || w.icao));
 
     const rMult = (atcCoverageSettings.radiusScale || 0) / 100;
     const oMult = (atcCoverageSettings.opacityScale || 0) / 100;
@@ -1904,7 +2030,7 @@ function redrawCachedNetworkTraffic() {
         CTR: { color: '#c084fc', icon: '🕸️', radiusNm: 35, strokeOpacity: 0.35, fillOpacity: 0.025, weight: 1.1, dash: '6, 6' }
     };
 
-    // 1. TORRI E CENTRI RADAR ONLINE (TWR, APP, CTR)
+    // 1. TORRI E CENTRI RADAR ONLINE (TWR, APP, CTR) CON DECLUTTER AUTOMATICO PER ZOOM
     const activeAtcs = [];
     (res.controllers || []).forEach(c => {
         if (c.lat === undefined || c.lon === undefined) return;
@@ -1919,7 +2045,11 @@ function redrawCachedNetworkTraffic() {
         const distNm = computeDistanceNm(refPos.lat, refPos.lng, c.lat, c.lon);
         activeAtcs.push({ ...c, distNm });
 
-        if (!bounds.contains([c.lat, c.lon]) && distNm > 180) return;
+        if (!bounds.contains([c.lat, c.lon])) return;
+
+        // A zoom panoramico (< 7), mostra le TWR solo se vicine (< 70 NM) o appartenenti al Piano di Volo
+        const pfx = (c.callsign || '').split('_')[0];
+        if (zoom < 7 && c.role === 'TWR' && distNm > 70 && !fplIcaos.has(pfx)) return;
 
         const cfg = BASE_ATC_CFG[c.role] || BASE_ATC_CFG.TWR;
         const roleColor = cfg.color;
@@ -1940,13 +2070,16 @@ function redrawCachedNetworkTraffic() {
         }
 
         const netTag = isVatsim ? 'VAT' : 'IVAO';
+        const isCompact = zoom < 8.5;
+        const shortCs = isCompact ? pfx : c.callsign;
+
         const atcMarker = L.marker([c.lat, c.lon], {
             icon: L.divIcon({
                 className: '',
                 html: `
-                    <div class="net-atc-badge" style="border-color:${roleColor};">
-                        <span class="net-atc-role" style="background:${roleColor};color:#090d13;">${roleIcon} ${c.role}</span>
-                        <span class="net-atc-cs">${c.callsign}</span>
+                    <div class="net-atc-badge ${isCompact ? 'atc-compact' : ''}" style="border-color:${roleColor};">
+                        <span class="net-atc-role" style="background:${roleColor};color:#090d13;">${roleIcon}<span class="net-atc-role-txt"> ${c.role}</span></span>
+                        <span class="net-atc-cs">${shortCs}</span>
                         <span class="net-atc-freq">📻 ${c.freq}</span>
                     </div>
                 `,
