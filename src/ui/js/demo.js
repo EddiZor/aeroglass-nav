@@ -1,444 +1,846 @@
-// --- MODALITÀ DIMOSTRATIVA INTERATTIVA (TOUR GUIDATO FUMETTI LIRF -> EGLL) ---
-const DEMO_LIRF_EGLL_FPL = [
-    { ident: "LIRF", name: "Roma Fiumicino Leonardo da Vinci", lat: 41.8003, lon: 12.2389, alt_ft: 15, type: "DEP", rwy: "34L", proc_type: "SID", proc_name: "RWY 34L", metar: "LIRF 121350Z 25010KT 9999 FEW035 19/11 Q1018" },
-    { ident: "GILIO", name: "Giglio Island (SID GILIO6A)", lat: 42.3694, lon: 11.4556, alt_ft: 14000, type: "WPT", proc_type: "SID", proc_name: "GILIO6A" },
-    { ident: "ELB", name: "Elba VOR/DME", lat: 42.7306, lon: 10.3956, alt_ft: 24000, type: "VOR", proc_type: "SID", proc_name: "GILIO6A" },
-    { ident: "GEN", name: "Genova Sestri VOR", lat: 44.4144, lon: 8.8475, alt_ft: 34000, type: "VOR", proc_type: "ENR", proc_name: "UM858" },
-    { ident: "TOR", name: "Torino Caselle VOR", lat: 45.2008, lon: 7.6496, alt_ft: 36000, type: "VOR", proc_type: "ENR", proc_name: "UM729" },
-    { ident: "MOLUS", name: "Monte Bianco / Geneva FIR", lat: 46.1433, lon: 6.7725, alt_ft: 36000, type: "WPT", proc_type: "ENR", proc_name: "UN853" },
-    { ident: "DIJ", name: "Dijon Longvic VOR", lat: 47.2708, lon: 5.0972, alt_ft: 36000, type: "VOR", proc_type: "ENR", proc_name: "UM729" },
-    { ident: "RESMI", name: "Paris South Sector", lat: 48.5686, lon: 2.8919, alt_ft: 32000, type: "WPT", proc_type: "ENR", proc_name: "UN857" },
-    { ident: "ABB", name: "Abbeville VOR", lat: 50.1350, lon: 1.8547, alt_ft: 24000, type: "VOR", proc_type: "STAR", proc_name: "BIG4B" },
-    { ident: "ALESO", name: "English Channel Entry (STAR BIG4B)", lat: 50.9756, lon: 1.3539, alt_ft: 16000, type: "WPT", proc_type: "STAR", proc_name: "BIG4B" },
-    { ident: "BIG", name: "Biggin Hill VOR (IAF)", lat: 51.3308, lon: 0.0347, alt_ft: 7000, type: "VOR", proc_type: "STAR", proc_name: "BIG4B" },
-    { ident: "EGLL", name: "London Heathrow", lat: 51.4700, lon: -0.4543, alt_ft: 83, type: "DEST", rwy: "27L", proc_type: "APPR", proc_name: "APPR RWY 27L", metar: "EGLL 121350Z 26014KT 9999 SCT028 BKN045 13/08 Q1014" }
-];
+// ============================================================================
+// 🎓 AEROGLASS-NAV — TOUR GUIDATO INTERATTIVO AD ALTA LEGGIBILITÀ (demo.js)
+// ============================================================================
 
-const DEMO_LIRF_EGLL_ALT = {
-    ident: "EGKK",
-    name: "London Gatwick (Alternate)",
-    lat: 51.1481,
-    lon: -0.1903
-};
+window._demoTourActive = false;
+let _demoStepIndex = 0;
+let _demoAutoTimer = null;
+let _demoAutoPlay = true;
+const DEMO_AUTO_INTERVAL_MS = 9000;
 
-let demoState = {
-    stepIndex: 0,
-    autoPlay: true,
-    timerId: null,
-    backupFpl: null,
-    backupAlt: null,
-    backupFuelCfg: null
-};
+function getDemoSteps() {
+    const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
 
-function closeAllModalsForDemo() {
-    if (typeof closeNavlogModal === 'function') closeNavlogModal();
-    if (typeof closeFuelPerfModal === 'function') closeFuelPerfModal();
-    if (typeof closeEfbNetworkModal === 'function') closeEfbNetworkModal();
-    if (typeof closeCreateFplModal === 'function') closeCreateFplModal();
-    if (typeof closeFlightHistoryModal === 'function') closeFlightHistoryModal();
-    if (typeof toggleScratchpad === 'function') toggleScratchpad(false);
+    if (isEn) {
+        return [
+            {
+                target: null,
+                badge: "WELCOME • v0.7.1",
+                title: "✈️ Welcome to AeroGlass-Nav",
+                body: `
+                    <p><b>AeroGlass-Nav</b> is your tactical Flight Planner & Moving Map in <b>Dark Cockpit</b> style for Microsoft Flight Simulator 2024.</p>
+                    <div class="demo-feature-grid">
+                        <div>🌍 <b>40,000+ World Airports</b> (SQLite + Progressive LOD)</div>
+                        <div>🌐 <b>Live VATSIM & IVAO</b> (Nearby Traffic & ATC Radar)</div>
+                        <div>📝 <b>EFB Scratchpad & Measure</b> (C.R.A.F.T. Pad & Ruler)</div>
+                        <div>📉 <b>Multi-Step VNAV & ToD</b> (Terrain & Cloud Scanner)</div>
+                    </div>
+                    <p class="demo-tip">💡 Use <b>← / →</b> arrows to navigate, <b>Space</b> for auto-play, or <b>Esc / F1</b> to exit at any time.</p>
+                `
+            },
+            {
+                target: "#sidebarPanel",
+                badge: "STEP 1 • FLIGHT PLANNING",
+                title: "🗺️ Flight Plan, SimBrief & .PLN",
+                body: `
+                    <p>Manage your entire route from the collapsible side panel:</p>
+                    <ul>
+                        <li><b>✈️ SimBrief OFP:</b> Download your latest flight plan with cruise altitudes, winds and METARs in one click.</li>
+                        <li><b>📂 Import / Export .PLN:</b> Load or drag-and-drop MSFS <code>.pln</code> files directly onto the map.</li>
+                        <li><b>🖐️ Rubber Banding:</b> Drag any leg on the map to insert intermediate waypoints on the fly.</li>
+                    </ul>
+                `
+            },
+            {
+                target: "#omniSearch",
+                badge: "STEP 2 • QUICK SEARCH",
+                title: "🔍 Instant ICAO Search & Map Centering",
+                body: `
+                    <p>Type any <b>ICAO code</b> (e.g. <code>LIRQ</code>, <code>LIPZ</code>, <code>LIKL</code>), VOR or airport name and press <b>Enter</b>:</p>
+                    <ul>
+                        <li>The map smoothly flies to the airport at tactical zoom.</li>
+                        <li>Opens the live <b>METAR card</b> with <b>Recommended Runway</b> (headwind/crosswind) and clickable radio frequencies.</li>
+                    </ul>
+                `
+            },
+            {
+                target: "#btnToggleGroundMap",
+                badge: "STEP 3 • WORLD AIRPORTS & GROUND MAP",
+                title: "🛫 Progressive Declutter (LOD) & Runways",
+                body: `
+                    <p>The map automatically adapts airport density to your zoom level to keep the chart clean:</p>
+                    <ul>
+                        <li><b>Continental Zoom (&lt; 8):</b> Shows major hubs as discrete radar dots (hover to reveal ICAO).</li>
+                        <li><b>Regional & VFR Zoom (&ge; 9.5):</b> Reveals medium airports and VFR airfields.</li>
+                        <li><b>Ground Map (&ge; 13.5):</b> Dynamically renders runway thresholds and surfaces directly from the SQLite database!</li>
+                    </ul>
+                `
+            },
+            {
+                target: "#btnToggleWeather",
+                badge: "STEP 4 • LIVE WEATHER",
+                title: "💨 Route Wind Vectors & METAR Pills",
+                body: `
+                    <p>Activate <b>WX / Meteo</b> to monitor real-time atmospheric conditions along your flight plan:</p>
+                    <ul>
+                        <li><b>Wind Badges:</b> Displays wind direction/speed and automatic <b>Headwind (HW)</b>, <b>Tailwind (TW)</b> or <b>Crosswind (XW)</b> components.</li>
+                        <li><b>Flight Categories:</b> Color-coded dots (<b style="color:#2ea043;">VFR</b>, <b style="color:#00d2ff;">MVFR</b>, <b style="color:#f85149;">IFR</b>, <b style="color:#e040fb;">LIFR</b>) on visible airports.</li>
+                    </ul>
+                `
+            },
+            {
+                target: "#btnToggleNetwork",
+                badge: "STEP 5 • ONLINE NETWORKS",
+                title: "🌐 VATSIM & IVAO Live Traffic + ATC",
+                body: `
+                    <p>Click <b>🌐 Online</b> to cycle between <b>OFF</b>, <b>ON (Both)</b>, <b>IVAO</b>, and <b>VATSIM</b> (auto-refreshed every 60 seconds):</p>
+                    <ul>
+                        <li><b>Active ATC Stations:</b> Displays online <b>🗼 TWR</b>, <b>📡 APP</b>, and <b>🕸️ CTR</b> radar centers with coverage rings and radio frequencies.</li>
+                        <li><b>One-Click Tuning:</b> Click any ATC badge on the map to copy its frequency directly into your EFB Scratchpad!</li>
+                        <li><b>Nearby Aircraft:</b> Shows live pilots around your position with altitude, ground speed, and distance in NM.</li>
+                    </ul>
+                `
+            },
+            {
+                target: "#btnAtcRadarCfg",
+                badge: "STEP 6 • RADAR CALIBRATION",
+                title: "🎚️ Real-Time ATC Coverage Sliders",
+                body: `
+                    <p>Click the <b>🎚️</b> button (or right-click <b>🌐 Online</b>) to customize the radar overlay at 60 FPS:</p>
+                    <ul>
+                        <li><b>⭕ ATC Circle Radius (0%–250%):</b> Scale TWR/APP/CTR rings or set to 0% to show badges only.</li>
+                        <li><b>🔆 Coverage Opacity:</b> Adjust ring transparency over the base chart.</li>
+                        <li><b>✈️ Nearby Aircraft Range (20–300 NM)</b> & individual <b>TWR / APP / CTR</b> filters.</li>
+                    </ul>
+                `,
+                onEnter: () => {
+                    if (typeof ensureAtcRadarPopoverDOM === 'function') ensureAtcRadarPopoverDOM();
+                    const pop = document.getElementById('aeroAtcRadarPopover');
+                    const btn = document.getElementById('btnAtcRadarCfg');
+                    if (pop && btn) {
+                        const rect = btn.getBoundingClientRect();
+                        pop.style.left = Math.max(160, Math.min(window.innerWidth - 170, rect.left + rect.width / 2)) + 'px';
+                        pop.style.top = (rect.bottom + 8) + 'px';
+                        pop.style.display = 'flex';
+                    }
+                },
+                onLeave: () => {
+                    const pop = document.getElementById('aeroAtcRadarPopover');
+                    if (pop) pop.style.display = 'none';
+                }
+            },
+            {
+                target: "#btnToggleScratchpad",
+                badge: "STEP 7 • ELECTRONIC FLIGHT BAG",
+                title: "📝 EFB Scratchpad: ATC Pad, Draw & Freq",
+                body: `
+                    <p>Your cockpit kneeboard for ATC clearances and notes:</p>
+                    <ul>
+                        <li><b>📋 ATC PAD:</b> Quick fields for <code>SQUAWK</code>, <code>QNH</code>, <code>ALT/FL</code>, <code>HDG</code>, <code>SPEED</code>, and <code>NEXT FREQ</code>, plus <b>🔄 SIM</b> sync.</li>
+                        <li><b>✏️ DRAW:</b> Freehand canvas with multi-color pen and eraser.</li>
+                        <li><b>📻 FREQ:</b> Automatically lists nearby online <b>VATSIM/IVAO controllers</b>, VORs, ILS, and emergency frequencies.</li>
+                    </ul>
+                `,
+                onEnter: () => {
+                    if (typeof toggleScratchpad === 'function') toggleScratchpad(true);
+                },
+                onLeave: () => {
+                    if (typeof toggleScratchpad === 'function') toggleScratchpad(false);
+                }
+            },
+            {
+                target: "#btnToggleMeasure",
+                badge: "STEP 8 • TACTICAL RULER",
+                title: "📏 Distance, Heading & ETE Measure Tool",
+                body: `
+                    <p>Measure any leg on the fly using the <b>📏 Measure</b> button or simply by <b>Right-Clicking</b> anywhere on the map:</p>
+                    <ul>
+                        <li>Shows <b>Distance (NM & km)</b>, <b>Magnetic & True Bearing (°M / °T)</b>, and real-time <b>ETE</b> based on your Ground Speed.</li>
+                        <li>Click the badge or press <b>Esc</b> to clear the measurement.</li>
+                    </ul>
+                `
+            },
+            {
+                target: "#btnNavlogTop",
+                badge: "STEP 9 • LOGS & PERFORMANCE",
+                title: "📋 NavLog, Fuel Calculator & SQLite Logbook",
+                body: `
+                    <p>Complete flight preparation and post-flight tracking tools:</p>
+                    <ul>
+                        <li><b>📋 NavLog:</b> Printable route table with magnetic tracks, distances, ETE/ETA, and progressive fuel burn.</li>
+                        <li><b>⛽ Fuel & Perf:</b> Customize TAS, fuel flow, taxi, contingency, and reserve fuel.</li>
+                        <li><b>📒 Logbook:</b> Automatically records your flights upon landing in the local SQLite database.</li>
+                    </ul>
+                `
+            },
+            {
+                target: "#elevationDrawer",
+                badge: "STEP 10 • VNAV & CLOUDS",
+                title: "📉 Multi-Step VNAV, ToD & Cloud Scanner",
+                body: `
+                    <p>The bottom drawer displays your vertical profile against real terrain elevation:</p>
+                    <ul>
+                        <li><b>Top of Descent (ToD):</b> Calculates the exact descent point and required vertical speed (fpm) for a 3° glidepath.</li>
+                        <li><b>☁️ CLOUDS Scanner:</b> Select <code>AUTO (ACFT)</code> or <code>FL050–FL300</code> to project METAR cloud layers onto the map and VNAV chart, with live <b>IMC</b> alerts.</li>
+                    </ul>
+                `
+            },
+            {
+                target: "#aeroCompassWidget",
+                badge: "STEP 11 • ERGONOMICS & EFB WI-FI",
+                title: "🧭 Compass Rose, UI Modes & Tablet Wi-Fi",
+                body: `
+                    <p>Tailor the interface to any cockpit lighting or screen setup:</p>
+                    <ul>
+                        <li><b>🧭 Compass Rose:</b> Rotates with the map in Track-Up mode; click it anytime to reset <b>North-Up (360°)</b>.</li>
+                        <li><b>🎛️ UI & Themes:</b> Switch between Extended/Simple modes and <b>Dark / Night / Day</b> cockpit themes.</li>
+                        <li><b>📱 EFB Wi-Fi:</b> Click the top-left EFB badge to scan the QR Code and open AeroGlass-Nav live on your iPad or Android tablet!</li>
+                    </ul>
+                `
+            }
+        ];
+    }
+
+    return [
+        {
+            target: null,
+            badge: "BENVENUTO • v0.7.1",
+            title: "✈️ Benvenuto in AeroGlass-Nav",
+            body: `
+                <p><b>AeroGlass-Nav</b> è il tuo Flight Planner & Moving Map tattico in stile <b>Dark Cockpit</b> progettato per Microsoft Flight Simulator 2024.</p>
+                <div class="demo-feature-grid">
+                    <div>🌍 <b>40.000+ Aeroporti Mondiali</b> (SQLite + Declutter LOD)</div>
+                    <div>🌐 <b>Traffico & ATC VATSIM/IVAO</b> (TWR, APP, CTR & Frequenze)</div>
+                    <div>📝 <b>Scratchpad EFB & Righello</b> (Note ATC, Disegno & ETE)</div>
+                    <div>📉 <b>Profilo VNAV & Cloud Scan</b> (Terreno, ToD e Nuvole)</div>
+                </div>
+                <p class="demo-tip">💡 Usa le frecce <b>← / →</b> per scorrere i passaggi, <b>Spazio</b> per lo scorrimento automatico o <b>Esc / F1</b> per chiudere.</p>
+            `
+        },
+        {
+            target: "#sidebarPanel",
+            badge: "PASSO 1 • PIANIFICAZIONE VOLO",
+            title: "🗺️ Piano di Volo, SimBrief & File .PLN",
+            body: `
+                <p>Dal pannello laterale sinistro gestisci l'intera rotta e i Waypoint:</p>
+                <ul>
+                    <li><b>✈️ SimBrief OFP:</b> Scarica con un clic l'ultimo piano di volo generato su SimBrief completo di quote, venti e METAR.</li>
+                    <li><b>📂 Importa / Esporta .PLN:</b> Carica o trascina (Drag & Drop) file <code>.pln</code> di MSFS direttamente sulla mappa.</li>
+                    <li><b>➕ Waypoints Utente:</b> Sezione a fisarmonica per salvare punti VFR personalizzati nel database SQLite o catturarli con un clic sulla mappa.</li>
+                </ul>
+            `
+        },
+        {
+            target: "#omniSearch",
+            badge: "PASSO 2 • RICERCA ISTANTANEA",
+            title: "🔍 Ricerca Rapida ICAO & Centratura Mappa",
+            body: `
+                <p>Digita qualsiasi codice <b>ICAO</b> (es. <code>LIRQ</code>, <code>LIPZ</code>, <code>LIKL</code>, <code>LITY</code>), un VOR o il nome di una città e premi <b>Invio</b>:</p>
+                <ul>
+                    <li>La mappa si centra automaticamente sullo scalo con zoom ravvicinato.</li>
+                    <li>Si apre subito la scheda <b>METAR live</b> con il calcolo della <b>Pista Consigliata</b> in base al vento, lunghezze piste e frequenze radio cliccabili.</li>
+                </ul>
+            `
+        },
+        {
+            target: "#btnToggleGroundMap",
+            badge: "PASSO 3 • AEROPORTI MONDIALI & PISTE",
+            title: "🛫 Declutter Intelligente (LOD) & Mappa Piste",
+            body: `
+                <p>Il motore cartografico regola automaticamente i dettagli in base al livello di zoom per mantenere la mappa sempre pulita:</p>
+                <ul>
+                    <li><b>Zoom Continentale (&lt; 8):</b> Mostra solo i grandi scali come discreti pallini radar (passa il mouse per leggere il codice ICAO).</li>
+                    <li><b>Zoom Regionale e VFR (&ge; 9.5):</b> Rivela progressivamente gli aeroporti medi e le aviosuperfici VFR.</li>
+                    <li><b>Ground Map (&ge; 13.5):</b> Disegna in tempo reale le piste orientate con testate e superficie attingendo al database SQLite mondiale (oltre ai layout completi di taxiway e stand per <code>LIKL</code>, <code>LIPD</code>, <code>LITY</code>).</li>
+                </ul>
+            `
+        },
+        {
+            target: "#btnToggleWeather",
+            badge: "PASSO 4 • METEO E VENTI IN ROTTA",
+            title: "💨 Vettori Vento & Bollettini METAR",
+            body: `
+                <p>Attivando <b>💨 Meteo: ON</b> visualizzi la situazione atmosferica lungo il piano di volo:</p>
+                <ul>
+                    <li><b>Badge Vento in Quota:</b> Mostrano direzione/intensità del vento e calcolano la componente di <b>Vento Contrario (HW)</b>, <b>Vento in Coda (TW)</b> o <b>Traverso (XW)</b>.</li>
+                    <li><b>Categorie di Volo:</b> Indicatori luminosi (<b style="color:#2ea043;">VFR</b>, <b style="color:#00d2ff;">MVFR</b>, <b style="color:#f85149;">IFR</b>, <b style="color:#e040fb;">LIFR</b>) sugli aeroporti in vista.</li>
+                </ul>
+            `
+        },
+        {
+            target: "#btnToggleNetwork",
+            badge: "PASSO 5 • RETI DI VOLO ONLINE",
+            title: "🌐 Traffico Live VATSIM / IVAO & Copertura ATC",
+            body: `
+                <p>Clicca su <b>🌐 Online</b> per ciclare tra <b>OFF</b>, <b>ON (Entrambi)</b>, <b>IVAO</b> e <b>VATSIM</b> (aggiornamento asincrono ogni 60 secondi):</p>
+                <ul>
+                    <li><b>Controllori ATC Online:</b> Visualizza sulla mappa Torri (<b>🗼 TWR</b> in verde), Avvicinamenti (<b>📡 APP</b> in ciano) e Centri Radar (<b>🕸️ CTR</b> in viola) con cerchi di copertura e frequenza radio.</li>
+                    <li><b>Sintonia Rapida:</b> Clicca su qualsiasi badge ATC per inviare la frequenza direttamente alla casella <code>NEXT FREQ</code> dello Scratchpad EFB!</li>
+                    <li><b>Aerei Vicini:</b> Mostra il traffico nelle immediate vicinanze con quota, Ground Speed e distanza in NM.</li>
+                </ul>
+            `
+        },
+        {
+            target: "#btnAtcRadarCfg",
+            badge: "PASSO 6 • CALIBRAZIONE RADAR",
+            title: "🎚️ Slider Raggio, Opacità & Filtri ATC",
+            body: `
+                <p>Clicca sul pulsante <b>🎚️</b> (o fai <b>Clic Destro</b> su <b>🌐 Online</b>) per aprire il pannello di calibrazione istantanea a 60 FPS:</p>
+                <ul>
+                    <li><b>⭕ Raggio Cerchi ATC (0%–250%):</b> Allarga o riduci gli anelli di copertura (a <code>0%</code> nasconde i cerchi lasciando solo i badge).</li>
+                    <li><b>🔆 Opacità Copertura:</b> Regola la trasparenza dei cerchi sulla mappa.</li>
+                    <li><b>✈️ Raggio Aerei Vicini (20–300 NM)</b> e pulsanti per attivare/disattivare singolarmente <b>🗼 TWR</b>, <b>📡 APP</b> e <b>🕸️ CTR</b>.</li>
+                </ul>
+            `,
+            onEnter: () => {
+                if (typeof ensureAtcRadarPopoverDOM === 'function') ensureAtcRadarPopoverDOM();
+                const pop = document.getElementById('aeroAtcRadarPopover');
+                const btn = document.getElementById('btnAtcRadarCfg');
+                if (pop && btn) {
+                    const rect = btn.getBoundingClientRect();
+                    pop.style.left = Math.max(160, Math.min(window.innerWidth - 170, rect.left + rect.width / 2)) + 'px';
+                    pop.style.top = (rect.bottom + 8) + 'px';
+                    pop.style.display = 'flex';
+                }
+            },
+            onLeave: () => {
+                const pop = document.getElementById('aeroAtcRadarPopover');
+                if (pop) pop.style.display = 'none';
+            }
+        },
+        {
+            target: "#btnToggleScratchpad",
+            badge: "PASSO 7 • BLOCCO NOTE DI BORDO",
+            title: "📝 Scratchpad EFB: Clearance ATC, Disegno & Freq",
+            body: `
+                <p>Il tuo cosciale elettronico sempre a portata di clic:</p>
+                <ul>
+                    <li><b>📋 ATC PAD:</b> Campi rapidi per <code>SQUAWK</code>, <code>QNH</code>, <code>ALT/FL</code>, <code>HDG</code>, <code>SPEED</code> e <code>NEXT FREQ</code>, con pulsante <b>🔄 SIM</b> per copiare QNH e quota dal simulatore.</li>
+                    <li><b>✏️ DISEGNO:</b> Lavagna grafica a mano libera con 4 colori e gomma per schizzi di rullaggio o holding.</li>
+                    <li><b>📻 FREQ:</b> Elenca automaticamente in cima i <b>controllori ATC online più vicini</b>, oltre a UNICOM, emergenza, VOR e ILS.</li>
+                </ul>
+            `,
+            onEnter: () => {
+                if (typeof toggleScratchpad === 'function') toggleScratchpad(true);
+            },
+            onLeave: () => {
+                if (typeof toggleScratchpad === 'function') toggleScratchpad(false);
+            }
+        },
+        {
+            target: "#btnToggleMeasure",
+            badge: "PASSO 8 • MISURAZIONE RAPIDA",
+            title: "📏 Righello Tattico (Distanza, Prua & ETE)",
+            body: `
+                <p>Attiva il pulsante <b>📏 Righello</b> oppure usa direttamente il <b>Clic Destro del mouse</b> su due punti qualsiasi della mappa:</p>
+                <ul>
+                    <li>Calcola all'istante <b>Distanza (NM e km)</b>, <b>Prua Magnetica e Vera (°M / °T)</b> e il <b>tempo di volo stimato (ETE)</b> alla tua Ground Speed attuale.</li>
+                    <li>Clicca sul badge giallo o premi <b>Esc</b> per rimuovere il righello.</li>
+                </ul>
+            `
+        },
+        {
+            target: "#btnNavlogTop",
+            badge: "PASSO 9 • STRUMENTI DI VOLO",
+            title: "📋 NavLog, Calcolatore Fuel & Logbook SQLite",
+            body: `
+                <p>Pianificazione pesi/carburante e archivio storico dei tuoi voli:</p>
+                <ul>
+                    <li><b>📋 NavLog:</b> Tabella di marcia completa con prue, distanze parziali/totali, tempi ETE/ETA e consumo progressivo.</li>
+                    <li><b>⛽ Fuel & Perf:</b> Calcola Block Fuel, Trip Fuel, contingenza e riserve in base a TAS e consumo orario del tuo aereo.</li>
+                    <li><b>📒 Logbook:</b> Registra automaticamente ogni volo all'atterraggio nel database SQLite locale.</li>
+                </ul>
+            `
+        },
+        {
+            target: "#elevationDrawer",
+            badge: "PASSO 10 • PROFILO VERTICALE & NUVOLE",
+            title: "📉 Profilo VNAV, Top of Descent & Cloud Scanner",
+            body: `
+                <p>Il cassetto inferiore mostra la sezione verticale della rotta rispetto al profilo altimetrico del terreno:</p>
+                <ul>
+                    <li><b>Top of Descent (ToD):</b> Calcola e posiziona sulla rotta e sul grafico il punto esatto di inizio discesa (sentiero 3°) e il rateo verticale richiesto (fpm).</li>
+                    <li><b>☁️ CLOUDS Scanner:</b> Seleziona <code>AUTO (ACFT)</code> o <code>FL050–FL300</code> per proiettare gli strati nuvolosi METAR sulla mappa e sul grafico VNAV, con avviso <b>IMC</b> quando voli dentro le nubi.</li>
+                </ul>
+            `
+        },
+        {
+            target: "#aeroCompassWidget",
+            badge: "PASSO 11 • BUSSOLA, TEMI & TABLET WI-FI",
+            title: "🧭 Rosa dei Venti, Temi Visivi & EFB Wi-Fi",
+            body: `
+                <p>Controllo totale dell'orientamento mappa e utilizzo multi-schermo:</p>
+                <ul>
+                    <li><b>🧭 Rosa dei Venti:</b> Ruota dinamicamente in modalità <i>Track-Up</i>; cliccala in qualsiasi momento per riallineare il <b>Nord in Alto (360°)</b>.</li>
+                    <li><b>🎛️ Vista & Temi:</b> Passa tra interfaccia <b>Estesa / Semplice</b> e temi <b>🌙 Dark / 🌑 Notte / ☀️ Giorno</b>.</li>
+                    <li><b>📱 EFB Wi-Fi:</b> Clicca sul primo pulsante in alto a sinistra per mostrare il <b>QR Code</b> e usare AeroGlass-Nav in diretta sul tuo iPad o tablet Android!</li>
+                </ul>
+            `
+        }
+    ];
 }
 
-function simulateDemoAircraftInFlight(lat, lon, hdg) {
-    if (typeof map === 'undefined' || !map) return;
-    const acftPos = L.latLng(lat, lon);
-    lastAcftLatLng = acftPos;
-    lastAcftHdgTrue = hdg;
-
-    document.getElementById('simStatus').innerText = "DEMO LIVE";
-    document.getElementById('simDot').className = 'status-dot live';
-    document.getElementById('valAlt').innerText = "36,000 ft";
-    document.getElementById('valGs').innerText = "455 kt";
-    document.getElementById('valHdg').innerText = `${hdg}°`;
-    document.getElementById('valAcft').innerText = "Airbus A320neo";
-
-    if (typeof getAircraftSvgIcon === 'function') {
-        const svgContent = getAircraftSvgIcon("Airbus A320neo");
-        const dynamicIcon = L.divIcon({
-            className: '',
-            html: `<div id="acftSvg" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;transform-origin:center center;filter:drop-shadow(0 0 10px #38bdf8) drop-shadow(0 0 20px #38bdf8);transform:rotate(${hdg}deg);">${svgContent}</div>`,
-            iconSize: [36, 36],
-            iconAnchor: [18, 18]
-        });
-        if (!aircraftMarker) {
-            aircraftMarker = L.marker(acftPos, { icon: dynamicIcon, zIndexOffset: 1000 }).addTo(map);
-        } else {
-            aircraftMarker.setLatLng(acftPos);
-            aircraftMarker.setIcon(dynamicIcon);
-        }
+function ensureDemoTourDOM() {
+    if (!document.getElementById('aeroDemoTourStyles')) {
+        const st = document.createElement('style');
+        st.id = 'aeroDemoTourStyles';
+        st.textContent = `
+            #aeroDemoSpotlight {
+                position: fixed;
+                z-index: 9990;
+                pointer-events: none;
+                border: 2.5px solid #00d2ff;
+                border-radius: 10px;
+                box-shadow: 0 0 0 9999px rgba(4, 7, 13, 0.68), 0 0 24px rgba(0, 210, 255, 0.85), inset 0 0 12px rgba(0, 210, 255, 0.35);
+                transition: all 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+                display: none;
+            }
+            #aeroDemoCard {
+                position: fixed;
+                z-index: 9995;
+                width: min(540px, calc(100vw - 32px));
+                background: rgba(13, 18, 28, 0.97);
+                border: 1.5px solid rgba(0, 210, 255, 0.55);
+                border-radius: 14px;
+                padding: 20px 22px 18px 22px;
+                color: #f1f5f9;
+                font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+                box-shadow: 0 18px 48px rgba(0, 0, 0, 0.88), 0 0 28px rgba(0, 210, 255, 0.22);
+                backdrop-filter: blur(16px);
+                display: none;
+                flex-direction: column;
+                gap: 12px;
+                transition: top 0.25s ease, left 0.25s ease;
+            }
+            .demo-header-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+            }
+            .demo-step-badge {
+                background: rgba(0, 210, 255, 0.16);
+                border: 1px solid rgba(0, 210, 255, 0.45);
+                color: #38bdf8;
+                font-family: Consolas, monospace;
+                font-size: 11px;
+                font-weight: 800;
+                padding: 3px 9px;
+                border-radius: 6px;
+                letter-spacing: 0.6px;
+            }
+            .demo-close-btn {
+                background: rgba(248, 81, 73, 0.14);
+                border: 1px solid rgba(248, 81, 73, 0.4);
+                color: #f85149;
+                font-size: 12px;
+                font-weight: 700;
+                padding: 3px 9px;
+                border-radius: 6px;
+                cursor: pointer;
+            }
+            .demo-close-btn:hover {
+                background: rgba(248, 81, 73, 0.28);
+            }
+            .demo-title {
+                font-size: 19px;
+                font-weight: 800;
+                color: #ffffff;
+                margin: 0;
+                letter-spacing: 0.2px;
+            }
+            .demo-body {
+                font-size: 14.5px;
+                line-height: 1.58;
+                color: #cbd5e1;
+            }
+            .demo-body p {
+                margin: 0 0 8px 0;
+            }
+            .demo-body ul {
+                margin: 6px 0 4px 0;
+                padding-left: 20px;
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+            }
+            .demo-body li {
+                color: #e2e8f0;
+            }
+            .demo-body code {
+                background: rgba(0, 210, 255, 0.14);
+                border: 1px solid rgba(0, 210, 255, 0.3);
+                color: #38bdf8;
+                font-family: Consolas, monospace;
+                font-size: 13px;
+                padding: 1px 5px;
+                border-radius: 4px;
+            }
+            .demo-feature-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+                margin: 10px 0;
+            }
+            .demo-feature-grid > div {
+                background: rgba(30, 41, 59, 0.65);
+                border: 1px solid rgba(148, 163, 184, 0.22);
+                border-radius: 8px;
+                padding: 8px 10px;
+                font-size: 12.5px;
+                color: #f8fafc;
+            }
+            .demo-tip {
+                margin-top: 8px !important;
+                background: rgba(52, 211, 153, 0.12);
+                border-left: 3px solid #34d399;
+                padding: 6px 10px;
+                border-radius: 4px;
+                font-size: 12.5px;
+                color: #a7f3d0;
+            }
+            .demo-dots-row {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+                padding-top: 2px;
+            }
+            .demo-dot {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background: rgba(148, 163, 184, 0.35);
+                cursor: pointer;
+                transition: all 0.2s ease;
+            }
+            .demo-dot.active {
+                width: 22px;
+                border-radius: 5px;
+                background: #00d2ff;
+                box-shadow: 0 0 8px rgba(0, 210, 255, 0.8);
+            }
+            .demo-footer-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+                border-top: 1px solid rgba(148, 163, 184, 0.2);
+                padding-top: 12px;
+                margin-top: 2px;
+            }
+            .demo-nav-btn {
+                background: rgba(30, 41, 59, 0.85);
+                border: 1px solid rgba(148, 163, 184, 0.35);
+                color: #e2e8f0;
+                font-size: 13px;
+                font-weight: 700;
+                padding: 7px 14px;
+                border-radius: 8px;
+                cursor: pointer;
+                transition: all 0.15s ease;
+            }
+            .demo-nav-btn:hover {
+                border-color: #00d2ff;
+                color: #ffffff;
+            }
+            .demo-nav-btn.primary {
+                background: linear-gradient(135deg, #0284c7, #00d2ff);
+                border-color: #38bdf8;
+                color: #090d13;
+                font-weight: 800;
+            }
+            .demo-nav-btn.primary:hover {
+                filter: brightness(1.1);
+            }
+        `;
+        document.head.appendChild(st);
     }
 
-    const acftLine = document.getElementById('acftVnavLine');
-    if (acftLine && typeof calculateRouteProgress === 'function') {
-        const res = calculateRouteProgress(lat, lon);
-        if (res) {
-            const xPos = res.fraction * 1000;
-            acftLine.setAttribute('x1', xPos);
-            acftLine.setAttribute('x2', xPos);
-            acftLine.style.display = 'block';
-            if (typeof updateActiveWaypointHighlight === 'function') {
-                updateActiveWaypointHighlight(lat, lon, hdg);
-            }
-        }
-    }
-    if (typeof updateTodHeaderStatus === 'function') updateTodHeaderStatus();
-}
-
-const DEMO_TOUR_STEPS = [
-    {
-        title: "🎬 Benvenuto nel Tour Dimostrativo (LIRF ➔ EGLL)",
-        desc: "Abbiamo caricato un piano di volo IFR completo da <strong>Roma Fiumicino (LIRF)</strong> a <strong>London Heathrow (EGLL)</strong> con un <em>Airbus A320neo</em> simulato in crociera a <strong>FL360</strong> sulle Alpi.",
-        targetSelector: ".telemetry-bar",
-        placement: "bottom",
-        action: () => {
-            closeAllModalsForDemo();
-            if (!sidebarOpen) toggleSidebar();
-            if (!drawerOpen) toggleDrawer();
-            simulateDemoAircraftInFlight(45.68, 7.21, 322);
-            if (typeof map !== 'undefined' && map) {
-                map.flyToBounds([[41.8, 12.2], [51.5, -0.45]], { padding: [70, 70], duration: 1.0 });
-            }
-        }
-    },
-    {
-        title: "📋 Piano di Volo Attivo, METAR & Procedure",
-        desc: "Nel pannello laterale visualizzi tutte le tratte con codifica colore automatica: <span style='color:#34d399;font-weight:700;'>SID (Verde)</span>, <span style='color:#c084fc;font-weight:700;'>Crociere (Magenta)</span>, <span style='color:#fbbf24;font-weight:700;'>STAR (Ambra)</span> e <span style='color:#38bdf8;font-weight:700;'>Approcci ILS (Ciano)</span>, più i bollettini METAR decodificati.",
-        targetSelector: "#fplContainer",
-        placement: "right",
-        action: () => {
-            closeAllModalsForDemo();
-            if (!sidebarOpen) toggleSidebar();
-        }
-    },
-    {
-        title: "📏 Righello Tattico & Misura Distanza/Prua (Measure Tool)",
-        desc: "Cliccando sul pulsante <strong>Righello</strong> (o usando il <strong>clic destro sulla mappa</strong>), puoi tracciare linee di misura per calcolare istantaneamente distanza in <strong>NM</strong>, prua magnetica/vera (<strong>HDG</strong>) e tempo stimato (<strong>ETE</strong>) alla Ground Speed attuale.",
-        targetSelector: "#btnToggleMeasure",
-        placement: "bottom",
-        action: () => {
-            closeAllModalsForDemo();
-            if (typeof clearMeasureTool === 'function') clearMeasureTool(true);
-        }
-    },
-    {
-        title: "📝 Scratchpad EFB & Frequenze Comuni",
-        desc: "Il pannello a scomparsa <strong>Note EFB</strong> ti permette di annotare al volo autorizzazioni ATC (Squawk, QNH, FL, vettori), disegnare a mano libera su canvas touch e consultare le frequenze radio d'emergenza, UNICOM e VOR/ILS vicine.",
-        targetSelector: "#btnToggleScratchpad",
-        placement: "bottom",
-        action: () => {
-            closeAllModalsForDemo();
-            if (typeof toggleScratchpad === 'function') toggleScratchpad(true);
-        }
-    },
-    {
-        title: "🌍 Database Aeroporti Mondiali & Piste (Ground Map)",
-        desc: "La mappa carica dinamicamente oltre 40.000 aeroporti mondiali in base al livello di zoom e al bounding box. Avvicinandosi agli scali (o cercando un ICAO), vengono generate automaticamente le geometrie vettoriali delle piste, dei raccordi e dei parcheggi.",
-        targetSelector: "#btnToggleGroundMap",
-        placement: "bottom",
-        action: () => {
-            closeAllModalsForDemo();
-            if (typeof toggleScratchpad === 'function') toggleScratchpad(false);
-            if (typeof map !== 'undefined' && map) map.setView([45.5053, 12.3519], 15, { duration: 1.0 });
-        }
-    },
-    {
-        title: "☁️ Copertura Nuvolosa & VNAV Cloud Scan",
-        desc: "Il selettore <strong>Clouds</strong> nel cassetto altimetrico ti permette di analizzare gli strati nuvolosi METAR (FEW, SCT, BKN, OVC) alla quota dell'aereo o a livelli di volo fissi, evidenziando le celle IMC e proiettando la linea di scansione sul profilo VNAV.",
-        targetSelector: "#vnavCloudSelector",
-        placement: "top",
-        action: () => {
-            closeAllModalsForDemo();
-            if (!drawerOpen) toggleDrawer();
-        }
-    },
-    {
-        title: "🌐 Traffico Online Live (VATSIM / IVAO)",
-        desc: "Attivando l'overlay di rete puoi visualizzare in tempo reale i piloti connessi su <strong>VATSIM</strong> (in giallo) e <strong>IVAO</strong> (in ciano) direttamente sulla mappa, con callsign, quota e velocità.",
-        targetSelector: "#btnToggleNetwork",
-        placement: "bottom",
-        action: () => {
-            closeAllModalsForDemo();
-        }
-    },
-    {
-        title: "⛰️ Profilo Altimetrico VNAV & Top of Descent (ToD)",
-        desc: "Il grafico inferiore mostra l'orografia reale delle <strong>Alpi</strong> sotto la rotta, la linea magenta dell'aereo in volo e calcola automaticamente il <strong>📉 Top of Descent (ToD a 3°)</strong> con il rateo verticale richiesto (fpm).",
-        targetSelector: "#elevationDrawer",
-        placement: "top",
-        action: () => {
-            closeAllModalsForDemo();
-            if (!drawerOpen) toggleDrawer();
-            if (typeof map !== 'undefined' && map) map.flyTo([46.0, 6.9], 7, { duration: 1.0 });
-        }
-    },
-    {
-        title: "📋 Tabella Operativa NavLog (ETE, ETA & Consumi)",
-        desc: "Aprendo il <strong>NavLog</strong> ottieni il registro completo di navigazione per ogni Waypoint: prua, distanza parziale e residua, tempi stimati (ETE / ETA UTC), consumo di tratta e carburante residuo a bordo (EFOB), esportabile in CSV.",
-        targetSelector: "#navlogModal .modal-content",
-        placement: "center",
-        action: () => {
-            closeAllModalsForDemo();
-            openNavlogModal();
-        }
-    },
-    {
-        title: "⛽ Calcolatore Carburante & Performance Velivolo",
-        desc: "Il modulo <strong>Fuel & Perf</strong> (qui impostato su <em>Airbus A320neo</em> con 3.200 Gal a bordo) calcola Taxi, Trip Fuel per le 790 NM di rotta, Contingency, Riserva di 45 min e verifica con un semaforo la copertura del <strong>Block Fuel</strong>.",
-        targetSelector: "#fuelPerfModal .modal-content",
-        placement: "center",
-        action: () => {
-            closeAllModalsForDemo();
-            onFuelPresetChange('a320');
-            fuelPerfConfig.fobGal = 3200;
-            openFuelPerfModal();
-            populateFuelModalInputs();
-            recalculateFuelAndPerfUI();
-        }
-    },
-    {
-        title: "📱 Modalità EFB di Rete Wi-Fi (Sincronizzazione Tablet)",
-        desc: "Inquadrando questo <strong>QR Code</strong> col tablet apri AeroGlass Nav via Wi-Fi sulla porta dedicata <code>8339</code>: qualsiasi modifica alla rotta fatta sul PC o col tocco sul tablet si sincronizza istantaneamente su entrambi gli schermi.",
-        targetSelector: "#efbNetworkModal .modal-content",
-        placement: "center",
-        action: () => {
-            closeAllModalsForDemo();
-            openEfbNetworkModal();
-        }
-    },
-    {
-        title: "📒 Logbook Automatico & Temi Giorno / Dark / Notte",
-        desc: "Nella barra superiore trovi il <strong>Logbook SQLite</strong> (che registra da solo ogni volo all'atterraggio), il selettore <strong>Mappa Track-Up</strong>, i temi <strong>☀️ Giorno / 🌙 Dark / 🌑 Notte Anti-Abbagliamento</strong> e lo switch <strong>💬 Info Tooltip</strong>.",
-        targetSelector: ".top-pills-group",
-        placement: "bottom",
-        action: () => {
-            closeAllModalsForDemo();
-            if (typeof map !== 'undefined' && map) {
-                map.flyToBounds([[41.8, 12.2], [51.5, -0.45]], { padding: [70, 70], duration: 1.0 });
-            }
-        }
-    }
-];
-
-function ensureDemoTourElements() {
     if (!document.getElementById('aeroDemoSpotlight')) {
         const spot = document.createElement('div');
         spot.id = 'aeroDemoSpotlight';
         document.body.appendChild(spot);
     }
-    if (!document.getElementById('aeroDemoBubble')) {
-        const bub = document.createElement('div');
-        bub.id = 'aeroDemoBubble';
-        document.body.appendChild(bub);
-    }
-}
 
-function positionDemoCallout(targetSelector, placement) {
-    const spot = document.getElementById('aeroDemoSpotlight');
-    const bub = document.getElementById('aeroDemoBubble');
-    if (!spot || !bub) return;
-
-    const target = targetSelector ? document.querySelector(targetSelector) : null;
-    if (!target || placement === 'center') {
-        spot.style.display = 'none';
-        bub.style.display = 'block';
-        bub.style.left = `${Math.max(12, (window.innerWidth - bub.offsetWidth) / 2)}px`;
-        bub.style.top = `${Math.max(65, (window.innerHeight - bub.offsetHeight) / 2)}px`;
-        return;
-    }
-
-    const rect = target.getBoundingClientRect();
-    const pad = 6;
-    spot.style.display = 'block';
-    spot.style.left = `${Math.max(2, rect.left - pad)}px`;
-    spot.style.top = `${Math.max(2, rect.top - pad)}px`;
-    spot.style.width = `${Math.min(window.innerWidth - 4, rect.width + pad * 2)}px`;
-    spot.style.height = `${Math.min(window.innerHeight - 4, rect.height + pad * 2)}px`;
-
-    bub.style.display = 'block';
-    const bw = bub.offsetWidth || 480;
-    const bh = bub.offsetHeight || 260;
-    const margin = 16;
-
-    let top = rect.bottom + margin;
-    let left = rect.left + (rect.width / 2) - (bw / 2);
-
-    if (placement === 'right') {
-        left = rect.right + margin;
-        top = rect.top + Math.min(80, rect.height / 4);
-    } else if (placement === 'left') {
-        left = rect.left - bub.offsetWidth - margin;
-        top = rect.top + (rect.height / 2) - (bub.offsetHeight / 2);
-    } else if (placement === 'top') {
-        top = rect.top - bh - margin;
-        left = rect.left + (rect.width / 2) - (bw / 2);
-        if (top < 55) top = Math.min(window.innerHeight - bh - 16, rect.bottom + margin);
-    }
-
-    left = Math.max(14, Math.min(window.innerWidth - bub.offsetWidth - 14, left));
-    top = Math.max(54, Math.min(window.innerHeight - bub.offsetHeight - 14, top));
-
-    bub.style.left = `${left}px`;
-    bub.style.top = `${top}px`;
-}
-
-function renderDemoStep(index) {
-    ensureDemoTourElements();
-    if (index < 0) index = 0;
-    if (index >= DEMO_TOUR_STEPS.length) {
-        stopInteractiveDemoTour(false);
-        return;
-    }
-
-    demoState.stepIndex = index;
-    const step = DEMO_TOUR_STEPS[index];
-    if (typeof step.action === 'function') step.action();
-
-    const bub = document.getElementById('aeroDemoBubble');
-    if (bub) {
-        const total = DEMO_TOUR_STEPS.length;
-        const pct = Math.round(((index + 1) / total) * 100);
-        bub.style.width = '480px';
-        bub.style.maxWidth = '92vw';
-        bub.style.background = 'rgba(13, 17, 23, 0.97)';
-        bub.style.border = '2px solid rgba(56, 189, 248, 0.65)';
-        bub.style.borderRadius = '14px';
-        bub.style.boxShadow = '0 16px 48px rgba(0, 0, 0, 0.85)';
-        bub.style.padding = '20px 22px';
-        bub.style.zIndex = '99999';
-        bub.style.position = 'fixed';
-        bub.style.backdropFilter = 'blur(16px)';
-
-        bub.innerHTML = `
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-                <span style="background:rgba(56,189,248,0.22);border:1px solid rgba(56,189,248,0.6);color:#38bdf8;font-size:11.5px;font-weight:800;padding:3px 10px;border-radius:999px;letter-spacing:0.5px;">
-                    🎬 DEMO LIRF ➔ EGLL • ${index + 1}/${total}
-                </span>
-                <span style="font-size:11px;color:#94a3b8;font-family:Consolas,monospace;">Tasto <strong>F1</strong> / <strong>Esc</strong></span>
-            </div>
-            <div style="font-size:16px;font-weight:800;color:#fbbf24;margin-bottom:8px;line-height:1.35;">${step.title}</div>
-            <div style="font-size:13.5px;color:#e2e8f0;line-height:1.6;margin-bottom:14px;">${step.desc}</div>
-            <div style="width:100%;height:6px;background:rgba(148,163,184,0.25);border-radius:999px;overflow:hidden;margin-bottom:14px;">
-                <div style="width:${pct}%;height:100%;background:linear-gradient(90deg,#38bdf8,#34d399);transition:width 0.3s ease;"></div>
-            </div>
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+    if (!document.getElementById('aeroDemoCard')) {
+        const card = document.createElement('div');
+        card.id = 'aeroDemoCard';
+        card.innerHTML = `
+            <div class="demo-header-row">
+                <span class="demo-step-badge" id="demoStepBadge">PASSO 1 / 12</span>
                 <div style="display:flex;gap:6px;">
-                    <button class="aero-demo-btn" style="padding:6px 12px;font-size:12px;" onclick="prevDemoTourStep()" ${index === 0 ? 'disabled style="opacity:0.4;cursor:default;"' : ''}>◀ Indietro</button>
-                    <button class="aero-demo-btn amber" style="padding:6px 12px;font-size:12px;" onclick="toggleDemoAutoPlay()">${demoState.autoPlay ? '⏸️ Pausa' : '▶️ Auto'}</button>
-                    <button class="aero-demo-btn primary" style="padding:6px 14px;font-size:12px;" onclick="nextDemoTourStep()">${index === total - 1 ? '✅ Fine' : 'Avanti ▶'}</button>
+                    <button class="demo-nav-btn" id="btnDemoAutoPlay" style="padding:3px 9px;font-size:11.5px;" onclick="toggleDemoAutoPlay()">▶ Auto</button>
+                    <button class="demo-close-btn" onclick="stopDemoTour()">✕ ESC</button>
                 </div>
-                <div style="display:flex;gap:6px;">
-                    <button class="aero-demo-btn" style="padding:6px 10px;font-size:11.5px;border-color:rgba(52,211,153,0.45);color:#34d399;" onclick="stopInteractiveDemoTour(true)" title="Termina il tour ma mantieni il piano di volo LIRF - EGLL">📌 Tieni Rotta</button>
-                    <button class="aero-demo-btn" style="padding:6px 10px;font-size:11.5px;border-color:rgba(244,63,94,0.45);color:#f43f5e;" onclick="stopInteractiveDemoTour(false)" title="Chiudi Demo e ripristina il piano di volo precedente">✕ Esci</button>
-                </div>
+            </div>
+            <h3 class="demo-title" id="demoStepTitle">Titolo</h3>
+            <div class="demo-body" id="demoStepBody"></div>
+            <div class="demo-dots-row" id="demoStepDots"></div>
+            <div class="demo-footer-row">
+                <button class="demo-nav-btn" id="btnDemoPrev" onclick="prevDemoStep()">◀ Indietro</button>
+                <span id="demoStepCounter" style="font-family:Consolas,monospace;font-size:12px;color:#94a3b8;">1 / 12</span>
+                <button class="demo-nav-btn primary" id="btnDemoNext" onclick="nextDemoStep()">Avanti ▶</button>
             </div>
         `;
-    }
-
-    setTimeout(() => positionDemoCallout(step.targetSelector, step.placement), 120);
-    scheduleNextDemoAutoStep();
-}
-
-function scheduleNextDemoAutoStep() {
-    if (demoState.timerId) {
-        clearTimeout(demoState.timerId);
-        demoState.timerId = null;
-    }
-    if (window._demoTourActive && demoState.autoPlay) {
-        demoState.timerId = setTimeout(() => {
-            if (!window._demoTourActive || !demoState.autoPlay) return;
-            if (demoState.stepIndex < DEMO_TOUR_STEPS.length - 1) {
-                renderDemoStep(demoState.stepIndex + 1);
-            } else {
-                stopInteractiveDemoTour(false);
-            }
-        }, 7500);
+        document.body.appendChild(card);
     }
 }
 
-function nextDemoTourStep() { if (window._demoTourActive) renderDemoStep(demoState.stepIndex + 1); }
-function prevDemoTourStep() { if (window._demoTourActive) renderDemoStep(Math.max(0, demoState.stepIndex - 1)); }
-function toggleDemoAutoPlay() { demoState.autoPlay = !demoState.autoPlay; renderDemoStep(demoState.stepIndex); }
+function runLeaveHook(idx) {
+    const steps = getDemoSteps();
+    const st = steps[idx];
+    if (st && typeof st.onLeave === 'function') {
+        try { st.onLeave(); } catch (e) {}
+    }
+}
 
-function startInteractiveDemoTour() {
-    if (window._demoTourActive) {
-        stopInteractiveDemoTour(false);
+function renderCurrentDemoStep() {
+    ensureDemoTourDOM();
+    const steps = getDemoSteps();
+    if (_demoStepIndex < 0) _demoStepIndex = 0;
+    if (_demoStepIndex >= steps.length) {
+        stopDemoTour();
         return;
     }
-    window._demoTourActive = true;
-    demoState.autoPlay = true;
 
-    demoState.backupFpl = JSON.parse(JSON.stringify(typeof flightPlan !== 'undefined' ? flightPlan : []));
-    demoState.backupAlt = JSON.parse(JSON.stringify(typeof currentAlternate !== 'undefined' ? currentAlternate : null));
-    demoState.backupFuelCfg = JSON.parse(JSON.stringify(fuelPerfConfig));
+    const step = steps[_demoStepIndex];
+    const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
 
-    flightPlan = JSON.parse(JSON.stringify(DEMO_LIRF_EGLL_FPL));
-    currentAlternate = JSON.parse(JSON.stringify(DEMO_LIRF_EGLL_ALT));
+    if (typeof step.onEnter === 'function') {
+        try { step.onEnter(); } catch (e) {}
+    }
 
-    window._skipRemoteSave = true;
-    if (typeof updateFlightPlanUI === 'function') updateFlightPlanUI(currentAlternate, true);
-    window._skipRemoteSave = false;
+    const badgeEl = document.getElementById('demoStepBadge');
+    const titleEl = document.getElementById('demoStepTitle');
+    const bodyEl = document.getElementById('demoStepBody');
+    const dotsEl = document.getElementById('demoStepDots');
+    const counterEl = document.getElementById('demoStepCounter');
+    const prevBtn = document.getElementById('btnDemoPrev');
+    const nextBtn = document.getElementById('btnDemoNext');
+    const autoBtn = document.getElementById('btnDemoAutoPlay');
 
-    renderDemoStep(0);
+    if (badgeEl) badgeEl.textContent = step.badge || `STEP ${_demoStepIndex + 1}`;
+    if (titleEl) titleEl.innerHTML = step.title || '';
+    if (bodyEl) bodyEl.innerHTML = step.body || '';
+    if (counterEl) counterEl.textContent = `${_demoStepIndex + 1} / ${steps.length}`;
+
+    if (prevBtn) {
+        prevBtn.style.visibility = _demoStepIndex === 0 ? 'hidden' : 'visible';
+        prevBtn.textContent = isEn ? '◀ Back' : '◀ Indietro';
+    }
+    if (nextBtn) {
+        const isLast = (_demoStepIndex === steps.length - 1);
+        nextBtn.textContent = isLast ? (isEn ? '✔ Finish' : '✔ Concludi') : (isEn ? 'Next ▶' : 'Avanti ▶');
+    }
+    if (autoBtn) {
+        autoBtn.textContent = _demoAutoPlay ? '⏸ Pause' : '▶ Auto';
+        autoBtn.style.borderColor = _demoAutoPlay ? '#34d399' : '';
+        autoBtn.style.color = _demoAutoPlay ? '#34d399' : '';
+    }
+
+    if (dotsEl) {
+        dotsEl.innerHTML = steps.map((_, i) =>
+            `<span class="demo-dot ${i === _demoStepIndex ? 'active' : ''}" onclick="jumpToDemoStep(${i})" title="Step ${i + 1}"></span>`
+        ).join('');
+    }
+
+    positionSpotlightAndCard(step.target);
 }
 
-function stopInteractiveDemoTour(keepDemoRoute = false) {
-    window._demoTourActive = false;
-    if (demoState.timerId) {
-        clearTimeout(demoState.timerId);
-        demoState.timerId = null;
-    }
-
+function positionSpotlightAndCard(selector) {
     const spot = document.getElementById('aeroDemoSpotlight');
-    const bub = document.getElementById('aeroDemoBubble');
+    const card = document.getElementById('aeroDemoCard');
+    if (!spot || !card) return;
+
+    card.style.display = 'flex';
+    const targetEl = selector ? document.querySelector(selector) : null;
+
+    if (!targetEl) {
+        spot.style.display = 'flex';
+        spot.style.left = '50%';
+        spot.style.top = '50%';
+        spot.style.width = '0px';
+        spot.style.height = '0px';
+
+        const cRect = card.getBoundingClientRect();
+        card.style.left = Math.max(16, (window.innerWidth - cRect.width) / 2) + 'px';
+        card.style.top = Math.max(24, (window.innerHeight - cRect.height) / 2) + 'px';
+        return;
+    }
+
+    const r = targetEl.getBoundingClientRect();
+    const pad = 6;
+    spot.style.display = 'block';
+    spot.style.left = Math.max(2, r.left - pad) + 'px';
+    spot.style.top = Math.max(2, r.top - pad) + 'px';
+    spot.style.width = (r.width + pad * 2) + 'px';
+    spot.style.height = (r.height + pad * 2) + 'px';
+
+    const cRect = card.getBoundingClientRect();
+    const margin = 18;
+    let left = (window.innerWidth - cRect.width) / 2;
+    let top = (window.innerHeight - cRect.height) / 2;
+
+    if (r.width > window.innerWidth * 0.5 && r.top > window.innerHeight * 0.6) {
+        // Elemento largo in basso (es. cassetto VNAV) -> posiziona la card sopra
+        top = Math.max(60, r.top - cRect.height - margin);
+    } else if (r.height > window.innerHeight * 0.5 && r.left < 350) {
+        // Sidebar sinistra -> posiziona la card a destra della sidebar
+        left = Math.min(window.innerWidth - cRect.width - 20, r.right + margin);
+        top = Math.max(64, (window.innerHeight - cRect.height) / 2);
+    } else if (r.top < 110) {
+        // Pulsante nella barra superiore -> posiziona la card al centro-basso per lasciare liberi anche i popover
+        top = Math.min(window.innerHeight - cRect.height - 28, Math.max(r.bottom + 24, window.innerHeight * 0.44));
+        left = Math.max(20, Math.min(window.innerWidth - cRect.width - 20, r.left + r.width / 2 - cRect.width / 2));
+    }
+
+    card.style.left = Math.round(left) + 'px';
+    card.style.top = Math.round(top) + 'px';
+}
+
+function startDemoAutoTimer() {
+    if (_demoAutoTimer) {
+        clearInterval(_demoAutoTimer);
+        _demoAutoTimer = null;
+    }
+    if (_demoAutoPlay) {
+        _demoAutoTimer = setInterval(() => {
+            if (!window._demoTourActive) {
+                clearInterval(_demoAutoTimer);
+                _demoAutoTimer = null;
+                return;
+            }
+            nextDemoStep(true);
+        }, DEMO_AUTO_INTERVAL_MS);
+    }
+}
+
+function startDemoTour(startIndex = 0) {
+    ensureDemoTourDOM();
+    if (window._demoTourActive) {
+        runLeaveHook(_demoStepIndex);
+    }
+    window._demoTourActive = true;
+    _demoStepIndex = typeof startIndex === 'number' ? startIndex : 0;
+    _demoAutoPlay = true;
+
+    const tipBox = document.getElementById('aeroFloatingTooltip');
+    if (tipBox) tipBox.classList.remove('visible');
+
+    startDemoAutoTimer();
+    renderCurrentDemoStep();
+}
+
+function stopDemoTour() {
+    if (window._demoTourActive) {
+        runLeaveHook(_demoStepIndex);
+    }
+    window._demoTourActive = false;
+    _demoAutoPlay = false;
+    if (_demoAutoTimer) {
+        clearInterval(_demoAutoTimer);
+        _demoAutoTimer = null;
+    }
+    const spot = document.getElementById('aeroDemoSpotlight');
+    const card = document.getElementById('aeroDemoCard');
     if (spot) spot.style.display = 'none';
-    if (bub) bub.style.display = 'none';
+    if (card) card.style.display = 'none';
+}
 
-    closeAllModalsForDemo();
-
-    if (aircraftMarker) {
-        try { map.removeLayer(aircraftMarker); } catch (e) {}
-        aircraftMarker = null;
-        lastRenderedAcftKey = null;
+function toggleDemoTour() {
+    if (window._demoTourActive) {
+        stopDemoTour();
+    } else {
+        startDemoTour(0);
     }
-    const acftLine = document.getElementById('acftVnavLine');
-    if (acftLine) acftLine.style.display = 'none';
+}
 
-    if (demoState.backupFuelCfg) fuelPerfConfig = demoState.backupFuelCfg;
-
-    if (!keepDemoRoute && demoState.backupFpl) {
-        flightPlan = demoState.backupFpl;
-        currentAlternate = demoState.backupAlt;
-        window._skipRemoteSave = true;
-        if (typeof updateFlightPlanUI === 'function') updateFlightPlanUI(currentAlternate, true);
-        window._skipRemoteSave = false;
-    } else if (keepDemoRoute && typeof updateFlightPlanUI === 'function') {
-        updateFlightPlanUI(currentAlternate, true);
+function nextDemoStep(fromAutoTimer = false) {
+    const steps = getDemoSteps();
+    runLeaveHook(_demoStepIndex);
+    if (_demoStepIndex >= steps.length - 1) {
+        if (_demoAutoPlay) {
+            // Ciclo continuo: ricomincia dal passo 0
+            _demoStepIndex = 0;
+            if (!fromAutoTimer) startDemoAutoTimer();
+            renderCurrentDemoStep();
+            return;
+        }
+        stopDemoTour();
+        return;
     }
+    _demoStepIndex++;
+    if (!fromAutoTimer && _demoAutoPlay) startDemoAutoTimer();
+    renderCurrentDemoStep();
+}
+
+function prevDemoStep() {
+    if (_demoStepIndex <= 0) return;
+    runLeaveHook(_demoStepIndex);
+    _demoStepIndex--;
+    renderCurrentDemoStep();
+}
+
+function jumpToDemoStep(idx) {
+    runLeaveHook(_demoStepIndex);
+    _demoStepIndex = idx;
+    renderCurrentDemoStep();
+}
+
+function toggleDemoAutoPlay() {
+    _demoAutoPlay = !_demoAutoPlay;
+    if (_demoAutoTimer) {
+        clearInterval(_demoAutoTimer);
+        _demoAutoTimer = null;
+    }
+    if (_demoAutoPlay) {
+        _demoAutoTimer = setInterval(() => {
+            if (!window._demoTourActive) {
+                clearInterval(_demoAutoTimer);
+                _demoAutoTimer = null;
+                return;
+            }
+            nextDemoStep();
+        }, DEMO_AUTO_INTERVAL_MS);
+    }
+    renderCurrentDemoStep();
 }
 
 function initDemoKeyboardShortcuts() {
-    if (window._demoKeysInstalled) return;
-    window._demoKeysInstalled = true;
+    if (window._demoShortcutsInitialized) return;
+    window._demoShortcutsInitialized = true;
 
     window.addEventListener('keydown', (e) => {
-        e.stopPropagation();
-        if (e.key === 'F1' || ((e.altKey || e.ctrlKey) && e.key.toLowerCase() === 'd')) {
+        if (e.key === 'F1') {
             e.preventDefault();
-            startInteractiveDemoTour();
+            toggleDemoTour();
             return;
         }
         if (!window._demoTourActive) return;
 
-        if (e.key === 'Escape') { e.preventDefault(); stopInteractiveDemoTour(false); }
-        else if (e.key === 'ArrowRight') { e.preventDefault(); nextDemoTourStep(); }
-        else if (e.key === 'ArrowLeft') { e.preventDefault(); prevDemoTourStep(); }
-        else if (e.key === 'Space' || e.key === ' ') { e.preventDefault(); toggleDemoAutoPlay(); }
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            stopDemoTour();
+        } else if (e.key === 'ArrowRight' || e.key === 'Enter') {
+            e.preventDefault();
+            nextDemoStep();
+        } else if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            prevDemoStep();
+        } else if (e.key === ' ') {
+            e.preventDefault();
+            toggleDemoAutoPlay();
+        }
     });
 
     window.addEventListener('resize', () => {
         if (window._demoTourActive) {
-            const step = DEMO_TOUR_STEPS[demoState.stepIndex];
-            if (step) positionDemoCallout(step.targetSelector, step.placement);
+            const steps = getDemoSteps();
+            const st = steps[_demoStepIndex];
+            if (st) positionSpotlightAndCard(st.target);
         }
     });
 }
+
+// Esporta tutte le funzioni e gli alias globali per compatibilità con index.html e app.js
+window.startDemoTour = startDemoTour;
+window.stopDemoTour = stopDemoTour;
+window.toggleDemoTour = toggleDemoTour;
+window.nextDemoStep = nextDemoStep;
+window.prevDemoStep = prevDemoStep;
+window.jumpToDemoStep = jumpToDemoStep;
+window.toggleDemoAutoPlay = toggleDemoAutoPlay;
+window.initDemoKeyboardShortcuts = initDemoKeyboardShortcuts;
+window.startDemo = startDemoTour;
+window.toggleDemo = toggleDemoTour;
