@@ -1,102 +1,73 @@
-﻿✈️ AeroGlass Nav - Flight Planner & Moving Map (v0.6.0)
+# AeroGlass-Nav ✈️🗺️
 
-AeroGlass Nav è un'applicazione desktop leggera di pianificazione volo e Moving Map in stile Dark Cockpit per Microsoft Flight Simulator 2024, sviluppata in Python (pywebview, SimConnect, SQLite3) e Leaflet.js.
+**AeroGlass-Nav** è un avanzato sistema EFB (Electronic Flight Bag) e Moving Map open-source progettato specificamente per Microsoft Flight Simulator (MSFS 2020 / MSFS 2024). Sviluppato con un'architettura ibrida Python (`pywebview` + backend Flask/HTTP) e frontend Leaflet, offre un'esperienza di navigazione fluida, reattiva ed ergonomica sia su monitor PC che su tablet Android via Wi-Fi.
 
-Progettata per offrire la chiarezza visiva di Navigraph Charts e la praticità operativa di Little Navmap in un'unica interfaccia fluida, senza appesantire i frame rate del simulatore e perfetta anche per monitor secondari dedicati alla telemetria.
+---
 
-🌟 Caratteristiche Principali (v0.6.0)
+## 🌟 Caratteristiche Principali
 
-🗄️ Persistenza Nativa SQLite (aeroglass.db):
-Archiviazione automatica in ~/.aeroglass_nav/aeroglass.db di impostazioni, SimBrief User ID, Piano di Volo attivo, Waypoint Utente, Storico Voli e cache degli aeroporti ICAO risolti online (nessuna dipendenza da file .json esterni).
+### 1. 🤖 Orwill – Co-Pilota Virtuale & Dispatcher Intelligente
+Orwill è il cuore euristico locale di AeroGlass-Nav (alimentato in Python senza richiedere chiavi API esterne a pagamento):
+* **Parser Aeronautico ICAO:** Estrae automaticamente codici ICAO (es. `LIPZ`, `LIRF`) da frasi colloquiali per interrogare in tempo reale i bollettini METAR ufficiali.
+* **Dizionario Aeronautico Integrato:** Spiega istantaneamente concetti e spazi aerei complessi come **ATZ**, **CTR**, **TMA**, **FIR**, codici **Squawk** d'emergenza (7500, 7600, 7700) e velocità caratteristiche ($V_1, V_R, V_2, V_{REF}$).
+* **Integrazione Smart con Gemini Web:** Se una domanda esula dal dizionario euristico locale, Orwill apre automaticamente il browser predefinito su **Gemini Free** e copia la domanda negli appunti di sistema (pronta per essere incollata con `Ctrl + V`).
+* **Accessibilità Totale:** Testi interamente selezionabili (`user-select: text`), font ingranditi a `16px` per una perfetta leggibilità su tablet e supporto completo alla copia/incolla.
 
-📡 Telemetria Live SimConnect & Sagome Velivoli Dinamiche:
-Connessione automatica a MSFS 2024 con riconoscimento automatico della categoria aeromobile e icona vettoriale SVG dedicata (Jet Militari/Addestratori es. MB-339, Aviazione Generale/Ultraleggeri es. Pioneer 400, Elicotteri, Business Jet, Airliner).
+### 2. 🗺️ Moving Map Dinamica e Cartografia Multi-Layer
+* **Layer Mappe Multipli:** Selezione rapida tra *IFR Dark Cockpit*, *VFR Topo*, *Low/High IFR* e *Satellite Imagery*.
+* **Layer VOR / ILS:** Visualizzazione interattiva di radioassistenze, frequenze e coni di avvicinamento sulla mappa.
+* **Aeroporti Mondiali & Ground Chart:** Bounding box dinamico per il caricamento di oltre 42.000 aeroporti mondiali da database SQLite e layout aeroportuale locale (piste, taxiway e parcheggi stand).
 
-🧭 Modalità Mappa Intelligenti & 5 Stili Cartografici:
-Passaggio rapido tra Mappa Libera, Follow (North Up) e Follow (Track Up) con rotazione dinamica della bussola mappa. Cinque layer cartografici integrati: IFR Dark Cockpit, VFR Topo, Low IFR Dark, High IFR Light e Satellite Imagery.
+### 3. ✈️ Gestione Piani di Volo & NavLog
+* **Import / Export .PLN:** Supporto al drag & drop nativo o caricamento file di piano di volo di MSFS.
+* **Integrazione SimBrief:** Sincronizzazione automatica dell'ultimo OFP tramite User ID SimBrief.
+* **Waypoints Utente (Custom):** Creazione, salvataggio in SQLite e posizionamento di waypoint personalizzati tramite click diretto sulla mappa.
+* **NavLog & Fuel & Performance:** Tabella di marcia dettagliata (prua, distanze, ETE/ETA) e calcolatore di carburante (Block Fuel e riserve EASA/FAA).
 
-🛬 Procedure SID, STAR & Cono di Avvicinamento (ILS / RNAV):
-Codifica cromatica automatica dei segmenti di rotta (SID in verde smeraldo, Enroute in magenta, STAR in ambra, Approach in ciano) e disegno geometrico del cono strumentale di allineamento pista (8 NM dalla soglia) con frequenze e prua finale.
+### 4. 📉 Profilo VNAV, ToD e Copertura Nuvole
+* **Profilo Altimetrico Verticale:** Grafico in tempo reale del terreno e della rotta con calcolo automatico del **Top of Descent (ToD)**.
+* **Scan Nuvole in Quota:** Selettore di quota (Auto basato sulla telemetria o livelli di volo fissi FL050 - FL300) per visualizzare le celle nuvolose derivate dai METAR direttamente sul profilo VNAV e sulla mappa.
 
-🤏 Waypoint Utente Rapidi, "Rubber Banding" & Undo (Ctrl+Z):
+### 5. 🌐 Traffico Online (VATSIM / IVAO) & Radar ATC
+* **Radar Postazioni ATC:** Visualizzazione cerchi di copertura per torri (`TWR`), approach (`APP`) e centri di controllo (`CTR`) con opacità e raggio configurabili.
+* **Traffico Piloti:** Monitoraggio in tempo reale dei piloti connessi nelle vicinanze con vettori di rotta, quota e Ground Speed.
 
-Creazione di waypoint personalizzati tramite modulo laterale, selezione su mappa o Click Destro diretto sulla carta (con opzione "Salva & Inserisci in Rotta").
+### 6. 📝 Scratchpad EFB & Righello Tattico
+* **ATC Clearance Pad:** Blocco note rapido per annotare Squawk, QNH, altitudini, vettori radar e frequenze d'ascolto con invio immediato al prossimo canale radio.
+* **Canvas Disegno a Mano Libera:** Ideale per appunti veloci in volo con supporto a penne colorate e gomma.
+* **Righello di Misura:** Strumento tattico per misurare distanze in NM, prua magnetica/vera e tempo ETE (attivabile via pulsante o click destro sulla mappa).
 
-Rubber Banding: modifica elastica della rotta trascinando col mouse qualsiasi segmento della linea di volo o waypoint intermedio, con aggancio magnetico (🧲 SNAP) ad aeroporti, VOR e fix vicini.
+---
 
-Ripristino Traccia (↩️ Ripristina / Ctrl+Z): storico multi-livello per annullare qualsiasi modifica alla traccia o alle quote.
+## 📱 Connessione Tablet EFB via Wi-Fi
 
-⛰️ Profilo Altimetrico VNAV Multi-Step & Orografia Reale:
-Cassetto inferiore a scomparsa con profilo di salita/discesa, elevazione reale del terreno (DEM/SRTM via Open-Meteo), linea di posizione aereo in tempo reale e puntatore sincronizzato tra grafico VNAV e mappa.
+AeroGlass-Nav integra un server HTTP multithreaded locale. Per utilizzare il tablet Android come EFB:
+1. Clicca sul pulsante **`📱 EFB Wi-Fi`** nella barra superiore per visualizzare il **QR Code** e l'indirizzo IP locale (es. `192.168.x.x:8339`).
+2. Inquadra il QR Code con la fotocamera del tablet (connesso alla stessa rete Wi-Fi del PC).
+3. Entrambi i dispositivi si sincronizzeranno in tempo reale su rotta, telemetria e assistente Orwill.
 
-✈️ Integrazione SimBrief, File .PLN & Risoluzione ICAO Globale:
-Importazione diretta dell'ultimo OFP da SimBrief, caricamento/esportazione di file .pln (anche via Drag & Drop sulla finestra) e generatore manuale di rotte con risoluzione online di qualsiasi aeroporto ICAO mondiale e badge METAR in tempo reale (vento, temperatura, QNH).
+---
 
-📒 Logbook & Fuel Log Automatico:
-Monitoraggio del consumo carburante tramite SimConnect (FUEL_TOTAL_QUANTITY) e registrazione automatica del volo nel database SQLite all'atterraggio sull'aeroporto di destinazione, con riepilogo totale di ore/voli, miglia nautiche e galloni consumati.
+## 🚀 Installazione e Avvio
 
-🪟 Integrazione Nativa Windows 11:
-Barra del titolo nativa colorata in stile AeroGlass Dark tramite API dwmapi, protezione Single-Instance tramite Mutex Win32 e adattamento automatico delle proporzioni su configurazioni multi-monitor.
+1. **Clona il repository:**
+   ```bash
+   git clone https://github.com/tuo-username/aeroglass-nav.git
+   cd aeroglass-nav
+   ```
+2. **Installa le dipendenze Python:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. **Avvia l'applicazione:**
+   ```bash
+   python main.py
+   ```
 
-🛠️ Requisiti e Installazione
+---
 
-Prerequisiti
-
-Sistema Operativo: Windows 10 / Windows 11 (64-bit)
-
-Python: 3.10 o superiore
-
-Simulatore: Microsoft Flight Simulator 2024 (oppure MSFS 2020)
-
-Avvio da Codice Sorgente
-
-Clona il repository:
-
-git clone https://github.com/EddiZor/aeroglass-nav.git
-cd aeroglass-nav
-
-
-Installa le dipendenze:
-
-pip install -r requirements.txt
-
-
-Avvia l'applicazione:
-
-python main.py
-
-
-📁 Struttura della Directory
-
-aeroglass-nav/
-├── main.py                      # Entry point, Win32 Mutex, DWM Dark Titlebar e finestra pywebview
-├── requirements.txt             # Dipendenze Python
-├── build.spec                   # Configurazione PyInstaller per generazione eseguibile
-└── src/
-    ├── core/
-    │   ├── api.py               # Ponte API Python <-> JS, SimBrief, PLN, ICAO resolver
-    │   └── database.py          # Gestore SQLite3 (~/.aeroglass_nav/aeroglass.db)
-    ├── simconnect/
-    │   └── telemetry.py         # Thread di polling SimConnect (Posizione, Quote, HDG, Fuel)
-    └── ui/
-        ├── index.html           # Interfaccia principale AeroGlass
-        ├── style.css            # Stili Glassmorphism e Dark Cockpit
-        ├── app.js               # Inizializzazione UI, temi, tooltip, resize sidebar e drag & drop
-        └── js/
-            ├── state.js         # Stato globale, sorgenti tile, database statici e spazi aerei
-            ├── map.js           # Gestione Leaflet, Navaids, Spazi Aerei e Rubber Banding (Mouse/Touch)
-            ├── flightplan.js    # Gestione FPL, SID/STAR, Cono ILS, User WP, Undo e PLN parser
-            ├── vnav.js          # Calcolo profilo VNAV, terreno Open-Meteo, hover sync e ToD 3°
-            ├── logbook_efb.js   # Gestione storico voli SQLite, auto-log atterraggio e server EFB Wi-Fi
-            ├── perf.js          # Calcolatore carburante, prestazioni velivolo e tabella NavLog CSV
-            ├── demo.js          # Tour guidato interattivo LIRF -> EGLL (Tasto F1)
-            └── telemetry.js     # Aggiornamento indicatori live, sagome SVG e gestione tracce
-
-
-📖 Manuale Utente - AeroGlass Nav
-
-Il manuale utente completo e dettagliato di tutte le funzionalità, dei comandi e delle modalità operative è consultabile all'interno del file aeroglass_nav_user_manual.md.
-
-👤 Autore
-
-Sviluppato da EddiZor (SKYSIM PILOT Community)
+## ⌨️ Scorciatoie e Interazione
+* **`F1`**: Avvia il Tour Guidato Dimostrativo (Demo Mode).
+* **`Ctrl + Z`**: Annulla l'ultima modifica sulla rotta.
+* **`Click Destro su Mappa`**: Avvia il righello di misurazione rapida.
+* **`Ctrl + C / Ctrl + V`**: Pienamente abilitati in tutti i pannelli, inclusa la chat di Orwill e lo Scratchpad.
