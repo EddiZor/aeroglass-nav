@@ -289,6 +289,26 @@
         </div>
     </div>
 
+    <!-- Widget Co-Pilota Virtuale ORWILL (Basso Sinistra) -->
+    <div id="orwillChatWidget" class="orwill-chat-panel glass-panel">
+        <div class="orwill-header" onclick="toggleOrwillChat()">
+            <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="font-size: 14px;">🤖</span>
+                <span style="font-weight: 800; color: var(--cyan); font-size: 11px;">ORWILL CO-PILOT</span>
+            </div>
+            <span id="orwillToggleArrow" style="font-size: 10px; color: var(--text-muted);">▲</span>
+        </div>
+        <div id="orwillBody" class="orwill-body" style="display: none;">
+            <div id="orwillMessages" class="orwill-messages">
+                <div class="orwill-msg bot">Ciao! Sono Orwill, il tuo dispatcher e co-pilota virtuale. Chiedimi info su QNH, meteo, discesa o rotta.</div>
+            </div>
+            <div class="orwill-input-row">
+                <input type="text" id="orwillInput" class="glass-input" placeholder="Chiedi a Orwill (es. 'A che quota scendiamo?')..." onkeydown="if(event.key==='Enter') sendOrwillQuery()">
+                <button class="btn btn-cyan" onclick="sendOrwillQuery()" style="padding: 4px 10px; font-size: 11px;">Invia</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Cassetto Altimetrico VNAV -->
     <div id="elevationDrawer" class="elevation-drawer glass-panel">
         <div class="elevation-header" onclick="toggleDrawer()">

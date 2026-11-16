@@ -3159,4 +3159,72 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+// --- 🤖 CO-PILOTA VIRTUALE ORWILL ---
+let orwillOpen = false;
+
+function toggleOrwillChat() {
+    orwillOpen = !orwillOpen;
+    const body = document.getElementById('orwillBody');
+    const arrow = document.getElementById('orwillToggleArrow');
+    if (body) body.style.display = orwillOpen ? 'flex' : 'none';
+    if (arrow) arrow.innerText = orwillOpen ? '▼' : '▲';
+}
+
+async function sendOrwillQuery() {
+    const inp = document.getElementById('orwillInput');
+    const msgBox = document.getElementById('orwillMessages');
+    if (!inp || !msgBox) return;
+
+    const query = inp.value.trim();
+    if (!query) return;
+
+    msgBox.innerHTML += `<div class="orwill-msg user">${escapeHtml(query)}</div>`;
+    inp.value = '';
+    msgBox.scrollTop = msgBox.scrollHeight;
+
+    const loadingId = 'orwill_load_' + Date.now();
+    msgBox.innerHTML += `<div id="${loadingId}" class="orwill-msg bot">Orwill sta analizzando i dati di volo...</div>`;
+    msgBox.scrollTop = msgBox.scrollHeight;
+
+    try {
+        let answer = "Orwill: Connessione temporaneamente non disponibile.";
+        if (window.pywebview && window.pywebview.api && window.pywebview.api.ask_orwill) {
+            const telemetryPayload = window.lastTelemetry || {};
+            const res = await window.pywebview.api.ask_orwill(query, telemetryPayload, window.flightPlan);
+            if (res && res.success) {
+                answer = res.answer;
+            }
+        } else {
+            answer = `Orwill (Offline Simulator): Ho ricevuto la tua domanda "${query}". Tutto regolare a bordo!`;
+        }
+
+        const loadEl = document.getElementById(loadingId);
+        if (loadEl) loadEl.remove();
+
+        msgBox.innerHTML += `<div class="orwill-msg bot">${escapeHtml(answer)}</div>`;
+        msgBox.scrollTop = msgBox.scrollHeight;
+    } catch (e) {
+        const loadEl = document.getElementById(loadingId);
+        if (loadEl) loadEl.remove();
+        msgBox.innerHTML += `<div class="orwill-msg bot">Orwill: Errore di comunicazione con il modulo di bordo.</div>`;
+        msgBox.scrollTop = msgBox.scrollHeight;
+    }
+}
+
+function escapeHtml(text) {
+    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+
+async function openGeminiWeb() {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.open_external_gemini) {
+        try {
+            await window.pywebview.api.open_external_gemini();
+        } catch (e) {
+            window.open("https://gemini.google.com", "_blank");
+        }
+    } else {
+        window.open("https://gemini.google.com", "_blank");
+    }
+}
+
 window.addEventListener('pywebviewready', initAeroGlassApp);

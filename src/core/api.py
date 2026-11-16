@@ -454,6 +454,141 @@ class AeroGlassAPI:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    def ask_orwill(self, prompt, telemetry=None, flight_plan=None):
+        """
+        Co-pilota virtuale Orwill - Parser aeronautico avanzato con estrazione ICAO e METAR live.
+        """
+        import re
+        q = (prompt or "").strip().lower()
+        q_raw = (prompt or "").strip()
+        telemetry = telemetry or {}
+        flight_plan = flight_plan or []
+
+        acft = telemetry.get('aircraft', 'MSFS 2024')
+        alt = telemetry.get('alt_ft', 0)
+        gs = telemetry.get('gs_kt', 0)
+        qnh = telemetry.get('qnh_mb', 1013)
+
+        if not q:
+            return {
+                "success": True, 
+                "answer": "**Orwill Dispatcher (Pronto)**\n\nCome posso assisterti nella pianificazione o nel monitoraggio del volo?"
+            }
+
+        # 1. PARSER AUTOMATICO AEROPORTI / METAR (Estrae codici ICAO a 4 lettere dalla frase)
+        words = q_raw.split()
+        target_icao = None
+        for w in words:
+            clean_w = re.sub(r'[^a-zA-Z]', '', w).upper()
+            if len(clean_w) == 4 and clean_w[0] in ('L', 'K', 'E', 'ED', 'LF', 'LS', 'LE', 'U', 'Z', 'Y', 'W', 'N', 'S'):
+                target_icao = clean_w
+                break
+
+        if not target_icao:
+            match_icao = re.search(r'\b([a-zA-Z]{4})\b', q_raw)
+            if match_icao and ('metar' in q or 'tempo' in q or 'aeroporto' in q or 'meteo' in q or 'arrivo' in q):
+                target_icao = match_icao.group(1).upper()
+
+        if target_icao or 'metar' in q or 'tempo' in q or 'meteo' in q:
+            if not target_icao:
+                if flight_plan:
+                    target_icao = flight_plan[-1].get('ident', 'LIPZ')
+                else:
+                    target_icao = 'LIPZ'
+
+            res_apt = self.resolve_icao(target_icao)
+            if res_apt and res_apt.get("success"):
+                name = res_apt.get("name", target_icao)
+                elev = res_apt.get("elev", 0)
+                metar = res_apt.get("metar", "Nessun bollettino METAR attivo o disponibile al momento.")
+                lat = res_apt.get("lat")
+                lon = res_apt.get("lon")
+                
+                return {
+                    "success": True,
+                    "answer": f"### 🌦️ METAR Briefing: `{target_icao}` - {name}\n\n* **Elevazione:** `{elev} ft` | **Coord:** `{lat}, {lon}`\n\n```text\n{metar}\n```\n\n**Stato:** Bollettino ufficiale aggiornato in tempo reale."
+                }
+            else:
+                return {
+                    "success": True,
+                    "answer": f"### ⚠️ Avviso Dispatcher\n\nNon sono riuscito a interrogare il server meteo per il codice `{target_icao}`. Verifica che sia un ICAO valido."
+                }
+
+        # --- DIZIONARIO ESPERTO AERONAUTICO AMPLIATO ---
+        
+        # 1. Spazi Aerei (ATZ, CTR, TMA, FIR)
+        if any(k in q for k in ['atz', 'ctr', 'tma', 'fir', 'spazio aereo', 'classi di spazio']):
+            if 'atz' in q:
+                return {"success": True, "answer": "### 🛂 ATZ (Aerodrome Traffic Zone)\n\nUn'**ATZ** (Zona di Traffico Aeroportuale) è uno spazio aereo di dimensioni definite stabilito attorno a un aerodromo per la protezione del traffico aereo locale.\n\n* **Finalità:** Regolare e proteggere le fasi di decollo, atterraggio e circuito di traffico.\n* **Servizi:** All'interno di un'ATZ le comunicazioni radio sono obbligatorie e il traffico è regolato dall'ente di controllo locale (Torre, AFISO o Radio).\n* **Spazio Aereo:** Solitamente classificato come spazio aereo controllato o non controllato (AFISO/INFO) a seconda dello scalo."}
+            elif 'ctr' in q:
+                return {"success": True, "answer": "### 🛡️ CTR (Control Zone)\n\nUna **CTR** (Zona di Controllo) è uno spazio aereo controllato che si estende dalla superficie terrestre fino a un limite superiore specificato, attorno a uno o più aeroporti principali.\n\n* **Scopo:** Proteggere i voli arrivati o partenti in Instrument Flight Rules (IFR) e VFR autorizzati.\n* **Procedure:** Richiede autorizzazione preventiva e contatto radio continuo con l'Approach (APP) o la Torre (TWR)."}
+            elif 'tma' in q:
+                return {"success": True, "answer": "### 🌐 TMA (Terminal Control Area)\n\nUna **TMA** (Area di Controllo Terminale) è uno spazio aereo controllato stabilito alla congiunzione di una o più rotte ATS in vicinanza di aeroporti principali.\n\n* **Struttura:** Ha tipicamente la forma di gradoni a quote crescenti man mano che ci si allontana dall'aeroporto.\n* **Regole:** Regola il traffico in salita iniziale e discesa/avvicinamento finale verso i grandi scali."}
+            elif 'fir' in q:
+                return {"success": True, "answer": "### 🗺️ FIR (Flight Information Region)\n\nGrande regione di informazioni volo che copre lo spazio aereo superiore e inferiore di uno Stato, gestita da un ACC (Area Control Center)."}
+            else:
+                return {"success": True, "answer": "### 🛩️ Spazi Aerei\n\nGli spazi aerei si dividono in Controllati (Classi A, B, C, D, E) e Non Controllati (Classi F, G). Richiedono differenti livelli di autorizzazione e separazione."}
+
+        # 2. Emergenze e Codici Transponder (Squawk)
+        elif any(k in q for k in ['squawk', '7500', '7600', '7700', 'emergenza', 'guasto radio', 'dirottamento']):
+            if '7500' in q or 'dirottamento' in q or 'ilecita' in q:
+                return {"success": True, "answer": "### 🚨 SQUAWK 7500 (Unlawful Interference)\n\n**Attenzione:** Dirottamento o interferenza illecita a bordo. Non rispondere via radio se compromette la sicurezza; inserisci discretamente il codice sul transponder."}
+            elif '7600' in q or 'guasto radio' in q or 'perdita radio' in q:
+                return {"success": True, "answer": "### 📻 SQUAWK 7600 (Lost Communications)\n\n* **Procedura VFR:** Mantenere il VMC, atterrare al primo aeroporto idoneo e osservare i segnali luminosi dalla torre.\n* **Procedura IFR:** Seguire l'ultima rotta assegnata, livello e velocità previsti dal piano di volo per 20 minuti, poi procedere secondo STAR/Approccio."}
+            elif '7700' in q or 'emergenza' in q:
+                return {"success": True, "answer": "### ⚠️ SQUAWK 7700 (General Emergency)\n\nCodice di emergenza generale. Avvisa immediatamente l'ente ATC competente, applica la checklist di emergenza dell'aeromobile e valuta il dirottamento sul campo più vicino."}
+            else:
+                return {"success": True, "answer": "### 🎛️ Codici Transponder Principali\n\n* **7000:** Volo VFR generale (Europa)\n* **1000:** Volo IFR generale (o transizione)\n* **7500:** Dirottamento\n* **7600:** Guasto Radio\n* **7700:** Emergenza Generale"}
+
+        # 3. Procedure IFR, Holding e VNAV
+        elif any(k in q for k in ['holding', 'attesa', 'circuiti', 'sid', 'star', 'ils', 'rnav', 'avvicinamento']):
+            if 'holding' in q or 'attesa' in q:
+                return {"success": True, "answer": "### 🔄 Circuiti d'Attesa (Holding)\n\n* **Ingresso:** Può essere a *Parallel* (parallelo), *Teardrop* (a goccia) o *Direct* (diretto) in base al settore di arrivo rispetto all'asse.\n* **Timing:** Standard 1 minuto in outbound (sotto i 14,000 ft) o 1.5 minuti (sopra i 14,000 ft). Virate standard a destra (standard rate, 3°/sec)."}
+            elif 'ils' in q or 'avvicinamento' in q:
+                return {"success": True, "answer": "### 📡 Avvicinamento ILS (Instrument Landing System)\n\nComposto da:\n* **Localizer (LLC):** Guida laterale (asse pista).\n* **Glide Slope (GS):** Guida verticale (sentiero standard 3.0°).\n* **Marker / DME / Fix:** Riferimenti di distanza per stabilire le quote minime (DA/DH)."}
+            else:
+                return {"success": True, "answer": "### 🧭 Procedure Strumentali\n\n* **SID:** Standard Instrument Departure (normalizza la salita dall'aeroporto alla rotta en-route).\n* **STAR:** Standard Terminal Arrival Route (connette la rotta en-route all'inizio dell'avvicinamento strumentale)."}
+
+        # 4. Aerodinamica e Velocità (V-speeds)
+        elif any(k in q for k in ['v1', 'vr', 'v2', 'vref', 'stallo', 'velocità', 'vs']):
+            return {
+                "success": True,
+                "answer": "### ✈️ Velocità Caratteristiche (V-Speeds)\n\n* **V1:** Decision Speed. Oltre questa velocità non si può più interrompere il decollo in sicurezza.\n* **VR:** Rotation Speed. Velocità alla quale si aziona il comando a picchiare/cabrare per sollevare il muso.\n* **V2:** Takeoff Safety Speed. Velocità da mantenere in salita con un motore in avaria.\n* **VREF:** Reference Landing Speed. Velocità di riferimento al passaggio sulla soglia pista (solitamente 1.3 volte la velocità di stallo in configurazione landing)."
+            }
+
+        # 5. QNH / Altimetro
+        elif 'qnh' in q or 'altimetro' in q or 'pressione' in q:
+            return {
+                "success": True, 
+                "answer": f"### 📊 Report Altimetrico & Barometro\n\n* **QNH Rilevato (Sim):** `{qnh} hPa`\n* **Quota Barometrica:** `{alt} ft`\n\n**Raccomandazione Operativa:**\n* Imposta il QNH attuale sui subscale del barometro del tuo aeromobile.\n* Sotto la Transition Altitude usa il QNH locale; sopra la Transition Level passa a `STANDARD (1013.2 hPa)`."
+            }
+
+        # 6. Discesa / VNAV / ToD
+        elif 'discesa' in q or 'tod' in q or 'top of descent' in q or 'quota' in q:
+            return {
+                "success": True, 
+                "answer": f"### 📉 Profilo di Volo & VNAV (Orwill)\n\n* **Quota Corrente:** `{alt} ft`\n\n**Parametri di Discesa Consigliati:**\n* **Regola del 3:** Calcola `3 NM per ogni 1.000 ft` da perdere.\n* Mantieni un sentiero standard di discesa a `3.0°` e monitora il marker *ToD* sul cassetto VNAV."
+            }
+
+        # 7. Carburante / Performance
+        elif 'carburante' in q or 'fuel' in q or 'consumo' in q:
+            return {
+                "success": True, 
+                "answer": f"### ⛽ Gestione Carburante & Performance\n\n* **GS Attuale:** `{gs} kt`\n\nApri il pannello **Fuel & Perf** nella barra superiore per calcolare il carburante e le riserve."
+            }
+
+        # Fallback automatico: copia negli appunti, apre il browser e avvisa l'utente
+        else:
+            try:
+                self.open_external_gemini(prompt)
+            except Exception:
+                pass
+
+            return {
+                "success": True,
+                "answer": f"### 🤖 Assistente Orwill\n\n🌐 **Per questa domanda è meglio allargare la ricerca:** ho aperto Gemini nel browser e **ho copiato la tua domanda negli appunti** (premi `Ctrl + V` per incollarla)."
+            }
+
     def set_setting(self, key, value):
         """Alias compatibile per save_setting."""
         return self.save_setting(key, value)
@@ -1209,3 +1344,42 @@ class AeroGlassAPI:
     def toggle_maximize_app(self):
         if self._window:
             self._window.toggle_fullscreen()
+
+    def open_external_gemini(self, query=""):
+        """Copia la query negli appunti di Windows e apre la pagina web di Gemini nel browser."""
+        try:
+            import webbrowser
+            import subprocess
+            if query:
+                # Copia la domanda negli appunti di Windows in modo nativo e pulito
+                subprocess.run(['clip.exe'], input=str(query).strip().encode('utf-8'), check=False)
+            webbrowser.open("https://gemini.google.com")
+            return {"success": True}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def open_external_gemini(self, query=""):
+        """Copia la query negli appunti di Windows e apre la pagina web di Gemini nel browser."""
+        try:
+            import webbrowser
+            import subprocess
+            if query:
+                # Copia la domanda negli appunti di Windows in modo nativo e pulito
+                subprocess.run(['clip.exe'], input=str(query).strip().encode('utf-8'), check=False)
+            webbrowser.open("https://gemini.google.com")
+            return {"success": True}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def open_external_gemini(self, query=""):
+        """Copia la query negli appunti di Windows e apre la pagina web di Gemini nel browser."""
+        try:
+            import webbrowser
+            import subprocess
+            if query:
+                # Copia la domanda negli appunti di Windows in modo nativo e pulito
+                subprocess.run(['clip.exe'], input=str(query).strip().encode('utf-8'), check=False)
+            webbrowser.open("https://gemini.google.com")
+            return {"success": True}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
