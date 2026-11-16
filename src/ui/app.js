@@ -1624,33 +1624,164 @@ function cycleNetworkOverlayMode() {
     }
 }
 
+window._lastOnlineControllers = [];
+
+function ensureNetAtcBadgeStyles() {
+    if (document.getElementById('aeroNetAtcStyles')) return;
+    const st = document.createElement('style');
+    st.id = 'aeroNetAtcStyles';
+    st.textContent = `
+        .net-atc-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: rgba(13, 17, 23, 0.94);
+            border: 1.5px solid #00d2ff;
+            border-radius: 6px;
+            padding: 2px 7px 2px 3px;
+            font-family: Consolas, monospace;
+            font-size: 10.5px;
+            font-weight: 700;
+            color: #e2e8f0;
+            white-space: nowrap;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.7);
+            cursor: pointer;
+            transform: translate(-50%, -50%);
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .net-atc-badge:hover {
+            transform: translate(-50%, -50%) scale(1.08);
+            box-shadow: 0 0 14px rgba(0, 210, 255, 0.65);
+            z-index: 2000;
+        }
+        .net-atc-role {
+            padding: 1px 5px;
+            border-radius: 4px;
+            font-size: 9.5px;
+            font-weight: 900;
+            letter-spacing: 0.3px;
+        }
+        .net-atc-cs { color: #ffffff; }
+        .net-atc-freq {
+            color: #38bdf8;
+            background: rgba(56, 189, 248, 0.14);
+            padding: 0 4px;
+            border-radius: 3px;
+        }
+    `;
+    document.head.appendChild(st);
+}
+
 async function fetchAndRenderNetworkTraffic() {
-    if (networkOverlayMode === 'off' || !window.pywebview || !window.pywebview.api || !window.pywebview.api.get_online_network_traffic) return;
+    if (networkOverlayMode === 'off' || !window.pywebview || !window.pywebview.api) return;
     if (!networkLayerGroup || typeof map === 'undefined' || !map) return;
 
+    ensureNetAtcBadgeStyles();
+
     try {
-        const res = await window.pywebview.api.get_online_network_traffic();
+        const apiFn = window.pywebview.api.get_online_network_traffic_atc || window.pywebview.api.get_online_network_traffic;
+        if (!apiFn) return;
+        const res = await apiFn();
         if (!res || !res.success) return;
 
         networkLayerGroup.clearLayers();
-        const bounds = map.getBounds().pad(0.4);
+        const bounds = map.getBounds().pad(0.35);
+        const refPos = (typeof lastAcftLatLng !== 'undefined' && lastAcftLatLng) ? lastAcftLatLng : map.getCenter();
 
-        let pilotCount = 0;
-        (res.pilots || []).forEach(p => {
-            if (p.lat === undefined || p.lon === undefined) return;
-            
-            const isVatsim = (p.network === 'vatsim');
-            // Filtro in base alla modalità scelta
+        // 1. TORRI E CENTRI RADAR ONLINE (TWR, APP, CTR) CON FREQUENZA RADIO
+        const activeAtcs = [];
+        (res.controllers || []).forEach(c => {
+            if (c.lat === undefined || c.lon === undefined) return;
+            const isVatsim = (c.network === 'vatsim');
             if (networkOverlayMode === 'ivao' && isVatsim) return;
             if (networkOverlayMode === 'vatsim' && !isVatsim) return;
 
-            const latLng = [p.lat, p.lon];
-            if (!bounds.contains(latLng)) return;
+            const distNm = computeDistanceNm(refPos.lat, refPos.lng, c.lat, c.lon);
+            activeAtcs.push({ ...c, distNm });
 
-            const planeColor = isVatsim ? '#fbbf24' : '#00d2ff'; // Giallo VATSIM, Ciano IVAO
+            if (!bounds.contains([c.lat, c.lon]) && distNm > 180) return;
+
+            let roleColor = '#34d399'; // TWR Verde
+            let radiusM = 9000;        // ~5 NM
+            let roleIcon = '🗼';
+            if (c.role === 'APP') {
+                roleColor = '#00d2ff'; // APP Ciano
+                radiusM = 38000;       // ~20 NM
+                roleIcon = '📡';
+            } else if (c.role === 'CTR') {
+                roleColor = '#c084fc'; // CTR Viola
+                radiusM = 95000;       // ~50 NM
+                roleIcon = '🕸️';
+            }
+
+            L.circle([c.lat, c.lon], {
+                radius: radiusM,
+                color: roleColor,
+                weight: 1.2,
+                dashArray: c.role === 'CTR' ? '6, 6' : null,
+                opacity: 0.45,
+                fillColor: roleColor,
+                fillOpacity: c.role === 'CTR' ? 0.04 : 0.08,
+                interactive: false
+            }).addTo(networkLayerGroup);
+
+            const netTag = isVatsim ? 'VAT' : 'IVAO';
+            const atcMarker = L.marker([c.lat, c.lon], {
+                icon: L.divIcon({
+                    className: '',
+                    html: `
+                        <div class="net-atc-badge" style="border-color:${roleColor};">
+                            <span class="net-atc-role" style="background:${roleColor};color:#090d13;">${roleIcon} ${c.role}</span>
+                            <span class="net-atc-cs">${c.callsign}</span>
+                            <span class="net-atc-freq">📻 ${c.freq}</span>
+                        </div>
+                    `,
+                    iconSize: null
+                }),
+                zIndexOffset: 850
+            }).addTo(networkLayerGroup);
+
+            atcMarker.bindTooltip(
+                `<b>[${netTag}] ${c.callsign}</b> (${c.name || ''})<br>` +
+                `Frequenza: <b style="color:#00d2ff;">${c.freq} MHz</b> | Dist: ${distNm.toFixed(0)} NM<br>` +
+                `<span style="font-size:9.5px;color:#34d399;">🖱️ Clicca per inviare frequenza a Note EFB</span>`,
+                { direction: 'top', className: 'vnav-route-tooltip' }
+            );
+
+            atcMarker.on('click', () => {
+                if (typeof sendFreqToScratchpad === 'function') {
+                    sendFreqToScratchpad(c.freq);
+                    toggleScratchpad(true);
+                }
+            });
+        });
+
+        window._lastOnlineControllers = activeAtcs.sort((a, b) => a.distNm - b.distNm);
+        if (scratchpadOpen && typeof renderScratchpadFrequencies === 'function') {
+            renderScratchpadFrequencies();
+        }
+
+        // 2. AEREI NELLE IMMEDIATE VICINANZE (ordinati per distanza)
+        const nearbyPilots = [];
+        (res.pilots || []).forEach(p => {
+            if (p.lat === undefined || p.lon === undefined) return;
+            const isVatsim = (p.network === 'vatsim');
+            if (networkOverlayMode === 'ivao' && isVatsim) return;
+            if (networkOverlayMode === 'vatsim' && !isVatsim) return;
+
+            const distNm = computeDistanceNm(refPos.lat, refPos.lng, p.lat, p.lon);
+            if (!bounds.contains([p.lat, p.lon]) || distNm > 160) return;
+            nearbyPilots.push({ ...p, distNm });
+        });
+
+        nearbyPilots.sort((a, b) => a.distNm - b.distNm);
+
+        nearbyPilots.slice(0, 80).forEach(p => {
+            const isVatsim = (p.network === 'vatsim');
+            const planeColor = isVatsim ? '#fbbf24' : '#00d2ff';
             const netLabel = isVatsim ? 'VATSIM' : 'IVAO';
-
             const hdg = p.hdg || 0;
+
             const pilotIcon = L.divIcon({
                 className: '',
                 html: `<div class="net-pilot-marker" style="transform: rotate(${hdg}deg);">
@@ -1662,14 +1793,11 @@ async function fetchAndRenderNetworkTraffic() {
                 iconAnchor: [10, 10]
             });
 
-            const m = L.marker(latLng, { icon: pilotIcon, zIndexOffset: 700 }).addTo(networkLayerGroup);
-            m.bindTooltip(`<b>[${netLabel}] ${p.callsign}</b><br>Alt: ${p.alt} ft | GS: ${p.gs} kt`, { 
-                direction: 'top', 
-                className: 'vnav-route-tooltip' 
-            });
-
-            pilotCount++;
-            if (pilotCount >= 140) return;
+            const m = L.marker([p.lat, p.lon], { icon: pilotIcon, zIndexOffset: 700 }).addTo(networkLayerGroup);
+            m.bindTooltip(
+                `<b>[${netLabel}] ${p.callsign}</b> (${p.distNm.toFixed(1)} NM)<br>Alt: ${p.alt} ft | GS: ${p.gs} kt | HDG: ${hdg}°`,
+                { direction: 'top', className: 'vnav-route-tooltip' }
+            );
         });
     } catch (err) {
         console.error("Errore caricamento traffico online:", err);
@@ -2025,12 +2153,24 @@ function renderScratchpadFrequencies() {
     const box = document.getElementById('spFreqListContainer');
     if (!box) return;
 
-    const items = [
+    const items = [];
+
+    if (Array.isArray(window._lastOnlineControllers) && window._lastOnlineControllers.length > 0) {
+        window._lastOnlineControllers.slice(0, 6).forEach(atc => {
+            items.push({
+                label: `🟢 [${atc.network.toUpperCase()}] ${atc.callsign}`,
+                freq: String(atc.freq),
+                note: `${atc.role} Online (${atc.distNm.toFixed(0)} NM) - ${atc.name || ''}`
+            });
+        });
+    }
+
+    items.push(
         { label: 'UNICOM (VATSIM / IVAO)', freq: '122.800', note: 'Traffico non controllato' },
         { label: 'GUARD / EMERGENZA', freq: '121.500', note: 'VHF Internazionale Emergenze' },
         { label: 'ITALIA VFR FIC / INFO', freq: '124.150', note: 'Padova / Roma Informazioni VFR' },
         { label: 'AVIOSUPERFICI / ULTRALEGGERI', freq: '130.000', note: 'Frequenza nazionale aviosuperfici IT' }
-    ];
+    );
 
     if (Array.isArray(vorsData) && vorsData.length > 0 && typeof map !== 'undefined' && map) {
         const c = map.getCenter();

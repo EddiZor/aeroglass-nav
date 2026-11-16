@@ -620,6 +620,185 @@ class AeroGlassAPI:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    def get_online_network_traffic_atc(self):
+        """Scarica ogni 60s (cache 55s) piloti e postazioni ATC (TWR, APP, CTR) da VATSIM e IVAO."""
+        import time
+        import json
+        import urllib.request
+        from concurrent.futures import ThreadPoolExecutor
+
+        now = time.time()
+        if hasattr(self, "_net_atc_cache") and (now - getattr(self, "_net_atc_ts", 0)) < 55:
+            return self._net_atc_cache
+
+        FIR_CENTERS = {
+            "LIPP": (45.406, 11.876, "Padova ACC"),
+            "LIMM": (45.462, 9.278, "Milano ACC"),
+            "LIRR": (41.799, 12.594, "Roma ACC"),
+            "LIBB": (40.658, 17.947, "Brindisi ACC"),
+            "LSAG": (46.238, 6.109, "Geneva ACC"),
+            "LSAZ": (47.458, 8.548, "Zurich ACC"),
+            "LFMM": (43.439, 5.214, "Marseille ACC"),
+            "LFFF": (48.726, 2.365, "Paris ACC"),
+            "LFEE": (48.538, 7.628, "Reims ACC"),
+            "LFBB": (44.828, -0.715, "Bordeaux ACC"),
+            "LFRR": (48.447, -4.418, "Brest ACC"),
+            "EDMM": (48.354, 11.786, "Muenchen ACC"),
+            "EDGG": (50.033, 8.571, "Langen ACC"),
+            "EDUU": (49.009, 8.404, "Rhein UAC"),
+            "EDWW": (53.047, 8.787, "Bremen ACC"),
+            "LOVV": (48.110, 16.570, "Wien ACC"),
+            "LDZO": (45.743, 16.069, "Zagreb ACC"),
+            "LJLA": (46.224, 14.458, "Ljubljana ACC"),
+            "EGTT": (51.470, -0.454, "London Control"),
+            "LECB": (41.297, 2.078, "Barcelona ACC"),
+            "LECM": (40.472, -3.561, "Madrid ACC"),
+            "LGAV": (37.936, 23.944, "Athinai ACC"),
+            "EURM": (50.901, 5.762, "Maastricht UAC"),
+        }
+
+        pilots, controllers, raw_atcs = [], [], []
+
+        def fetch_vatsim():
+            v_pilots, v_atcs = [], []
+            try:
+                req = urllib.request.Request(
+                    "https://data.vatsim.net/v3/vatsim-data.json",
+                    headers={"User-Agent": "AeroGlass-Nav/0.7"}
+                )
+                with urllib.request.urlopen(req, timeout=6) as resp:
+                    data = json.loads(resp.read().decode("utf-8", errors="replace"))
+                for p in data.get("pilots", []):
+                    lat, lon = p.get("latitude"), p.get("longitude")
+                    if lat is not None and lon is not None:
+                        v_pilots.append({
+                            "callsign": p.get("callsign", "N/A"),
+                            "lat": float(lat),
+                            "lon": float(lon),
+                            "alt": int(p.get("altitude", 0)),
+                            "gs": int(p.get("groundspeed", 0)),
+                            "hdg": int(p.get("heading", 0)),
+                            "network": "vatsim"
+                        })
+                for c in data.get("controllers", []):
+                    cs = str(c.get("callsign") or "").strip().upper()
+                    freq = str(c.get("frequency") or "").strip()
+                    if not cs or freq == "199.998" or "_" not in cs:
+                        continue
+                    suffix = cs.split("_")[-1]
+                    if suffix not in ("TWR", "APP", "DEP", "CTR"):
+                        continue
+                    prefix = cs.split("_")[0][:4]
+                    v_atcs.append({
+                        "callsign": cs,
+                        "prefix": prefix,
+                        "role": "APP" if suffix == "DEP" else suffix,
+                        "freq": freq,
+                        "lat": None,
+                        "lon": None,
+                        "network": "vatsim"
+                    })
+            except Exception:
+                pass
+            return v_pilots, v_atcs
+
+        def fetch_ivao():
+            i_pilots, i_atcs = [], []
+            try:
+                req = urllib.request.Request(
+                    "https://api.ivao.aero/v2/tracker/whazzup",
+                    headers={"User-Agent": "AeroGlass-Nav/0.7"}
+                )
+                with urllib.request.urlopen(req, timeout=6) as resp:
+                    data = json.loads(resp.read().decode("utf-8", errors="replace"))
+                clients = data.get("clients", {})
+                for p in clients.get("pilots", []):
+                    tr = p.get("lastTrack") or {}
+                    lat, lon = tr.get("latitude"), tr.get("longitude")
+                    if lat is not None and lon is not None:
+                        i_pilots.append({
+                            "callsign": p.get("callsign", "N/A"),
+                            "lat": float(lat),
+                            "lon": float(lon),
+                            "alt": int(tr.get("altitude", 0)),
+                            "gs": int(tr.get("groundSpeed", 0)),
+                            "hdg": int(tr.get("heading", 0)),
+                            "network": "ivao"
+                        })
+                for c in clients.get("atcs", []):
+                    cs = str(c.get("callsign") or "").strip().upper()
+                    sess = c.get("atcSession") or {}
+                    freq = sess.get("frequency")
+                    if not cs or not freq or "_" not in cs:
+                        continue
+                    suffix = cs.split("_")[-1]
+                    if suffix not in ("TWR", "APP", "DEP", "CTR"):
+                        continue
+                    tr = c.get("lastTrack") or {}
+                    lat, lon = tr.get("latitude"), tr.get("longitude")
+                    prefix = cs.split("_")[0][:4]
+                    freq_str = ("%.3f" % float(freq)) if isinstance(freq, (int, float)) else str(freq)
+                    i_atcs.append({
+                        "callsign": cs,
+                        "prefix": prefix,
+                        "role": "APP" if suffix == "DEP" else suffix,
+                        "freq": freq_str,
+                        "lat": float(lat) if lat is not None else None,
+                        "lon": float(lon) if lon is not None else None,
+                        "network": "ivao"
+                    })
+            except Exception:
+                pass
+            return i_pilots, i_atcs
+
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            f_vat = ex.submit(fetch_vatsim)
+            f_iva = ex.submit(fetch_ivao)
+            vp, va = f_vat.result()
+            ip, ia = f_iva.result()
+            pilots.extend(vp)
+            pilots.extend(ip)
+            raw_atcs.extend(va)
+            raw_atcs.extend(ia)
+
+        needed_prefixes = list(set(a["prefix"] for a in raw_atcs if a["prefix"]))
+        apt_coords = {}
+        if needed_prefixes:
+            try:
+                with self._db_lock:
+                    with get_connection() as conn:
+                        placeholders = ",".join(["?"] * len(needed_prefixes))
+                        sql_q = "SELECT icao, name, lat, lon FROM world_airports WHERE icao IN (" + placeholders + ")"
+                        rows = conn.execute(sql_q, needed_prefixes).fetchall()
+                        for r in rows:
+                            apt_coords[r["icao"]] = (float(r["lat"]), float(r["lon"]), r["name"])
+            except Exception:
+                pass
+
+        for a in raw_atcs:
+            pfx = a["prefix"]
+            lat, lon = a["lat"], a["lon"]
+            name = pfx
+            if pfx in apt_coords:
+                lat, lon, name = apt_coords[pfx]
+            elif pfx in FIR_CENTERS:
+                lat, lon, name = FIR_CENTERS[pfx]
+            if lat is not None and lon is not None:
+                controllers.append({
+                    "callsign": a["callsign"],
+                    "name": name,
+                    "role": a["role"],
+                    "freq": a["freq"],
+                    "lat": lat,
+                    "lon": lon,
+                    "network": a["network"]
+                })
+
+        res = {"success": True, "pilots": pilots, "controllers": controllers}
+        self._net_atc_cache = res
+        self._net_atc_ts = now
+        return res
+
     def save_simbrief_id(self, simbrief_id):
         """Metodo ponte chiamato da flightplan.js per salvare il SimBrief User ID."""
         return self.save_setting("simbrief_id", simbrief_id)
