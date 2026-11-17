@@ -47,6 +47,7 @@ class AeroGlassAPI:
         self._db_lock = threading.Lock()
         # Inizializza il database SQLite (~/.aeroglass_nav/aeroglass.db)
         init_db()
+        self._init_ground_cache_table()
         if SimTelemetry is not None:
             try:
                 self._telemetry = SimTelemetry()
@@ -64,6 +65,22 @@ class AeroGlassAPI:
         self._migrate_legacy_files()
         # Avvia automaticamente il server HTTP EFB in background
         self.start_efb_server(self._get_default_ui_dir())
+
+    def _init_ground_cache_table(self):
+        """Crea la tabella di cache SQLite per i layout di terra se non esiste."""
+        try:
+            with self._db_lock:
+                with get_connection() as conn:
+                    conn.execute("""
+                        CREATE TABLE IF NOT EXISTS airport_ground_cache (
+                            icao TEXT PRIMARY KEY,
+                            layout_json TEXT,
+                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        )
+                    """)
+                    conn.commit()
+        except Exception:
+            pass
 
     def _get_default_ui_dir(self):
         if hasattr(sys, "_MEIPASS"):
@@ -109,7 +126,6 @@ class AeroGlassAPI:
 
         class EfbRequestHandler(BaseHTTPRequestHandler):
             def log_message(self, format, *args):
-                # Disabilita log su stderr per compatibilità PyInstaller console=False
                 pass
 
             def do_GET(self):
@@ -183,7 +199,6 @@ class AeroGlassAPI:
                     self.end_headers()
                     self.wfile.write(err_bytes)
 
-        # Cerca la porta preferita (es. 8339) o la prima libera successiva (evitando 8080)
         for candidate in range(pref_port, pref_port + 30):
             if candidate == 8080:
                 continue
@@ -197,7 +212,6 @@ class AeroGlassAPI:
                 continue
 
     def get_efb_info(self):
-        """Restituisce IP locale, porta attiva e URL completo per collegare il Tablet EFB."""
         now = time.time()
         if (now - self._ip_last_check) > 30.0 or not self.efb_ip:
             self._ip_last_check = now
@@ -211,7 +225,6 @@ class AeroGlassAPI:
         }
 
     def set_efb_port(self, new_port):
-        """Salva una nuova porta preferita per l'EFB in SQLite (diversa da 8080)."""
         try:
             p = int(new_port)
             if p < 1024 or p > 65535 or p == 8080:
@@ -221,9 +234,7 @@ class AeroGlassAPI:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    # --- DATI INIZIALI E IMPOSTAZIONI (SQLITE) ---
     def get_initial_data(self):
-        """Restituisce i dati iniziali all'avvio della UI, inclusi cache aeroporti SQLite, SimBrief ID, EFB e ultimo piano di volo."""
         simbrief_res = self.get_setting("simbrief_id")
         simbrief_id = simbrief_res.get("value") if simbrief_res.get("success") else ""
 
@@ -268,14 +279,12 @@ class AeroGlassAPI:
         }
 
     def resolve_icao(self, ident):
-        """Risolve coordinate, quota e METAR di qualsiasi aeroporto ICAO e lo salva nella tabella SQLite cached_airports."""
         code = str(ident or "").strip().upper()
         if not code:
             return {"success": False}
 
         result = None
 
-        # 1. Controlla prima se l'aeroporto è già presente nel database SQLite (cached_airports o world_airports)
         try:
             with self._db_lock:
                 with get_connection() as conn:
@@ -310,7 +319,6 @@ class AeroGlassAPI:
         except Exception:
             pass
 
-        # 2. Hub principali europei di fallback immediato
         hub_airports = {
             "EDDF": {"name": "Frankfurt Main", "lat": 50.0333, "lon": 8.5706, "elev": 364},
             "EDDM": {"name": "Munich Franz Josef Strauss", "lat": 48.3538, "lon": 11.7861, "elev": 1487},
@@ -351,7 +359,6 @@ class AeroGlassAPI:
                 "is_airport": True
             }
 
-        # 3. Ricerca live tramite API AviationWeather (coordinate + METAR aggiornato)
         try:
             url = f"https://aviationweather.gov/api/data/metar?ids={code}&format=json"
             req = urllib.request.Request(url, headers={"User-Agent": "AeroGlassNav/1.0"})
@@ -376,7 +383,6 @@ class AeroGlassAPI:
         except Exception:
             pass
 
-        # 4. Fallback su endpoint anagrafica aeroporti AviationWeather se non ha METAR attivo
         if not result:
             try:
                 url_apt = f"https://aviationweather.gov/api/data/airport?ids={code}&format=json"
@@ -402,7 +408,6 @@ class AeroGlassAPI:
             except Exception:
                 pass
 
-        # 5. Salva o aggiorna l'aeroporto trovato nella tabella SQLite cached_airports
         if result:
             try:
                 with self._db_lock:
@@ -428,7 +433,6 @@ class AeroGlassAPI:
         return {"success": False}
 
     def get_setting(self, key):
-        """Recupera un'impostazione dalla tabella settings di SQLite."""
         try:
             with self._db_lock:
                 with get_connection() as conn:
@@ -440,7 +444,6 @@ class AeroGlassAPI:
             return {"success": False, "value": None, "error": str(e)}
 
     def save_setting(self, key, value):
-        """Salva o aggiorna un'impostazione nella tabella settings di SQLite."""
         try:
             with self._db_lock:
                 with get_connection() as conn:
@@ -455,16 +458,12 @@ class AeroGlassAPI:
             return {"success": False, "error": str(e)}
 
     def ask_orwill(self, prompt, telemetry=None, flight_plan=None):
-        """
-        Co-pilota virtuale Orwill - Parser aeronautico avanzato con estrazione ICAO e METAR live.
-        """
         import re
         q = (prompt or "").strip().lower()
         q_raw = (prompt or "").strip()
         telemetry = telemetry or {}
         flight_plan = flight_plan or []
 
-        acft = telemetry.get('aircraft', 'MSFS 2024')
         alt = telemetry.get('alt_ft', 0)
         gs = telemetry.get('gs_kt', 0)
         qnh = telemetry.get('qnh_mb', 1013)
@@ -475,7 +474,6 @@ class AeroGlassAPI:
                 "answer": "**Orwill Dispatcher (Pronto)**\n\nCome posso assisterti nella pianificazione o nel monitoraggio del volo?"
             }
 
-        # 1. PARSER AUTOMATICO AEROPORTI / METAR (Estrae codici ICAO a 4 lettere dalla frase)
         words = q_raw.split()
         target_icao = None
         for w in words:
@@ -514,9 +512,6 @@ class AeroGlassAPI:
                     "answer": f"### ⚠️ Avviso Dispatcher\n\nNon sono riuscito a interrogare il server meteo per il codice `{target_icao}`. Verifica che sia un ICAO valido."
                 }
 
-        # --- DIZIONARIO ESPERTO AERONAUTICO AMPLIATO ---
-        
-        # 1. Spazi Aerei (ATZ, CTR, TMA, FIR)
         if any(k in q for k in ['atz', 'ctr', 'tma', 'fir', 'spazio aereo', 'classi di spazio']):
             if 'atz' in q:
                 return {"success": True, "answer": "### 🛂 ATZ (Aerodrome Traffic Zone)\n\nUn'**ATZ** (Zona di Traffico Aeroportuale) è uno spazio aereo di dimensioni definite stabilito attorno a un aerodromo per la protezione del traffico aereo locale.\n\n* **Finalità:** Regolare e proteggere le fasi di decollo, atterraggio e circuito di traffico.\n* **Servizi:** All'interno di un'ATZ le comunicazioni radio sono obbligatorie e il traffico è regolato dall'ente di controllo locale (Torre, AFISO o Radio).\n* **Spazio Aereo:** Solitamente classificato come spazio aereo controllato o non controllato (AFISO/INFO) a seconda dello scalo."}
@@ -529,7 +524,6 @@ class AeroGlassAPI:
             else:
                 return {"success": True, "answer": "### 🛩️ Spazi Aerei\n\nGli spazi aerei si dividono in Controllati (Classi A, B, C, D, E) e Non Controllati (Classi F, G). Richiedono differenti livelli di autorizzazione e separazione."}
 
-        # 2. Emergenze e Codici Transponder (Squawk)
         elif any(k in q for k in ['squawk', '7500', '7600', '7700', 'emergenza', 'guasto radio', 'dirottamento']):
             if '7500' in q or 'dirottamento' in q or 'ilecita' in q:
                 return {"success": True, "answer": "### 🚨 SQUAWK 7500 (Unlawful Interference)\n\n**Attenzione:** Dirottamento o interferenza illecita a bordo. Non rispondere via radio se compromette la sicurezza; inserisci discretamente il codice sul transponder."}
@@ -540,7 +534,6 @@ class AeroGlassAPI:
             else:
                 return {"success": True, "answer": "### 🎛️ Codici Transponder Principali\n\n* **7000:** Volo VFR generale (Europa)\n* **1000:** Volo IFR generale (o transizione)\n* **7500:** Dirottamento\n* **7600:** Guasto Radio\n* **7700:** Emergenza Generale"}
 
-        # 3. Procedure IFR, Holding e VNAV
         elif any(k in q for k in ['holding', 'attesa', 'circuiti', 'sid', 'star', 'ils', 'rnav', 'avvicinamento']):
             if 'holding' in q or 'attesa' in q:
                 return {"success": True, "answer": "### 🔄 Circuiti d'Attesa (Holding)\n\n* **Ingresso:** Può essere a *Parallel* (parallelo), *Teardrop* (a goccia) o *Direct* (diretto) in base al settore di arrivo rispetto all'asse.\n* **Timing:** Standard 1 minuto in outbound (sotto i 14,000 ft) o 1.5 minuti (sopra i 14,000 ft). Virate standard a destra (standard rate, 3°/sec)."}
@@ -549,35 +542,30 @@ class AeroGlassAPI:
             else:
                 return {"success": True, "answer": "### 🧭 Procedure Strumentali\n\n* **SID:** Standard Instrument Departure (normalizza la salita dall'aeroporto alla rotta en-route).\n* **STAR:** Standard Terminal Arrival Route (connette la rotta en-route all'inizio dell'avvicinamento strumentale)."}
 
-        # 4. Aerodinamica e Velocità (V-speeds)
         elif any(k in q for k in ['v1', 'vr', 'v2', 'vref', 'stallo', 'velocità', 'vs']):
             return {
                 "success": True,
                 "answer": "### ✈️ Velocità Caratteristiche (V-Speeds)\n\n* **V1:** Decision Speed. Oltre questa velocità non si può più interrompere il decollo in sicurezza.\n* **VR:** Rotation Speed. Velocità alla quale si aziona il comando a picchiare/cabrare per sollevare il muso.\n* **V2:** Takeoff Safety Speed. Velocità da mantenere in salita con un motore in avaria.\n* **VREF:** Reference Landing Speed. Velocità di riferimento al passaggio sulla soglia pista (solitamente 1.3 volte la velocità di stallo in configurazione landing)."
             }
 
-        # 5. QNH / Altimetro
         elif 'qnh' in q or 'altimetro' in q or 'pressione' in q:
             return {
                 "success": True, 
                 "answer": f"### 📊 Report Altimetrico & Barometro\n\n* **QNH Rilevato (Sim):** `{qnh} hPa`\n* **Quota Barometrica:** `{alt} ft`\n\n**Raccomandazione Operativa:**\n* Imposta il QNH attuale sui subscale del barometro del tuo aeromobile.\n* Sotto la Transition Altitude usa il QNH locale; sopra la Transition Level passa a `STANDARD (1013.2 hPa)`."
             }
 
-        # 6. Discesa / VNAV / ToD
         elif 'discesa' in q or 'tod' in q or 'top of descent' in q or 'quota' in q:
             return {
                 "success": True, 
                 "answer": f"### 📉 Profilo di Volo & VNAV (Orwill)\n\n* **Quota Corrente:** `{alt} ft`\n\n**Parametri di Discesa Consigliati:**\n* **Regola del 3:** Calcola `3 NM per ogni 1.000 ft` da perdere.\n* Mantieni un sentiero standard di discesa a `3.0°` e monitora il marker *ToD* sul cassetto VNAV."
             }
 
-        # 7. Carburante / Performance
         elif 'carburante' in q or 'fuel' in q or 'consumo' in q:
             return {
                 "success": True, 
                 "answer": f"### ⛽ Gestione Carburante & Performance\n\n* **GS Attuale:** `{gs} kt`\n\nApri il pannello **Fuel & Perf** nella barra superiore per calcolare il carburante e le riserve."
             }
 
-        # Fallback automatico: copia negli appunti, apre il browser e avvisa l'utente
         else:
             try:
                 self.open_external_gemini(prompt)
@@ -590,11 +578,9 @@ class AeroGlassAPI:
             }
 
     def set_setting(self, key, value):
-        """Alias compatibile per save_setting."""
         return self.save_setting(key, value)
 
     def get_airports_in_bounds(self, min_lat, max_lat, min_lon, max_lon, zoom=8):
-        """Restituisce gli aeroporti mondiali visibili nel riquadro mappa filtrati per livello di zoom."""
         try:
             z = float(zoom)
             if z < 6.5:
@@ -630,7 +616,6 @@ class AeroGlassAPI:
             return {"success": False, "error": str(e), "airports": []}
 
     def search_world_airports(self, query_str):
-        """Ricerca istantanea su 42.000 aeroporti per codice ICAO, nome o città."""
         q = str(query_str or "").strip().upper()
         if len(q) < 2:
             return {"success": True, "results": []}
@@ -655,7 +640,6 @@ class AeroGlassAPI:
             return {"success": False, "error": str(e), "results": []}
 
     def get_airport_details(self, icao, wind_dir=None, wind_spd=None):
-        """Restituisce dettagli aeroporto, piste, frequenze radio e pista consigliata per il vento."""
         import math
         ident = str(icao or "").strip().upper()
         try:
@@ -701,75 +685,176 @@ class AeroGlassAPI:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def get_airport_ground_layout(self, icao):
-        """Genera automaticamente il layout geometrico delle piste dal database per qualsiasi aeroporto ICAO."""
-        import math
-        ident = str(icao or "").strip().upper()
+    def get_nearest_airport(self, lat, lon):
+        """Trova l'aeroporto più vicino alle coordinate date (lat, lon) nel database mondiale SQLite."""
         try:
+            lat = float(lat)
+            lon = float(lon)
             with self._db_lock:
                 with get_connection() as conn:
-                    apt = conn.execute("SELECT * FROM world_airports WHERE icao = ?", (ident,)).fetchone()
-                    if not apt:
-                        return {"success": False, "error": "Airport not found"}
-                    
-                    db_rwys = conn.execute("SELECT * FROM world_runways WHERE apt_icao = ?", (ident,)).fetchall()
-                    runways = []
-                    for r in db_rwys:
-                        le_lat = r["le_lat"]
-                        le_lon = r["le_lon"]
-                        he_lat = r["he_lat"]
-                        he_lon = r["he_lon"]
-                        
-                        # Fallback geometrico se le soglie esatte non sono presenti ma abbiamo heading e lunghezza
-                        if (le_lat is None or le_lon is None or he_lat is None or he_lon is None) and apt["lat"] and apt["lon"]:
-                            hdg = float(r["le_hdg"] or 0)
-                            length_m = float(r["length_ft"] or 3000) * 0.3048
-                            rad = math.radians(hdg)
-                            d_lat = (length_m / 2.0) * math.cos(rad) / 111111.0
-                            d_lon = (length_m / 2.0) * math.sin(rad) / (111111.0 * math.cos(math.radians(apt["lat"])))
-                            le_lat = apt["lat"] - d_lat
-                            le_lon = apt["lon"] - d_lon
-                            he_lat = apt["lat"] + d_lat
-                            he_lon = apt["lon"] + d_lon
-
-                        if le_lat and le_lon and he_lat and he_lon:
-                            runways.append({
-                                "ref": f"{r['le_ident']}/{r['he_ident']}",
-                                "width": int((r["width_ft"] or 100) * 0.3048),
-                                "surface": str(r["surface"] or "asphalt").lower(),
-                                "coords": [[le_lat, le_lon], [he_lat, he_lon]]
-                            })
-
-                    return {
-                        "success": True,
-                        "layout": {
-                            "name": apt["name"],
-                            "lat": apt["lat"],
-                            "lon": apt["lon"],
-                            "runways": runways,
-                            "taxiways": [],
-                            "aprons": [],
-                            "stands": []
+                    row = conn.execute("""
+                        SELECT icao, name, lat, lon, elev_ft 
+                        FROM world_airports 
+                        WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?
+                        ORDER BY ((lat - ?) * (lat - ?) + (lon - ?) * (lon - ?)) ASC
+                        LIMIT 1
+                    """, (lat - 3.0, lat + 3.0, lon - 3.0, lon + 3.0, lat, lat, lon, lon)).fetchone()
+                    if row:
+                        return {
+                            "success": True,
+                            "airport": {
+                                "icao": row["icao"],
+                                "name": row["name"] or row["icao"],
+                                "lat": float(row["lat"]),
+                                "lon": float(row["lon"]),
+                                "elev": row["elev_ft"] or 0
+                            }
                         }
-                    }
+            return {"success": False}
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def get_online_network_traffic_atc(self):
-        """Scarica ogni 60s (cache 55s) piloti e postazioni ATC (TWR, APP, CTR) da VATSIM e IVAO."""
-        import time
+    def get_airport_ground_layout(self, icao):
+        """Restituisce il layout di terra (piste, taxiway, apron, stands) di un aeroporto.
+           Controlla prima la cache SQLite locale; se assente, interroga OpenStreetMap e salva in cache."""
         import json
         import urllib.request
-        from concurrent.futures import ThreadPoolExecutor
+        import urllib.parse
 
+        icao = str(icao or "").strip().upper()
+        if not icao:
+            return {"success": False, "error": "ICAO non valido"}
+
+        # 1. Controlla se il layout è già memorizzato nella cache SQLite locale
+        try:
+            with self._db_lock:
+                with get_connection() as conn:
+                    row = conn.execute("SELECT layout_json FROM airport_ground_cache WHERE icao = ?", (icao,)).fetchone()
+                    if row and row["layout_json"]:
+                        cached_layout = json.loads(row["layout_json"])
+                        return {"success": True, "layout": cached_layout}
+        except Exception:
+            pass
+
+        lat, lon, apt_name = None, None, icao
+        db_runways = []
+
+        # 2. Recupera coordinate e piste dal database SQLite locale
+        try:
+            with self._db_lock:
+                with get_connection() as conn:
+                    row = conn.execute("SELECT name, lat, lon FROM world_airports WHERE icao = ?", (icao,)).fetchone()
+                    if row:
+                        apt_name = row["name"] or icao
+                        lat, lon = float(row["lat"]), float(row["lon"])
+                    
+                    rwy_rows = conn.execute("SELECT le_ident, he_ident, length_ft, width_ft, surface, le_lat, le_lon, he_lat, he_lon FROM world_runways WHERE apt_icao = ?", (icao,)).fetchall()
+                    for r in rwy_rows:
+                        if r["le_lat"] is not None and r["le_lon"] is not None and r["he_lat"] is not None and r["he_lon"] is not None:
+                            rwy_ref = f"{r['le_ident']}/{r['he_ident']}" if r['le_ident'] and r['he_ident'] else "RWY"
+                            db_runways.append({
+                                "ref": rwy_ref,
+                                "width": float(r["width_ft"] or 150) * 0.3048,
+                                "surface": str(r["surface"] or "asphalt").lower(),
+                                "coords": [[float(r["le_lat"]), float(r["le_lon"])], [float(r["he_lat"]), float(r["he_lon"])]]
+                            })
+        except Exception:
+            pass
+
+        if lat is None or lon is None:
+            return {"success": False, "error": f"Aeroporto {icao} non trovato nel database"}
+
+        layout = {
+            "name": apt_name,
+            "lat": lat,
+            "lon": lon,
+            "runways": db_runways,
+            "taxiways": [],
+            "aprons": [],
+            "stands": []
+        }
+
+        # 3. Interroga la Overpass API di OpenStreetMap per taxiway, apron e piazzole
+        overpass_query = f"""
+        [out:json][timeout:8];
+        (
+          way["aeroway"="taxiway"](around:3500,{lat},{lon});
+          way["aeroway"="apron"](around:3500,{lat},{lon});
+          way["aeroway"="parking_position"](around:3500,{lat},{lon});
+          node["aeroway"="parking_position"](around:3500,{lat},{lon});
+          way["aeroway"="runway"](around:3500,{lat},{lon});
+        );
+        out body;
+        >;
+        out skel qt;
+        """
+
+        url = "https://overpass-api.de/api/interpreter"
+
+        try:
+            data_encoded = urllib.parse.urlencode({'data': overpass_query}).encode('utf-8')
+            req = urllib.request.Request(url, data=data_encoded, headers={"User-Agent": "AeroGlass-Nav/0.7"})
+            with urllib.request.urlopen(req, timeout=12) as resp:
+                osm_data = json.loads(resp.read().decode("utf-8", errors="replace"))
+
+            nodes_map = {}
+            for el in osm_data.get("elements", []):
+                if el.get("type") == "node":
+                    nodes_map[el["id"]] = [float(el["lat"]), float(el["lon"])]
+
+            for el in osm_data.get("elements", []):
+                if el.get("type") == "way":
+                    tags = el.get("tags") or {}
+                    node_ids = el.get("nodes", [])
+                    coords = [nodes_map[nid] for nid in node_ids if nid in nodes_map]
+                    if len(coords) < 2:
+                        continue
+
+                    aeroway = tags.get("aeroway")
+                    ref = tags.get("ref") or tags.get("name") or ""
+
+                    if aeroway == "taxiway":
+                        layout["taxiways"].append({"ref": ref, "coords": coords})
+                    elif aeroway == "apron":
+                        layout["aprons"].append(coords)
+                    elif aeroway == "runway" and not layout["runways"]:
+                        layout["runways"].append({"ref": ref or "RWY", "width": 45, "surface": "asphalt", "coords": coords})
+                    elif aeroway == "parking_position":
+                        mid = coords[len(coords) // 2]
+                        layout["stands"].append({"ref": ref or "GATE", "lat": mid[0], "lon": mid[1]})
+
+                elif el.get("type") == "node":
+                    tags = el.get("tags") or {}
+                    if tags.get("aeroway") == "parking_position":
+                        ref = tags.get("ref") or tags.get("name") or "GATE"
+                        layout["stands"].append({"ref": ref, "lat": float(el["lat"]), "lon": float(el["lon"])})
+        except Exception as net_err:
+            print(f"Avviso Overpass API per {icao} (uso dati locali/piste):", net_err)
+
+        # 4. Salva SEMPRE il layout (anche se OSM fallisce) nella cache SQLite locale
+        try:
+            layout_json_str = json.dumps(layout)
+            with self._db_lock:
+                with get_connection() as conn:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO airport_ground_cache (icao, layout_json) VALUES (?, ?)",
+                        (icao, layout_json_str)
+                    )
+                    conn.commit()
+            print(f"Layout di terra per {icao} memorizzato con successo nella cache SQLite.")
+        except Exception as db_err:
+            print("Errore scrittura cache SQLite:", db_err)
+
+        return {"success": True, "layout": layout}
+
+    def get_online_network_traffic_atc(self):
+        from concurrent.futures import ThreadPoolExecutor
         now = time.time()
         if hasattr(self, "_net_atc_cache") and (now - getattr(self, "_net_atc_ts", 0)) < 55:
             return self._net_atc_cache
 
-        # Motore Poligoni Mondiali v2 (Separazione rigorosa CTR vs APP/TWR + Sotto-Settori + Cache v2)
         if not hasattr(self, "_global_atc_polygons"):
             self._global_atc_polygons = {
-                # TMA/APP Italiane ed Europee con codici di settore speciali (es. LIRR_TWI_APP = Roma TMA)
                 "LIRR_TWI_APP": [[42.35, 11.55], [42.42, 12.45], [41.95, 12.88], [41.42, 12.65], [41.48, 11.92], [41.88, 11.52]],
                 "LIRF_APP": [[42.35, 11.55], [42.42, 12.45], [41.95, 12.88], [41.42, 12.65], [41.48, 11.92], [41.88, 11.52]],
                 "LIMM_APP": [[46.05, 8.35], [46.12, 9.45], [45.65, 9.85], [45.18, 9.45], [45.22, 8.42], [45.62, 8.22]],
@@ -835,7 +920,6 @@ class AeroGlassAPI:
                                 base = norm_key.split("_")[0].strip()
                                 if not base:
                                     continue
-                                # Salva sia la chiave specifica del sotto-settore (es. LFMM_E_CTR, LIRR_TWI_APP) sia la base col ruolo
                                 self._global_atc_polygons[f"{norm_key}_{role_type}"] = ring
                                 if f"{base}_{role_type}" not in self._global_atc_polygons:
                                     self._global_atc_polygons[f"{base}_{role_type}"] = ring
@@ -911,7 +995,6 @@ class AeroGlassAPI:
                 for c in data.get("controllers", []):
                     cs = str(c.get("callsign") or "").strip().upper()
                     freq = str(c.get("frequency") or "").strip()
-                    # Scarta osservatori (facility 0), prenotazioni o frequenze non VHF attive (es. 199.998)
                     if not cs or "_" not in cs or c.get("facility") == 0:
                         continue
                     try:
@@ -972,14 +1055,12 @@ class AeroGlassAPI:
                     cs = str(c.get("callsign") or "").strip().upper()
                     sess = c.get("atcSession") or {}
                     freq = sess.get("frequency")
-                    # Verifica che il controllore sia realmente online e attivo (non booked/standby/observer)
                     if not cs or not freq or "_" not in cs:
                         continue
                     if c.get("isBooked") or sess.get("isBooked") or str(c.get("state", "")).lower() == "booked":
                         continue
                     try:
                         f_val = float(freq)
-                        # Scarta frequenze di standby (199.998) o fuori banda VHF aeronautica
                         if not (118.0 <= f_val <= 137.0):
                             continue
                         freq_str = "%.3f" % f_val
@@ -989,13 +1070,11 @@ class AeroGlassAPI:
                     if suffix not in ("TWR", "APP", "DEP", "CTR"):
                         continue
                     tr = c.get("lastTrack") or {}
-                    # Se su IVAO non ha una traccia attiva (online time = 0 / non connesso al voice/radar), lo ignora
                     if not tr or (tr.get("latitude") is None and tr.get("longitude") is None):
                         continue
                     lat, lon = tr.get("latitude"), tr.get("longitude")
                     prefix = cs.split("_")[0][:4]
 
-                    # Estrae il poligono reale dello spazio aereo da IVAO (supporta lat/lng, lat/lon, latitude/longitude)
                     poly = None
                     for src_obj in (c.get("atcPosition"), c.get("subcenter"), c.get("atcSession"), c):
                         if not isinstance(src_obj, dict):
@@ -1046,7 +1125,6 @@ class AeroGlassAPI:
             raw_atcs.extend(va)
             raw_atcs.extend(ia)
 
-        import math
         needed_prefixes = list(set(a["prefix"] for a in raw_atcs if a["prefix"]))
         apt_coords = {}
         apt_hdgs = {}
@@ -1077,8 +1155,7 @@ class AeroGlassAPI:
             elif pfx in FIR_CENTERS:
                 lat, lon, name = FIR_CENTERS[pfx]
 
-            # Cerca il poligono rispettando rigorosamente il ruolo (es. un APP non eredita MAI il poligono gigante di un CTR/FIR)
-            cs_no_role = "_".join(cs_full.split("_")[:-1])  # es. LIRR_TWI o LFMM_E
+            cs_no_role = "_".join(cs_full.split("_")[:-1])
             poly = (
                 a.get("polygon")
                 or ATC_POLYGONS.get(cs_full)
@@ -1087,7 +1164,6 @@ class AeroGlassAPI:
                 or ATC_POLYGONS.get(f"{pfx[:3]}_{role_t}")
             )
 
-            # Se il poligono ha un centro geografico reale, centra il badge nel poligono se manca lat/lon
             if poly and (lat is None or lon is None):
                 lat = sum(p[0] for p in poly) / len(poly)
                 lon = sum(p[1] for p in poly) / len(poly)
@@ -1110,11 +1186,9 @@ class AeroGlassAPI:
         return res
 
     def save_simbrief_id(self, simbrief_id):
-        """Metodo ponte chiamato da flightplan.js per salvare il SimBrief User ID."""
         return self.save_setting("simbrief_id", simbrief_id)
 
     def save_active_flight_plan(self, flight_plan, alternate=None):
-        """Salva il piano di volo corrente e l'alternato in SQLite e aggiorna il timestamp di sync EFB solo se modificato."""
         try:
             self.flight_plan = flight_plan or []
             new_sig = json.dumps({"fpl": self.flight_plan, "alt": alternate}, sort_keys=True)
@@ -1127,9 +1201,7 @@ class AeroGlassAPI:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    # --- WAYPOINTS UTENTE CUSTOM (SQLITE) ---
     def get_user_waypoints(self):
-        """Restituisce tutti i waypoint personalizzati salvati nel DB SQLite."""
         try:
             with self._db_lock:
                 with get_connection() as conn:
@@ -1142,7 +1214,6 @@ class AeroGlassAPI:
             return {"success": False, "waypoints": [], "error": str(e)}
 
     def save_user_waypoints(self, waypoints):
-        """Sincronizza la lista dei waypoint utente nel DB SQLite e aggiorna il timestamp di sync EFB."""
         try:
             with self._db_lock:
                 with get_connection() as conn:
@@ -1166,9 +1237,7 @@ class AeroGlassAPI:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    # --- STORICO VOLI E FUEL LOG (SQLITE) ---
     def get_flight_history(self):
-        """Restituisce lo storico dei voli registrati nel DB SQLite."""
         try:
             with self._db_lock:
                 with get_connection() as conn:
@@ -1183,7 +1252,6 @@ class AeroGlassAPI:
             return {"success": False, "history": [], "error": str(e)}
 
     def add_flight_record(self, aircraft, departure, destination, distance_nm, fuel_used_gal=0.0):
-        """Aggiunge un volo completato nello storico SQLite."""
         try:
             now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
             with self._db_lock:
@@ -1206,7 +1274,6 @@ class AeroGlassAPI:
             return {"success": False, "error": str(e)}
 
     def delete_flight_record(self, record_id):
-        """Elimina un singolo volo dallo storico SQLite."""
         try:
             with self._db_lock:
                 with get_connection() as conn:
@@ -1217,9 +1284,7 @@ class AeroGlassAPI:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    # --- GESTIONE PIANO DI VOLO E SIMBRIEF ---
     def fetch_simbrief_plan(self):
-        """Scarica l'ultimo OFP da SimBrief includendo SID, STAR, aerovie e piste in uso."""
         res = self.get_setting("simbrief_id")
         sb_id = res.get("value") if res.get("success") else None
         if not sb_id:
@@ -1324,7 +1389,6 @@ class AeroGlassAPI:
             return {"success": False, "error": str(e)}
 
     def load_pln_file(self):
-        """Apre il selettore file nativo per importare un file .pln."""
         if not self._window:
             return {"success": False, "error": "Finestra non inizializzata"}
         try:
@@ -1340,7 +1404,6 @@ class AeroGlassAPI:
             return {"success": False, "error": str(e)}
 
     def export_pln_file(self, flight_plan):
-        """Esporta il piano di volo corrente in formato MSFS .pln nella cartella Download."""
         try:
             if not flight_plan or len(flight_plan) < 2:
                 return {"success": False, "error": "Piano di volo non valido"}
@@ -1404,7 +1467,6 @@ class AeroGlassAPI:
             return {"success": False, "error": str(e)}
 
     def update_waypoint_altitude(self, index, new_alt):
-        """Aggiorna la quota di un singolo waypoint nel piano di volo e su SQLite."""
         try:
             idx = int(index)
             if 0 <= idx < len(self.flight_plan):
@@ -1416,7 +1478,6 @@ class AeroGlassAPI:
             return {"success": False, "error": str(e)}
 
     def clear_flight_plan(self):
-        """Svuota il piano di volo attivo in memoria e su SQLite."""
         self.flight_plan = []
         self._last_saved_fpl_sig = ""
         self.save_setting("active_flight_plan", "")
@@ -1425,7 +1486,6 @@ class AeroGlassAPI:
         return {"success": True, "fpl_ts": self._fpl_ts}
 
     def get_online_network_traffic(self):
-        """Scarica i dati pubblici delle reti online (VATSIM e IVAO) con cache di 60 secondi."""
         now = time.time()
         if hasattr(self, "_cached_network_data") and hasattr(self, "_net_fetch_time"):
             if (now - self._net_fetch_time) < 60.0:
@@ -1434,7 +1494,6 @@ class AeroGlassAPI:
         pilots = []
         controllers = []
 
-        # 1. Fetch VATSIM
         try:
             vatsim_url = "https://data.vatsim.net/v3/vatsim-data.json"
             req = urllib.request.Request(vatsim_url, headers={"User-Agent": "AeroGlassNav/1.0"})
@@ -1456,7 +1515,6 @@ class AeroGlassAPI:
         except Exception:
             pass
 
-        # 2. Fetch IVAO (Whazzup v2)
         try:
             import gzip
             ivao_url = "https://api.ivao.aero/v2/tracker/whazzup"
@@ -1507,9 +1565,7 @@ class AeroGlassAPI:
         self._net_fetch_time = now
         return result
 
-    # --- TELEMETRIA E CONTROLLI FINESTRA ---
     def get_telemetry(self):
-        """Restituisce i dati di telemetria istantanei al frontend insieme al timestamp di sync EFB."""
         try:
             data = dict(self._telemetry.get_data())
         except Exception:
@@ -1537,33 +1593,6 @@ class AeroGlassAPI:
             import webbrowser
             import subprocess
             if query:
-                # Copia la domanda negli appunti di Windows in modo nativo e pulito
-                subprocess.run(['clip.exe'], input=str(query).strip().encode('utf-8'), check=False)
-            webbrowser.open("https://gemini.google.com")
-            return {"success": True}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    def open_external_gemini(self, query=""):
-        """Copia la query negli appunti di Windows e apre la pagina web di Gemini nel browser."""
-        try:
-            import webbrowser
-            import subprocess
-            if query:
-                # Copia la domanda negli appunti di Windows in modo nativo e pulito
-                subprocess.run(['clip.exe'], input=str(query).strip().encode('utf-8'), check=False)
-            webbrowser.open("https://gemini.google.com")
-            return {"success": True}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    def open_external_gemini(self, query=""):
-        """Copia la query negli appunti di Windows e apre la pagina web di Gemini nel browser."""
-        try:
-            import webbrowser
-            import subprocess
-            if query:
-                # Copia la domanda negli appunti di Windows in modo nativo e pulito
                 subprocess.run(['clip.exe'], input=str(query).strip().encode('utf-8'), check=False)
             webbrowser.open("https://gemini.google.com")
             return {"success": True}

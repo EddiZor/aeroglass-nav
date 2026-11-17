@@ -2,7 +2,8 @@ import os
 import sqlite3
 from contextlib import contextmanager
 
-DB_PATH = os.path.join(os.path.expanduser("~"), ".aeroglass_nav", "aeroglass.db")
+# Punta direttamente al database nella cartella src/core/ del progetto
+DB_PATH = os.path.join(os.path.dirname(__file__), "aeroglass.db")
 
 
 @contextmanager
@@ -74,7 +75,7 @@ def init_db():
             )
         """)
 
-        # 5. Tabelle Database Mondiale Aeroporti, Piste e Frequenze (OurAirports)
+        # 5. Tabelle Database Mondiale Aeroporti, Piste, Frequenze e Cache Ground Map (OurAirports & OSM)
         cursor.executescript("""
             CREATE TABLE IF NOT EXISTS world_airports (
                 icao TEXT PRIMARY KEY,
@@ -85,6 +86,12 @@ def init_db():
                 elev_ft INTEGER,
                 country TEXT,
                 municipality TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS airport_ground_cache (
+                icao TEXT PRIMARY KEY,
+                layout_json TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
             CREATE TABLE IF NOT EXISTS world_runways (
