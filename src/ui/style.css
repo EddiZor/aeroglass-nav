@@ -175,17 +175,32 @@ body.sidebar-collapsed .top-controls-bar {
 }
 
 .top-select {
-    flex-shrink: 0;
-    white-space: nowrap;
-    background: var(--nav-panel-glass);
-    border: 1px solid var(--nav-border);
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid var(--glass-border);
     color: var(--text-main);
-    padding: 6px 10px;
+    padding: 5px 10px;
     border-radius: 6px;
-    font-size: 11.5px;
-    font-weight: 600;
+    font-size: 12.5px;
+    font-family: inherit;
     outline: none;
     cursor: pointer;
+}
+
+/* Filtri di illuminazione Giorno/Notte sul contenitore della mappa Leaflet */
+#map.map-light-mode {
+    filter: brightness(1.05) contrast(1.02) !important;
+}
+
+#map.map-night-mode {
+    filter: brightness(0.65) contrast(1.25) saturate(0.85) invert(0.92) hue-rotate(180deg) !important;
+}
+
+/* Correzione per icone e marker in modalità notte affinché non si invertano male */
+#map.map-night-mode img:not(.leaflet-tile),
+#map.map-night-mode .net-atc-badge,
+#map.map-night-mode .cloud-cell-tag,
+#map.map-night-mode .leaflet-marker-icon {
+    filter: invert(1) hue-rotate(180deg);
 }
 
 .status-dot {

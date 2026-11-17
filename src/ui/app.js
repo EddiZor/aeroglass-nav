@@ -468,9 +468,115 @@ async function applyThemeMode(mode, persist = true) {
 }
 
 function toggleThemeMode() {
-    const order = ['dark', 'night', 'day'];
-    const nextIdx = (order.indexOf(currentThemeMode) + 1) % order.length;
-    applyThemeMode(order[nextIdx], true);
+    currentTheme = (currentTheme === 'dark') ? 'light' : 'dark';
+    applyTheme(currentTheme, true);
+}
+
+// --- GESTIONE CARTOGRAFIA STILE NAVIGRAPH (IFR, VFR, MAP, SAT + GIORNO/NOTTE + RILIEVI) ---
+let currentMapLighting = 'day'; // 'day' o 'night'
+let reliefOverlayActive = false;
+let reliefLayer = null;
+
+function switchMapStyle(styleKey) {
+    const mapEl = document.getElementById('map');
+    if (!mapEl || typeof map === 'undefined' || !map) return;
+
+    mapEl.className = mapEl.className.replace(/map-(dark|light|vfr|sat|map)-mode/g, '').trim();
+    mapEl.classList.add(`map-${styleKey}-mode`);
+
+    if (typeof currentBaseTileLayer !== 'undefined' && currentBaseTileLayer) {
+        map.removeLayer(currentBaseTileLayer);
+    }
+
+    let tileUrl = '';
+    let attr = '&copy; OpenStreetMap contributors';
+    let maxZ = 19;
+
+    if (styleKey === 'ifr' || styleKey === 'map') {
+        // IFR e MAP usano OpenStreetMap standard (la modalità IFR applica automaticamente il filtro scuro notturno via CSS)
+        tileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+    } else if (styleKey === 'vfr') {
+        // VFR Topo
+        tileUrl = 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png';
+        maxZ = 17;
+        attr = '&copy; OpenTopoMap';
+    } else if (styleKey === 'sat') {
+        // Satellite (Esri)
+        tileUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+        maxZ = 18;
+        attr = 'Tiles &copy; Esri';
+    } else {
+        tileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+    }
+
+    currentBaseTileLayer = L.tileLayer(tileUrl, {
+        maxZoom: maxZ,
+        subdomains: 'abc',
+        attribution: attr
+    }).addTo(map);
+
+    applyMapLightingState();
+}
+
+function toggleMapLighting() {
+    currentMapLighting = (currentMapLighting === 'day') ? 'night' : 'day';
+    applyMapLightingState();
+}
+
+function applyMapLightingState() {
+    const mapEl = document.getElementById('map');
+    const lbl = document.getElementById('lblMapLighting');
+    const btn = document.getElementById('btnMapLighting');
+    const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+
+    if (!mapEl) return;
+
+    mapEl.classList.remove('map-light-mode', 'map-night-mode');
+
+    if (currentMapLighting === 'night') {
+        mapEl.classList.add('map-night-mode');
+        if (lbl) lbl.innerText = isEn ? 'Night' : 'Notte';
+        if (btn) {
+            btn.innerHTML = '🌙 <span id="lblMapLighting">' + (isEn ? 'Night' : 'Notte') + '</span>';
+            btn.classList.add('active');
+        }
+    } else {
+        mapEl.classList.add('map-light-mode');
+        if (lbl) lbl.innerText = isEn ? 'Day' : 'Giorno';
+        if (btn) {
+            btn.innerHTML = '☀️ <span id="lblMapLighting">' + (isEn ? 'Day' : 'Giorno') + '</span>';
+            btn.classList.remove('active');
+        }
+    }
+}
+
+function toggleMapRelief() {
+    reliefOverlayActive = !reliefOverlayActive;
+    const btn = document.getElementById('btnMapRelief');
+    const lbl = document.getElementById('lblMapRelief');
+    const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+
+    if (typeof map === 'undefined' || !map) return;
+
+    if (reliefOverlayActive) {
+        if (!reliefLayer) {
+            // Hillshading aperto e gratuito al 100% (Stamen / OpenStreetMap Hillshade)
+            reliefLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+                maxZoom: 17,
+                opacity: 0.35,
+                interactive: false
+            });
+        }
+        reliefLayer.addTo(map);
+        if (btn) btn.classList.add('active');
+        if (lbl) lbl.innerText = isEn ? 'Relief ON' : 'Rilievi ON';
+    } else {
+        if (reliefLayer && map.hasLayer(reliefLayer)) {
+            map.removeLayer(reliefLayer);
+        }
+        if (btn) btn.classList.remove('active');
+        if (lbl) lbl.innerText = isEn ? 'Relief' : 'Rilievi';
+    }
 }
 
 // --- 🔍 RICERCA RAPIDA AEROPORTO & CENTRATURA MAPPA ---
@@ -1978,8 +2084,8 @@ function organizeTopBarButtons() {
         ['btnEfbNet', 'btnLogbook', 'btnNavlogTop', 'btnFuelPerfTop', 'btnToggleScratchpad', 'btnToggleMeasure'],
         // 2. Layer Cartografici & Traffico
         ['btnFilters', 'btnToggleNavaids', 'btnToggleGroundMap', 'btnToggleWeather', 'btnToggleNetwork', 'btnAtcRadarCfg'],
-        // 3. Controllo Mappa
-        ['btnFollowAcft', 'mapStyleSelect'],
+        // 3. Controllo Mappa (Stile Navigraph: IFR/VFR/MAP/SAT + Giorno/Notte + Rilievi)
+        ['btnFollowAcft', 'mapStyleSelect', 'btnMapLighting', 'btnMapRelief'],
         // 4. Impostazioni Interfaccia (Icone compatte)
         ['btnToggleTooltips', 'btnToggleUIMode', 'btnThemeMode', 'btnLangSelect']
     ];

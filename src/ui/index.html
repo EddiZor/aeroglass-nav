@@ -43,13 +43,20 @@
             <button id="btnFollowAcft" class="top-btn active" onclick="toggleFollowAircraft()">
                 🎯 <span>Segui</span>
             </button>
-            <select id="mapStyleSelect" class="top-select" onchange="switchMapStyle(this.value)">
-                <option value="dark">🗺️ IFR Dark</option>
-                <option value="vfr">🗺️ VFR Topo</option>
-                <option value="lowifr">🗺️ Low IFR</option>
-                <option value="highifr">🗺️ High IFR</option>
-                <option value="sat">🗺️ Satellite</option>
-            </select>
+            <div class="map-navigraph-group" style="display:flex; align-items:center; gap:4px;">
+                <select id="mapStyleSelect" class="top-select" onchange="switchMapStyle(this.value)" style="width: 100px;">
+                    <option value="ifr">🗺️ IFR</option>
+                    <option value="vfr">🗺️ VFR</option>
+                    <option value="map">🗺️ MAP</option>
+                    <option value="sat">🗺️ SAT</option>
+                </select>
+                <button id="btnMapLighting" class="top-btn" onclick="toggleMapLighting()" title="Alterna Illuminazione Giorno / Notte">
+                    ☀️ <span id="lblMapLighting">Giorno</span>
+                </button>
+                <button id="btnMapRelief" class="top-btn" onclick="toggleMapRelief()" title="Attiva/Disattiva Rilievi (Hillshading)">
+                    ⛰️ <span id="lblMapRelief">Rilievi</span>
+                </button>
+            </div>
             <button id="btnLangSelect" class="top-btn" onclick="toggleLanguage()">
                 🌐 <span id="langLabel">IT</span>
             </button>

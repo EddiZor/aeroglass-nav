@@ -197,7 +197,7 @@ function getDemoSteps() {
                     <ul>
                         <li><b>💬 Aviation Expert:</b> Answers questions on airspace (ATZ, CTR, TMA), QNH, weather, and VNAV calculations.</li>
                         <li><b>🌦️ ICAO Parser:</b> Automatically detects airport codes in your questions (e.g., "METAR LIPZ") and retrieves live weather.</li>
-                        <li><b>🌐 Gemini Bridge:</b> If a query is outside local rules, Orwill automatically opens Gemini in your browser and copies your question to clipboard!</li>
+                        <li><b>🌐 Gemini Bridge:</b> If a query is outside local rules, Orwill automatically copies your question to clipboard, opens Gemini, and assists you!</li>
                     </ul>
                 `,
                 onEnter: () => {
@@ -216,6 +216,19 @@ function getDemoSteps() {
                         if (arrow) arrow.innerText = '▲';
                     }
                 }
+            },
+            {
+                target: "#mapStyleSelect",
+                badge: "STEP 13 • PRO MAP LAYERS",
+                title: "🗺️ IFR, VFR, MAP, SAT, Day/Night & Relief",
+                body: `
+                    <p>Professional cartographic chart system:</p>
+                    <ul>
+                        <li><b>🗺️ 4 Map Models:</b> Switch instantly between <b>IFR</b>, <b>VFR</b>, <b>MAP</b>, and <b>SAT</b> views.</li>
+                        <li><b>☀️/🌙 Day & Night:</b> Dedicated lighting modes to optimize cockpit night vision.</li>
+                        <li><b>⛰️ Relief:</b> Independent toggle for terrain hillshading overlays.</li>
+                    </ul>
+                `
             }
         ];
     }
@@ -405,7 +418,7 @@ function getDemoSteps() {
                 <ul>
                     <li><b>💬 Esperto Aeronautico:</b> Risponde a domande su spazi aerei (ATZ, CTR, TMA), QNH, meteo e calcoli di discesa.</li>
                     <li><b>🌦️ Parser ICAO:</b> Estrae automaticamente i codici aeroportuali dalle tue frasi (es. "metar di lipz") e recupera il meteo live.</li>
-                    <li><b>🌐 Ponte con Gemini:</b> Se una domanda esce dalle regole locali, Orwill apre automaticamente il browser su Gemini e copia la domanda negli appunti!</li>
+                    <li><b>🌐 Ponte con Gemini:</b> Se una domanda esce dalle regole locali, Orwill copia la domanda negli appunti, apre automaticamente il browser su Gemini e ti assiste!</li>
                 </ul>
             `,
             onEnter: () => {
@@ -424,6 +437,19 @@ function getDemoSteps() {
                     if (arrow) arrow.innerText = '▲';
                 }
             }
+        },
+        {
+            target: "#mapStyleSelect",
+            badge: "PASSO 13 • SISTEMA MAPPE PRO",
+            title: "🗺️ IFR, VFR, MAP, SAT, Giorno/Notte & Rilievi",
+            body: `
+                <p>Modelli cartografici professionali:</p>
+                <ul>
+                    <li><b>🗺️ 4 Viste Dedicate:</b> Seleziona al volo tra <b>IFR</b>, <b>VFR</b>, <b>MAP</b> e <b>SAT</b>.</li>
+                    <li><b>☀️/🌙 Giorno & Notte:</b> Illuminazione regolabile per la massima visibilità in cabina.</li>
+                    <li><b>⛰️ Rilievi:</b> Overlay indipendente di ombreggiatura del terreno (Hillshading).</li>
+                </ul>
+            `
         }
     ];
 }
@@ -616,7 +642,7 @@ function ensureDemoTourDOM() {
         card.id = 'aeroDemoCard';
         card.innerHTML = `
             <div class="demo-header-row">
-                <span class="demo-step-badge" id="demoStepBadge">PASSO 1 / 12</span>
+                <span class="demo-step-badge" id="demoStepBadge">PASSO 1 / 13</span>
                 <div style="display:flex;gap:6px;">
                     <button class="demo-nav-btn" id="btnDemoAutoPlay" style="padding:3px 9px;font-size:11.5px;" onclick="toggleDemoAutoPlay()">▶ Auto</button>
                     <button class="demo-close-btn" onclick="stopDemoTour()">✕ ESC</button>
@@ -627,7 +653,7 @@ function ensureDemoTourDOM() {
             <div class="demo-dots-row" id="demoStepDots"></div>
             <div class="demo-footer-row">
                 <button class="demo-nav-btn" id="btnDemoPrev" onclick="prevDemoStep()">◀ Indietro</button>
-                <span id="demoStepCounter" style="font-family:Consolas,monospace;font-size:12px;color:#94a3b8;">1 / 12</span>
+                <span id="demoStepCounter" style="font-family:Consolas,monospace;font-size:12px;color:#94a3b8;">1 / 13</span>
                 <button class="demo-nav-btn primary" id="btnDemoNext" onclick="nextDemoStep()">Avanti ▶</button>
             </div>
         `;
