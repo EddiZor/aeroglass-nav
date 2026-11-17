@@ -766,10 +766,19 @@ class AeroGlassAPI:
         if hasattr(self, "_net_atc_cache") and (now - getattr(self, "_net_atc_ts", 0)) < 55:
             return self._net_atc_cache
 
-        # Motore Poligoni Mondiali Automatico (Cache su disco + SimAware TRACON + VATSpy FIR + IVAO Live)
+        # Motore Poligoni Mondiali v2 (Separazione rigorosa CTR vs APP/TWR + Sotto-Settori + Cache v2)
         if not hasattr(self, "_global_atc_polygons"):
-            self._global_atc_polygons = {}
-            cache_file = os.path.join(os.path.expanduser("~"), ".aeroglass_nav", "world_atc_polygons.json")
+            self._global_atc_polygons = {
+                # TMA/APP Italiane ed Europee con codici di settore speciali (es. LIRR_TWI_APP = Roma TMA)
+                "LIRR_TWI_APP": [[42.35, 11.55], [42.42, 12.45], [41.95, 12.88], [41.42, 12.65], [41.48, 11.92], [41.88, 11.52]],
+                "LIRF_APP": [[42.35, 11.55], [42.42, 12.45], [41.95, 12.88], [41.42, 12.65], [41.48, 11.92], [41.88, 11.52]],
+                "LIMM_APP": [[46.05, 8.35], [46.12, 9.45], [45.65, 9.85], [45.18, 9.45], [45.22, 8.42], [45.62, 8.22]],
+                "LIMC_APP": [[46.05, 8.35], [46.12, 9.45], [45.65, 9.85], [45.18, 9.45], [45.22, 8.42], [45.62, 8.22]],
+                "LIBD_APP": [[41.48, 16.05], [41.58, 16.38], [41.53, 16.72], [41.32, 17.15], [40.92, 17.95], [40.82, 18.28], [40.58, 18.18], [40.48, 18.35], [40.32, 18.42], [40.18, 18.32], [40.25, 18.02], [40.62, 17.42], [40.98, 16.65], [41.02, 16.45], [40.82, 16.32], [40.80, 15.95], [40.95, 15.72], [41.15, 15.88], [41.28, 16.18]],
+                "LIBR_APP": [[41.48, 16.05], [41.58, 16.38], [41.53, 16.72], [41.32, 17.15], [40.92, 17.95], [40.82, 18.28], [40.58, 18.18], [40.48, 18.35], [40.32, 18.42], [40.18, 18.32], [40.25, 18.02], [40.62, 17.42], [40.98, 16.65], [41.02, 16.45], [40.82, 16.32], [40.80, 15.95], [40.95, 15.72], [41.15, 15.88], [41.28, 16.18]],
+                "ESSA_TWR": [[59.83, 17.70], [59.83, 18.08], [59.62, 18.22], [59.52, 17.95], [59.52, 17.75], [59.60, 17.63]]
+            }
+            cache_file = os.path.join(os.path.expanduser("~"), ".aeroglass_nav", "world_atc_polygons_v2.json")
             if os.path.isfile(cache_file):
                 try:
                     with open(cache_file, "r", encoding="utf-8") as cf:
@@ -801,18 +810,18 @@ class AeroGlassAPI:
                             gtype = geom.get("type", "")
                             ring = None
                             if gtype == "Polygon" and coords and len(coords[0]) >= 3:
-                                step = max(1, len(coords[0]) // 60)
+                                step = max(1, len(coords[0]) // 120)
                                 ring = [[round(float(pt[1]), 4), round(float(pt[0]), 4)] for pt in coords[0][::step]]
                             elif gtype == "MultiPolygon" and coords:
                                 longest = max((r[0] for r in coords if r and r[0]), key=len, default=[])
                                 if len(longest) >= 3:
-                                    step = max(1, len(longest) // 60)
+                                    step = max(1, len(longest) // 120)
                                     ring = [[round(float(pt[1]), 4), round(float(pt[0]), 4)] for pt in longest[::step]]
                             if not ring or len(ring) < 3:
                                 continue
 
                             raw_keys = []
-                            for field in ("id", "oceanic", "label"):
+                            for field in ("id", "label"):
                                 if props.get(field):
                                     raw_keys.append(str(props[field]).upper().strip())
                             pfx_val = props.get("prefix")
@@ -822,17 +831,16 @@ class AeroGlassAPI:
                                 raw_keys.append(str(pfx_val).upper().strip())
 
                             for rk in raw_keys:
-                                base = rk.split("_")[0].split("-")[0].strip()
+                                norm_key = rk.replace("-", "_").strip()
+                                base = norm_key.split("_")[0].strip()
                                 if not base:
                                     continue
-                                self._global_atc_polygons[f"{base}_{role_type}"] = ring
-                                if base not in self._global_atc_polygons:
-                                    self._global_atc_polygons[base] = ring
+                                # Salva sia la chiave specifica del sotto-settore (es. LFMM_E_CTR, LIRR_TWI_APP) sia la base col ruolo
+                                self._global_atc_polygons[f"{norm_key}_{role_type}"] = ring
+                                if f"{base}_{role_type}" not in self._global_atc_polygons:
+                                    self._global_atc_polygons[f"{base}_{role_type}"] = ring
                                 if len(base) == 3:
-                                    # Mappa anche prefissi USA/IATA a 3 lettere (es. JFK -> KJFK)
                                     self._global_atc_polygons[f"K{base}_{role_type}"] = ring
-                                    if f"K{base}" not in self._global_atc_polygons:
-                                        self._global_atc_polygons[f"K{base}"] = ring
                                 updated = True
                     except Exception:
                         pass
@@ -842,7 +850,6 @@ class AeroGlassAPI:
                         os.makedirs(os.path.dirname(cache_file), exist_ok=True)
                         with open(cache_file, "w", encoding="utf-8") as cf:
                             json.dump(self._global_atc_polygons, cf)
-                        # Invalida la cache ATC di 55s così al prossimo ciclo disegna subito i poligoni appena scaricati
                         self._net_atc_ts = 0
                     except Exception:
                         pass
@@ -904,7 +911,14 @@ class AeroGlassAPI:
                 for c in data.get("controllers", []):
                     cs = str(c.get("callsign") or "").strip().upper()
                     freq = str(c.get("frequency") or "").strip()
-                    if not cs or freq == "199.998" or "_" not in cs:
+                    # Scarta osservatori (facility 0), prenotazioni o frequenze non VHF attive (es. 199.998)
+                    if not cs or "_" not in cs or c.get("facility") == 0:
+                        continue
+                    try:
+                        f_val = float(freq)
+                        if not (118.0 <= f_val <= 137.0):
+                            continue
+                    except Exception:
                         continue
                     suffix = cs.split("_")[-1]
                     if suffix not in ("TWR", "APP", "DEP", "CTR"):
@@ -958,15 +972,28 @@ class AeroGlassAPI:
                     cs = str(c.get("callsign") or "").strip().upper()
                     sess = c.get("atcSession") or {}
                     freq = sess.get("frequency")
+                    # Verifica che il controllore sia realmente online e attivo (non booked/standby/observer)
                     if not cs or not freq or "_" not in cs:
+                        continue
+                    if c.get("isBooked") or sess.get("isBooked") or str(c.get("state", "")).lower() == "booked":
+                        continue
+                    try:
+                        f_val = float(freq)
+                        # Scarta frequenze di standby (199.998) o fuori banda VHF aeronautica
+                        if not (118.0 <= f_val <= 137.0):
+                            continue
+                        freq_str = "%.3f" % f_val
+                    except Exception:
                         continue
                     suffix = cs.split("_")[-1]
                     if suffix not in ("TWR", "APP", "DEP", "CTR"):
                         continue
                     tr = c.get("lastTrack") or {}
+                    # Se su IVAO non ha una traccia attiva (online time = 0 / non connesso al voice/radar), lo ignora
+                    if not tr or (tr.get("latitude") is None and tr.get("longitude") is None):
+                        continue
                     lat, lon = tr.get("latitude"), tr.get("longitude")
                     prefix = cs.split("_")[0][:4]
-                    freq_str = ("%.3f" % float(freq)) if isinstance(freq, (int, float)) else str(freq)
 
                     # Estrae il poligono reale dello spazio aereo da IVAO (supporta lat/lng, lat/lon, latitude/longitude)
                     poly = None
@@ -1050,14 +1077,14 @@ class AeroGlassAPI:
             elif pfx in FIR_CENTERS:
                 lat, lon, name = FIR_CENTERS[pfx]
 
-            # Cerca il poligono reale associato esclusivamente ai dataset ufficiali o ai dati live
+            # Cerca il poligono rispettando rigorosamente il ruolo (es. un APP non eredita MAI il poligono gigante di un CTR/FIR)
+            cs_no_role = "_".join(cs_full.split("_")[:-1])  # es. LIRR_TWI o LFMM_E
             poly = (
                 a.get("polygon")
                 or ATC_POLYGONS.get(cs_full)
+                or ATC_POLYGONS.get(f"{cs_no_role}_{role_t}")
                 or ATC_POLYGONS.get(f"{pfx}_{role_t}")
-                or ATC_POLYGONS.get(pfx)
                 or ATC_POLYGONS.get(f"{pfx[:3]}_{role_t}")
-                or ATC_POLYGONS.get(pfx[:3])
             )
 
             # Se il poligono ha un centro geografico reale, centra il badge nel poligono se manca lat/lon

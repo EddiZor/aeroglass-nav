@@ -44,14 +44,18 @@
                 🎯 <span>Segui</span>
             </button>
             <div class="map-navigraph-group" style="display:flex; align-items:center; gap:4px;">
-                <select id="mapStyleSelect" class="top-select" onchange="switchMapStyle(this.value)" style="width: 100px;">
+                <select id="mapStyleSelect" class="top-select" onchange="switchMapStyle(this.value)" style="width: 110px;">
                     <option value="ifr">🗺️ IFR</option>
                     <option value="vfr">🗺️ VFR</option>
                     <option value="map">🗺️ MAP</option>
                     <option value="sat">🗺️ SAT</option>
+                    <option value="topo">🗺️ TOPO</option>
                 </select>
                 <button id="btnMapLighting" class="top-btn" onclick="toggleMapLighting()" title="Alterna Illuminazione Giorno / Notte">
                     ☀️ <span id="lblMapLighting">Giorno</span>
+                </button>
+                <button id="btnOpenFilterCalibrator" class="top-btn" onclick="toggleFilterCalibrator()" title="Taratura Slider Luminosità/Contrasto Mappa">
+                    🎛️ Filtri
                 </button>
                 <button id="btnMapRelief" class="top-btn" onclick="toggleMapRelief()" title="Attiva/Disattiva Rilievi (Hillshading)">
                     ⛰️ <span id="lblMapRelief">Rilievi</span>
@@ -353,5 +357,47 @@
     <script src="js/demo.js"></script>
     <script src="js/telemetry.js"></script>
     <script src="app.js"></script>
+
+    <!-- Pannello Slider Interattivi Taratura Filtri Mappa -->
+    <div id="mapFilterCalibratorModal" class="glass-panel" style="position:fixed; bottom:140px; right:16px; width:310px; z-index:2500; display:none; flex-direction:column; gap:10px; padding:14px; border-radius:10px; font-family:Consolas,monospace; font-size:11.5px; color:#f0f6fc;">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(148,163,184,0.2); padding-bottom:6px;">
+            <span style="font-weight:800; color:#00d2ff;">🎛️ TARATURA FILTRI MAPPA</span>
+            <button onclick="toggleFilterCalibrator()" style="background:none; border:none; color:#94a3b8; font-size:13px; cursor:pointer;">✕</button>
+        </div>
+        
+        <div style="display:flex; flex-direction:column; gap:3px;">
+            <div style="display:flex; justify-content:space-between;">
+                <span>Luminosità (Brightness):</span>
+                <b id="valCalBrightness" style="color:#38bdf8;">0.65</b>
+            </div>
+            <input type="range" id="sliderBrightness" min="0.1" max="1.5" step="0.02" value="0.65" style="accent-color:#00d2ff; cursor:pointer;" oninput="applyInteractiveFilters()">
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:3px;">
+            <div style="display:flex; justify-content:space-between;">
+                <span>Contrasto (Contrast):</span>
+                <b id="valCalContrast" style="color:#34d399;">1.20</b>
+            </div>
+            <input type="range" id="sliderContrast" min="0.5" max="2.5" step="0.05" value="1.20" style="accent-color:#34d399; cursor:pointer;" oninput="applyInteractiveFilters()">
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:3px;">
+            <div style="display:flex; justify-content:space-between;">
+                <span>Saturazione (Saturate):</span>
+                <b id="valCalSaturate" style="color:#fbbf24;">0.85</b>
+            </div>
+            <input type="range" id="sliderSaturate" min="0.0" max="2.0" step="0.05" value="0.85" style="accent-color:#fbbf24; cursor:pointer;" oninput="applyInteractiveFilters()">
+        </div>
+
+        <div style="background:rgba(9,13,19,0.9); border:1px solid rgba(148,163,184,0.25); border-radius:6px; padding:8px; font-size:10px; color:#cbd5e1; user-text:text;">
+            <div style="font-weight:700; color:#00d2ff; margin-bottom:3px;">Valori CSS attuali da copiare in style.css:</div>
+            <div id="cssOutputSnippet" style="font-family:monospace; color:#34d399; word-break:break-all;">brightness(0.65) contrast(1.20) saturate(0.85)</div>
+        </div>
+        
+        <button class="top-btn" onclick="copyFilterSnippet()" style="justify-content:center; background:rgba(56,189,248,0.15); border-color:rgba(56,189,248,0.4); color:#38bdf8;">📋 Copia negli Appunti</button>
+    </div>
+
+    <!-- Script di avvio -->
+
 </body>
 </html>
