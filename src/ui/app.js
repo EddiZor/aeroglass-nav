@@ -451,6 +451,8 @@ async function applyThemeMode(mode, persist = true) {
     ensureNetworkOverlayUI();
     ensureScratchpadUI();
     ensureMeasureToolUI();
+    ensureNetAtcBadgeStyles();
+    organizeTopBarButtons();
     applyUIMode(currentUIMode, false);
     initSyntheticTooltipsEngine();
 
@@ -608,12 +610,12 @@ function ensureGroundMapUI() {
             const btn = document.createElement('button');
             btn.id = 'btnToggleGroundMap';
             btn.className = 'top-btn active';
-            btn.innerHTML = '🛫 <span>Taxi/Gate: ON</span>';
+            btn.innerHTML = '🛫 <span>Taxi</span>';
             btn.onclick = (e) => {
                 if (e.shiftKey) {
                     groundMapEnabled = !groundMapEnabled;
                     btn.classList.toggle('active', groundMapEnabled);
-                    btn.innerHTML = groundMapEnabled ? '🛫 <span>Taxi/Gate: ON</span>' : '🛫 <span>Taxi/Gate: OFF</span>';
+                    btn.innerHTML = '🛫 <span>Taxi</span>';
                     if (!groundMapEnabled && groundLayerGroup) {
                         groundLayerGroup.clearLayers();
                         lastRenderedGroundKey = null;
@@ -650,7 +652,7 @@ function zoomToClosestOrActiveAirport() {
     const btn = document.getElementById('btnToggleGroundMap');
     if (btn) {
         btn.classList.add('active');
-        btn.innerHTML = '🛫 <span>Taxi/Gate: ON</span>';
+        btn.innerHTML = '🛫 <span>Taxi</span>';
     }
 
     if (Array.isArray(flightPlan) && flightPlan.length > 0) {
@@ -1004,13 +1006,8 @@ function ensureWeatherOverlayUI() {
 function updateWeatherOverlayButtonUI() {
     const btn = document.getElementById('btnToggleWeather');
     if (!btn) return;
-    const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
     btn.classList.toggle('active', weatherOverlayEnabled);
-    if (weatherOverlayEnabled) {
-        btn.innerHTML = isEn ? '💨 <span>WX: ON</span>' : '💨 <span>Meteo: ON</span>';
-    } else {
-        btn.innerHTML = isEn ? '💨 <span>WX: OFF</span>' : '💨 <span>Meteo: OFF</span>';
-    }
+    btn.innerHTML = '💨 <span>WX</span>';
 }
 
 async function toggleWeatherOverlay(forceState) {
@@ -1960,15 +1957,81 @@ function ensureNetAtcBadgeStyles() {
         #btnThemeMode span {
             display: none !important;
         }
-        #btnThemeMode {
-            min-width: 32px !important;
+        #btnThemeMode, #btnToggleTooltips, #btnToggleUIMode {
+            min-width: 28px !important;
+            padding: 4px 6px !important;
         }
     `;
     document.head.appendChild(st);
-    setupErgonomicSpatialBar();
+    setupErgonomicSidebarAndTopBar();
+}
+
+function organizeTopBarButtons() {
+    const pillsGroup = document.querySelector('.top-pills-group');
+    if (!pillsGroup) return;
+
+    // Rimuove i vecchi separatori prima di riordinare
+    pillsGroup.querySelectorAll('.top-bar-sep').forEach(el => el.remove());
+
+    const clusters = [
+        // 1. EFB & Strumenti di Pianificazione
+        ['btnEfbNet', 'btnLogbook', 'btnNavlogTop', 'btnFuelPerfTop', 'btnToggleScratchpad', 'btnToggleMeasure'],
+        // 2. Layer Cartografici & Traffico
+        ['btnFilters', 'btnToggleNavaids', 'btnToggleGroundMap', 'btnToggleWeather', 'btnToggleNetwork', 'btnAtcRadarCfg'],
+        // 3. Controllo Mappa
+        ['btnFollowAcft', 'mapStyleSelect'],
+        // 4. Impostazioni Interfaccia (Icone compatte)
+        ['btnToggleTooltips', 'btnToggleUIMode', 'btnThemeMode', 'btnLangSelect']
+    ];
+
+    clusters.forEach((group, gIdx) => {
+        let addedInGroup = 0;
+        group.forEach(id => {
+            const el = document.getElementById(id);
+            if (el && el.parentNode === pillsGroup) {
+                pillsGroup.appendChild(el);
+                addedInGroup++;
+            }
+        });
+        if (addedInGroup > 0 && gIdx < clusters.length - 1) {
+            const sep = document.createElement('span');
+            sep.className = 'top-bar-sep';
+            pillsGroup.appendChild(sep);
+        }
+    });
+
+    // Forza e mantiene nel tempo le etichette compatte senza farsi sovrascrivere dal loop telemetria
+    const enforceCompactLabels = () => {
+        const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+        const efbBtn = document.getElementById('btnEfbNet');
+        const efbLbl = document.getElementById('lblEfbNet');
+        if (efbLbl && efbLbl.innerText !== 'EFB') {
+            if (efbBtn && efbLbl.innerText.includes(':')) {
+                efbBtn.title = `Tablet Wi-Fi (${efbLbl.innerText}) — Clicca per QR Code`;
+            }
+            efbLbl.innerText = 'EFB';
+        }
+        const fltLbl = document.getElementById('lblFilters');
+        if (fltLbl) fltLbl.innerText = isEn ? 'Filters' : 'Filtri';
+
+        const navBtn = document.getElementById('btnToggleNavaids');
+        if (navBtn) navBtn.innerHTML = '📡 <span>VOR/ILS</span>';
+
+        const fuelBtn = document.querySelector('#btnFuelPerfTop span');
+        if (fuelBtn) fuelBtn.innerText = 'Fuel';
+
+        const spBtn = document.querySelector('#btnToggleScratchpad span');
+        if (spBtn) spBtn.innerText = isEn ? 'Notes' : 'Note';
+    };
+
+    enforceCompactLabels();
+    if (!window._compactLabelsTimer) {
+        window._compactLabelsTimer = setInterval(enforceCompactLabels, 1000);
+    }
 }
 
 function setupErgonomicSidebarAndTopBar() {
+    organizeTopBarButtons();
     // 1. Rende la sezione "WAYPOINTS UTENTE (CUSTOM)" nella sidebar richiudibile a fisarmonica
     const wpNameInp = document.getElementById('customWpName');
     if (wpNameInp && !wpNameInp._accordionHooked) {
@@ -2085,17 +2148,32 @@ function redrawCachedNetworkTraffic() {
         const roleIcon = cfg.icon;
         const radiusM = cfg.radiusNm * rMult * 1852;
 
-        if (radiusM > 50 && oMult > 0) {
-            L.circle([c.lat, c.lon], {
-                radius: radiusM,
-                color: roleColor,
-                weight: cfg.weight,
-                dashArray: cfg.dash,
-                opacity: Math.min(1, cfg.strokeOpacity * oMult),
-                fillColor: roleColor,
-                fillOpacity: Math.min(0.85, cfg.fillOpacity * oMult),
-                interactive: false
-            }).addTo(networkLayerGroup);
+        if (oMult > 0) {
+            if (Array.isArray(c.polygon) && c.polygon.length >= 3) {
+                // Colori ufficiali poligoni IVAO WebEye: TWR Rosso/Corallo, APP Blu, CTR Viola
+                const polyColor = (c.role === 'TWR') ? '#f43f5e' : ((c.role === 'APP') ? '#3b82f6' : '#a855f7');
+                L.polygon(c.polygon, {
+                    color: polyColor,
+                    weight: 1.8,
+                    dashArray: cfg.dash,
+                    opacity: Math.min(1, 0.85 * oMult),
+                    fillColor: polyColor,
+                    fillOpacity: Math.min(0.85, 0.16 * oMult),
+                    interactive: false,
+                    smoothFactor: 1.2
+                }).addTo(networkLayerGroup);
+            } else if (radiusM > 50) {
+                L.circle([c.lat, c.lon], {
+                    radius: radiusM,
+                    color: roleColor,
+                    weight: cfg.weight,
+                    dashArray: cfg.dash,
+                    opacity: Math.min(1, cfg.strokeOpacity * oMult),
+                    fillColor: roleColor,
+                    fillOpacity: Math.min(0.85, cfg.fillOpacity * oMult),
+                    interactive: false
+                }).addTo(networkLayerGroup);
+            }
         }
 
         const netTag = isVatsim ? 'VAT' : 'IVAO';

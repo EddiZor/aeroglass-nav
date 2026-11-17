@@ -29,30 +29,30 @@
     <div class="top-controls-bar">
         <div class="top-pills-group">
             <button id="btnEfbNet" class="top-btn" onclick="openEfbNetworkModal()" title="Collega Tablet in Wi-Fi (Modalità EFB di Rete)" style="border-color: rgba(56,189,248,0.45); color: var(--cyan);">
-                📱 <span id="lblEfbNet">EFB: ...</span>
+                📱 <span id="lblEfbNet">EFB</span>
             </button>
             <button id="btnLogbook" class="top-btn" onclick="openFlightHistoryModal()">
                 📒 <span id="lblLogbook">Logbook</span>
             </button>
             <button id="btnFilters" class="top-btn" onclick="toggleProceduresPanel()">
-                ⚙️ <span id="lblFilters">Filtri & SID/STAR</span>
+                ⚙️ <span id="lblFilters">Filtri</span>
             </button>
             <button id="btnToggleNavaids" class="top-btn active" onclick="toggleNavaidsLayer()">
-                📡 VOR / ILS: ON
+                📡 <span>VOR/ILS</span>
             </button>
             <button id="btnFollowAcft" class="top-btn active" onclick="toggleFollowAircraft()">
-                🎯 Segui Aereo: ON
+                🎯 <span>Segui</span>
             </button>
+            <select id="mapStyleSelect" class="top-select" onchange="switchMapStyle(this.value)">
+                <option value="dark">🗺️ IFR Dark</option>
+                <option value="vfr">🗺️ VFR Topo</option>
+                <option value="lowifr">🗺️ Low IFR</option>
+                <option value="highifr">🗺️ High IFR</option>
+                <option value="sat">🗺️ Satellite</option>
+            </select>
             <button id="btnLangSelect" class="top-btn" onclick="toggleLanguage()">
                 🌐 <span id="langLabel">IT</span>
             </button>
-            <select id="mapStyleSelect" class="top-select" onchange="switchMapStyle(this.value)">
-                <option value="dark">Mappa: IFR Dark Cockpit</option>
-                <option value="vfr">Mappa: VFR Topo</option>
-                <option value="lowifr">Mappa: Low IFR Dark</option>
-                <option value="highifr">Mappa: High IFR Light</option>
-                <option value="sat">Mappa: Satellite Imagery</option>
-            </select>
         </div>
 
         <div class="telemetry-bar glass-panel">

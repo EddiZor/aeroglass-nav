@@ -766,6 +766,92 @@ class AeroGlassAPI:
         if hasattr(self, "_net_atc_cache") and (now - getattr(self, "_net_atc_ts", 0)) < 55:
             return self._net_atc_cache
 
+        # Motore Poligoni Mondiali Automatico (Cache su disco + SimAware TRACON + VATSpy FIR + IVAO Live)
+        if not hasattr(self, "_global_atc_polygons"):
+            self._global_atc_polygons = {}
+            cache_file = os.path.join(os.path.expanduser("~"), ".aeroglass_nav", "world_atc_polygons.json")
+            if os.path.isfile(cache_file):
+                try:
+                    with open(cache_file, "r", encoding="utf-8") as cf:
+                        loaded = json.load(cf)
+                        if isinstance(loaded, dict):
+                            self._global_atc_polygons.update(loaded)
+                except Exception:
+                    pass
+
+            def _load_world_polygons_bg():
+                import gzip
+                urls = [
+                    ("APP", "https://raw.githubusercontent.com/vatsimnetwork/simaware-tracon-project/main/TRACONBoundaries.geojson"),
+                    ("CTR", "https://raw.githubusercontent.com/vatsimnetwork/vatspy-data-project/master/Boundaries.geojson")
+                ]
+                updated = False
+                for role_type, u in urls:
+                    try:
+                        req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0", "Accept-Encoding": "gzip"})
+                        with urllib.request.urlopen(req, timeout=15) as resp:
+                            raw = resp.read()
+                            if resp.info().get("Content-Encoding") == "gzip" or raw[:2] == b"\x1f\x8b":
+                                raw = gzip.decompress(raw)
+                            gj = json.loads(raw.decode("utf-8", errors="replace"))
+                        for feat in gj.get("features", []):
+                            props = feat.get("properties") or {}
+                            geom = feat.get("geometry") or {}
+                            coords = geom.get("coordinates") or []
+                            gtype = geom.get("type", "")
+                            ring = None
+                            if gtype == "Polygon" and coords and len(coords[0]) >= 3:
+                                step = max(1, len(coords[0]) // 60)
+                                ring = [[round(float(pt[1]), 4), round(float(pt[0]), 4)] for pt in coords[0][::step]]
+                            elif gtype == "MultiPolygon" and coords:
+                                longest = max((r[0] for r in coords if r and r[0]), key=len, default=[])
+                                if len(longest) >= 3:
+                                    step = max(1, len(longest) // 60)
+                                    ring = [[round(float(pt[1]), 4), round(float(pt[0]), 4)] for pt in longest[::step]]
+                            if not ring or len(ring) < 3:
+                                continue
+
+                            raw_keys = []
+                            for field in ("id", "oceanic", "label"):
+                                if props.get(field):
+                                    raw_keys.append(str(props[field]).upper().strip())
+                            pfx_val = props.get("prefix")
+                            if isinstance(pfx_val, list):
+                                raw_keys.extend(str(p).upper().strip() for p in pfx_val)
+                            elif pfx_val:
+                                raw_keys.append(str(pfx_val).upper().strip())
+
+                            for rk in raw_keys:
+                                base = rk.split("_")[0].split("-")[0].strip()
+                                if not base:
+                                    continue
+                                self._global_atc_polygons[f"{base}_{role_type}"] = ring
+                                if base not in self._global_atc_polygons:
+                                    self._global_atc_polygons[base] = ring
+                                if len(base) == 3:
+                                    # Mappa anche prefissi USA/IATA a 3 lettere (es. JFK -> KJFK)
+                                    self._global_atc_polygons[f"K{base}_{role_type}"] = ring
+                                    if f"K{base}" not in self._global_atc_polygons:
+                                        self._global_atc_polygons[f"K{base}"] = ring
+                                updated = True
+                    except Exception:
+                        pass
+
+                if updated:
+                    try:
+                        os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+                        with open(cache_file, "w", encoding="utf-8") as cf:
+                            json.dump(self._global_atc_polygons, cf)
+                        # Invalida la cache ATC di 55s così al prossimo ciclo disegna subito i poligoni appena scaricati
+                        self._net_atc_ts = 0
+                    except Exception:
+                        pass
+
+            if len(self._global_atc_polygons) < 200:
+                threading.Thread(target=_load_world_polygons_bg, daemon=True).start()
+
+        ATC_POLYGONS = self._global_atc_polygons
+
         FIR_CENTERS = {
             "LIPP": (45.406, 11.876, "Padova ACC"),
             "LIMM": (45.462, 9.278, "Milano ACC"),
@@ -840,12 +926,20 @@ class AeroGlassAPI:
         def fetch_ivao():
             i_pilots, i_atcs = [], []
             try:
+                import gzip
                 req = urllib.request.Request(
                     "https://api.ivao.aero/v2/tracker/whazzup",
-                    headers={"User-Agent": "AeroGlass-Nav/0.7"}
+                    headers={
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                        "Accept": "application/json",
+                        "Accept-Encoding": "gzip"
+                    }
                 )
-                with urllib.request.urlopen(req, timeout=6) as resp:
-                    data = json.loads(resp.read().decode("utf-8", errors="replace"))
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    raw_bytes = resp.read()
+                    if resp.info().get("Content-Encoding") == "gzip" or raw_bytes[:2] == b"\x1f\x8b":
+                        raw_bytes = gzip.decompress(raw_bytes)
+                    data = json.loads(raw_bytes.decode("utf-8", errors="replace"))
                 clients = data.get("clients", {})
                 for p in clients.get("pilots", []):
                     tr = p.get("lastTrack") or {}
@@ -873,13 +967,42 @@ class AeroGlassAPI:
                     lat, lon = tr.get("latitude"), tr.get("longitude")
                     prefix = cs.split("_")[0][:4]
                     freq_str = ("%.3f" % float(freq)) if isinstance(freq, (int, float)) else str(freq)
+
+                    # Estrae il poligono reale dello spazio aereo da IVAO (supporta lat/lng, lat/lon, latitude/longitude)
+                    poly = None
+                    for src_obj in (c.get("atcPosition"), c.get("subcenter"), c.get("atcSession"), c):
+                        if not isinstance(src_obj, dict):
+                            continue
+                        reg_map = src_obj.get("regionMapPolygon") or src_obj.get("regionMap") or src_obj.get("polygon")
+                        if isinstance(reg_map, list) and len(reg_map) >= 3:
+                            parsed_poly = []
+                            for pt in reg_map:
+                                if isinstance(pt, dict):
+                                    plat = pt.get("lat") if pt.get("lat") is not None else pt.get("latitude")
+                                    plon = pt.get("lng") if pt.get("lng") is not None else (pt.get("lon") if pt.get("lon") is not None else pt.get("longitude"))
+                                    if plat is not None and plon is not None:
+                                        parsed_poly.append([round(float(plat), 4), round(float(plon), 4)])
+                                elif isinstance(pt, (list, tuple)) and len(pt) >= 2:
+                                    parsed_poly.append([round(float(pt[0]), 4), round(float(pt[1]), 4)])
+                            if len(parsed_poly) >= 3:
+                                poly = parsed_poly
+                                break
+
+                    role_norm = "APP" if suffix == "DEP" else suffix
+                    if poly and prefix:
+                        ATC_POLYGONS[f"{cs}"] = poly
+                        ATC_POLYGONS[f"{prefix}_{role_norm}"] = poly
+                        if prefix not in ATC_POLYGONS:
+                            ATC_POLYGONS[prefix] = poly
+
                     i_atcs.append({
                         "callsign": cs,
                         "prefix": prefix,
-                        "role": "APP" if suffix == "DEP" else suffix,
+                        "role": role_norm,
                         "freq": freq_str,
                         "lat": float(lat) if lat is not None else None,
                         "lon": float(lon) if lon is not None else None,
+                        "polygon": poly,
                         "network": "ivao"
                     })
             except Exception:
@@ -896,8 +1019,10 @@ class AeroGlassAPI:
             raw_atcs.extend(va)
             raw_atcs.extend(ia)
 
+        import math
         needed_prefixes = list(set(a["prefix"] for a in raw_atcs if a["prefix"]))
         apt_coords = {}
+        apt_hdgs = {}
         if needed_prefixes:
             try:
                 with self._db_lock:
@@ -907,17 +1032,39 @@ class AeroGlassAPI:
                         rows = conn.execute(sql_q, needed_prefixes).fetchall()
                         for r in rows:
                             apt_coords[r["icao"]] = (float(r["lat"]), float(r["lon"]), r["name"])
+                        sql_rwy = "SELECT apt_icao, le_hdg FROM world_runways WHERE apt_icao IN (" + placeholders + ") AND le_hdg IS NOT NULL"
+                        for rw in conn.execute(sql_rwy, needed_prefixes).fetchall():
+                            if rw["apt_icao"] not in apt_hdgs and rw["le_hdg"]:
+                                apt_hdgs[rw["apt_icao"]] = float(rw["le_hdg"])
             except Exception:
                 pass
 
         for a in raw_atcs:
             pfx = a["prefix"]
+            cs_full = a["callsign"]
+            role_t = a["role"]
             lat, lon = a["lat"], a["lon"]
             name = pfx
             if pfx in apt_coords:
                 lat, lon, name = apt_coords[pfx]
             elif pfx in FIR_CENTERS:
                 lat, lon, name = FIR_CENTERS[pfx]
+
+            # Cerca il poligono reale associato esclusivamente ai dataset ufficiali o ai dati live
+            poly = (
+                a.get("polygon")
+                or ATC_POLYGONS.get(cs_full)
+                or ATC_POLYGONS.get(f"{pfx}_{role_t}")
+                or ATC_POLYGONS.get(pfx)
+                or ATC_POLYGONS.get(f"{pfx[:3]}_{role_t}")
+                or ATC_POLYGONS.get(pfx[:3])
+            )
+
+            # Se il poligono ha un centro geografico reale, centra il badge nel poligono se manca lat/lon
+            if poly and (lat is None or lon is None):
+                lat = sum(p[0] for p in poly) / len(poly)
+                lon = sum(p[1] for p in poly) / len(poly)
+
             if lat is not None and lon is not None:
                 controllers.append({
                     "callsign": a["callsign"],
@@ -926,6 +1073,7 @@ class AeroGlassAPI:
                     "freq": a["freq"],
                     "lat": lat,
                     "lon": lon,
+                    "polygon": poly,
                     "network": a["network"]
                 })
 
@@ -1283,10 +1431,21 @@ class AeroGlassAPI:
 
         # 2. Fetch IVAO (Whazzup v2)
         try:
+            import gzip
             ivao_url = "https://api.ivao.aero/v2/tracker/whazzup"
-            req = urllib.request.Request(ivao_url, headers={"User-Agent": "AeroGlassNav/1.0"})
-            with urllib.request.urlopen(req, timeout=4) as resp:
-                i_data = json.loads(resp.read().decode("utf-8"))
+            req = urllib.request.Request(
+                ivao_url,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    "Accept": "application/json",
+                    "Accept-Encoding": "gzip"
+                }
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                raw_bytes = resp.read()
+                if resp.info().get("Content-Encoding") == "gzip" or raw_bytes[:2] == b"\x1f\x8b":
+                    raw_bytes = gzip.decompress(raw_bytes)
+                i_data = json.loads(raw_bytes.decode("utf-8", errors="replace"))
                 clients = i_data.get("clients", {})
                 pilot_list = clients.get("pilots", []) if isinstance(clients, dict) else clients
                 for p in pilot_list:
