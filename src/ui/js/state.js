@@ -103,7 +103,9 @@ const DEFAULT_VORS = [
 const DEFAULT_ILS = [
     {"ident": "IFLL", "rwy": "16L", "name": "ILS-DME Fiumicino RWY 16L", "freq": "109.75", "course": 161, "gs_alt": "3,000 ft", "lat": 41.8250, "lon": 12.2480},
     {"ident": "IFRR", "rwy": "34R", "name": "ILS-DME Fiumicino RWY 34R", "freq": "110.30", "course": 341, "gs_alt": "3,000 ft", "lat": 41.7780, "lon": 12.2320},
-    {"ident": "IBOL", "rwy": "12", "name": "ILS Bologna RWY 12", "freq": "109.30", "course": 118, "gs_alt": "2,500 ft", "lat": 44.5420, "lon": 11.2720},
+    {"ident": "IBOL", "rwy": "12", "name": "ILS Bologna RWY 12", "freq": "109.30", "course": 116, "gs_alt": "2,500 ft", "lat": 44.5408, "lon": 11.2728},
+    {"ident": "IBLQ", "rwy": "30", "name": "ILS/LOC Bologna RWY 30", "freq": "108.90", "course": 296, "gs_alt": "2,500 ft", "lat": 44.5300, "lon": 11.3045},
+    {"ident": "ITES", "rwy": "04R", "name": "ILS Venezia RWY 04R", "freq": "110.30", "course": 41, "gs_alt": "3,000 ft", "lat": 45.4935, "lon": 12.3375},
     {"ident": "IVIL", "rwy": "04", "name": "ILS Verona RWY 04", "freq": "109.50", "course": 43, "gs_alt": "3,000 ft", "lat": 45.3820, "lon": 10.8710}
 ];
 

@@ -850,9 +850,9 @@ function findNearestAirportAtCenter(lat, lon) {
             if (rawDist > 0.085) continue;
             // Dà priorità agli scali principali/medi ed evita che piccoli eliporti con trattino (es. IT-0012) rubino il focus
             let weight = 1.0;
+            if (apt.icao.includes('-')) continue;
             if (apt.type === 'large_airport') weight = 0.5;
             else if (apt.type === 'medium_airport') weight = 0.75;
-            else if (apt.icao.includes('-')) weight = 1.8;
 
             const weightedDist = rawDist * weight;
             if (weightedDist < minWeightedDist) {
@@ -1037,19 +1037,7 @@ async function evaluateAirportGroundMap() {
                 if (badgeName) badgeName.innerText = `${targetIcao} - ${nearApt.name || ly.name || 'GROUND CHART'}`;
                 renderCustomAirportLayout(ly);
 
-                // Se il backend ha usato il layout procedurale, scarica i dati OSM direttamente da Chromium e aggiorna la cache SQLite
-                if (ly.source !== 'osm') {
-                    fetchOsmGroundFromBrowser(targetIcao, ly.lat || nearApt.lat, ly.lon || nearApt.lon, nearApt.name || ly.name, ly.runways).then(osmLy => {
-                        if (osmLy) {
-                            if (lastRenderedGroundKey === targetIcao) {
-                                renderCustomAirportLayout(osmLy);
-                            }
-                            if (window.pywebview && window.pywebview.api && window.pywebview.api.save_airport_ground_layout) {
-                                window.pywebview.api.save_airport_ground_layout(targetIcao, osmLy);
-                            }
-                        }
-                    });
-                }
+                // Dati gestiti interamente dal database SQLite locale e da MSFS 2024
             } else {
                 lastRenderedGroundKey = null;
                 if (groundLayerGroup) groundLayerGroup.clearLayers();

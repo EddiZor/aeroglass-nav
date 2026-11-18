@@ -698,6 +698,7 @@ class AeroGlassAPI:
                         FROM world_airports
                         WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?
                           AND type IN ('large_airport', 'medium_airport', 'small_airport')
+                          AND icao NOT LIKE '%-%'
                         ORDER BY (
                             ((lat - ?) * (lat - ?) + (lon - ?) * (lon - ?)) *
                             CASE type

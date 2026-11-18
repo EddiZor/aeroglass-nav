@@ -82,19 +82,11 @@ def fetch_from_msfs2024_simconnect(icao, fallback_lat, fallback_lon, fallback_na
     if not dll:
         return None
 
+    if "-" in icao or len(icao) > 4:
+        return None
+
     h_sim = ctypes.c_void_p()
     try:
-        dll.SimConnect_Open.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_char_p, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_uint32]
-        dll.SimConnect_Open.restype = ctypes.c_long
-        dll.SimConnect_AddToFacilityDefinition.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_char_p]
-        dll.SimConnect_AddToFacilityDefinition.restype = ctypes.c_long
-        dll.SimConnect_RequestFacilityData.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_char_p, ctypes.c_char_p]
-        dll.SimConnect_RequestFacilityData.restype = ctypes.c_long
-        dll.SimConnect_GetNextDispatch.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(ctypes.c_uint32)]
-        dll.SimConnect_GetNextDispatch.restype = ctypes.c_long
-        dll.SimConnect_Close.argtypes = [ctypes.c_void_p]
-        dll.SimConnect_Close.restype = ctypes.c_long
-
         res = dll.SimConnect_Open(
             ctypes.byref(h_sim),
             b"AeroGlass-Nav GroundDB",
@@ -488,11 +480,88 @@ def _extract_bgl_airport_children(data, apt_start, apt_end, icao, apt_lat, apt_l
 
 
 # ==============================================================================
-# 3. RISOLUZIONE COMPLETA E FALLBACK IPv4 VELOCE (QUANDO MSFS 2024 È CHIUSO)
+# 3. RISOLUZIONE MSFS 2024 (SIMCONNECT + BGL) & PRE-CACHING AUTOMATICO IN SQLITE
 # ==============================================================================
+PRIORITY_ITALIAN_ICAOS = (
+    "LIPE", "LIPQ", "LIPZ", "LIPV", "LIPH", "LIPX", "LIPO", "LIPR", "LIPY", "LIPA",
+    "LIRF", "LIRA", "LIRN", "LIRQ", "LIRP", "LIRS", "LIRZ",
+    "LIMC", "LIML", "LIME", "LIMF", "LIMJ", "LIMZ",
+    "LIBD", "LIBR", "LIBP", "LICC", "LICJ", "LICR", "LICT", "LIEE", "LIEO", "LIEA"
+)
+_bg_preload_started = False
+
+
+def _start_background_msfs_preloader(db_lock):
+    """Quando MSFS 2024 è attivo, pre-carica in background nella cache SQLite i principali aeroporti italiani
+       (1 aeroporto ogni 1.5 secondi) così sono sempre pronti anche a simulatore chiuso."""
+    global _bg_preload_started
+    if _bg_preload_started:
+        return
+    _bg_preload_started = True
+
+    def _worker():
+        import threading as _th
+        time.sleep(3.0)
+        for icao_code in PRIORITY_ITALIAN_ICAOS:
+            try:
+                with db_lock:
+                    with get_connection() as conn:
+                        row = conn.execute("SELECT layout_json FROM airport_ground_cache WHERE icao = ?", (icao_code,)).fetchone()
+                        if row and row["layout_json"] and '"source": "msfs"' in row["layout_json"]:
+                            continue
+                        apt = conn.execute("SELECT name, lat, lon FROM world_airports WHERE icao = ?", (icao_code,)).fetchone()
+                        if not apt:
+                            continue
+                        a_name, a_lat, a_lon = apt["name"] or icao_code, float(apt["lat"]), float(apt["lon"])
+                        rwy_rows = [dict(r) for r in conn.execute("SELECT * FROM world_runways WHERE apt_icao = ?", (icao_code,)).fetchall()]
+
+                rwys = []
+                for r in rwy_rows:
+                    if r.get("le_lat") is not None and r.get("he_lat") is not None:
+                        le_id = str(r.get("le_ident") or "").strip()
+                        he_id = str(r.get("he_ident") or "").strip()
+                        surf_raw = str(r.get("surface") or "asphalt").lower()
+                        rwys.append({
+                            "ref": f"{le_id}/{he_id}" if (le_id and he_id) else "RWY",
+                            "width": round(max(18.0, float(r.get("width_ft") or 148) * 0.3048), 1),
+                            "surface": "grass" if ("grass" in surf_raw or "turf" in surf_raw or "grs" in surf_raw) else "asphalt",
+                            "coords": [[float(r["le_lat"]), float(r["le_lon"])], [float(r["he_lat"]), float(r["he_lon"])]]
+                        })
+
+                from src.core.diagnostics import SIMCONNECT_GLOBAL_LOCK
+                with SIMCONNECT_GLOBAL_LOCK:
+                    sc_ly = fetch_from_msfs2024_simconnect(icao_code, a_lat, a_lon, a_name)
+                if sc_ly:
+                    sc_ly["runways"] = rwys
+                    _save_to_sqlite_cache(icao_code, sc_ly, db_lock)
+                else:
+                    # Se MSFS 2024 è stato chiuso, interrompe il pre-caricamento
+                    break
+                time.sleep(1.5)
+            except Exception:
+                continue
+
+    import threading
+    threading.Thread(target=_worker, name="MSFSGroundPreloader", daemon=True).start()
+
+
 def fetch_and_cache_airport_ground(icao, apt_name, lat, lon, db_runways, db_lock):
     from src.core.diagnostics import log_diag, SIMCONNECT_GLOBAL_LOCK
     icao = str(icao or "").strip().upper()
+
+    # Ignora subito i micro-campi non ICAO col trattino (es. IT-0087)
+    if not icao or "-" in icao or len(icao) > 4:
+        return {
+            "icao": icao,
+            "name": apt_name,
+            "lat": lat,
+            "lon": lon,
+            "source": "runways_only",
+            "runways": db_runways,
+            "taxiways": [],
+            "aprons": [],
+            "stands": []
+        }
 
     # A. Canale 1: Se MSFS 2024 è aperto, estrae in mutua esclusione dal simulatore via SimConnect Facility Data
     with SIMCONNECT_GLOBAL_LOCK:
@@ -523,148 +592,19 @@ def fetch_and_cache_airport_ground(icao, apt_name, lat, lon, db_runways, db_lock
                 _save_to_sqlite_cache(icao, bgl_layout, db_lock)
                 return bgl_layout
 
-    # C. Canale 3: A simulatore chiuso (DEMO), scarica in IPv4 puro con singola scansione veloce
-    layout = {
+    # C. Se MSFS 2024 è chiuso e l'aeroporto non è ancora in cache, restituisce subito le piste in 1 ms
+    #    SENZA sporcare airport_ground_cache con "runways_only" e senza attendere server web esterni.
+    return {
         "icao": icao,
         "name": apt_name,
         "lat": lat,
         "lon": lon,
-        "source": "msfs",
+        "source": "runways_only",
         "runways": db_runways,
         "taxiways": [],
         "aprons": [],
         "stands": []
     }
-
-    s, w, n, e = round(lat - 0.025, 5), round(lon - 0.035, 5), round(lat + 0.025, 5), round(lon + 0.035, 5)
-    # Query con indice chiave=valore esatto e bbox globale (risposta < 0.5s su overpass.private.coffee)
-    overpass_query = (
-        f"[out:json][timeout:18][bbox:{s},{w},{n},{e}];("
-        f"way[\"aeroway\"=\"taxiway\"];"
-        f"way[\"aeroway\"=\"taxilane\"];"
-        f"way[\"aeroway\"=\"apron\"];"
-        f"way[\"aeroway\"=\"parking_position\"];"
-        f"node[\"aeroway\"=\"parking_position\"];"
-        f"node[\"aeroway\"=\"gate\"];"
-        f");out geom qt;"
-    )
-
-    ssl_ctx = ssl._create_unverified_context()
-
-    class _IPv4HTTPSConnection(http.client.HTTPSConnection):
-        def connect(self_conn):
-            last_err = None
-            for res in socket.getaddrinfo(self_conn.host, self_conn.port or 443, socket.AF_INET, socket.SOCK_STREAM):
-                af, socktype, proto, _, sa = res
-                sock = None
-                try:
-                    sock = socket.socket(af, socktype, proto)
-                    sock.settimeout(16.0)
-                    sock.connect(sa)
-                    self_conn.sock = ssl_ctx.wrap_socket(sock, server_hostname=self_conn.host)
-                    return
-                except Exception as err:
-                    last_err = err
-                    if sock is not None:
-                        sock.close()
-            raise last_err or OSError(f"Connessione IPv4 fallita verso {self_conn.host}")
-
-    class _IPv4HTTPSHandler(urllib.request.HTTPSHandler):
-        def https_open(self_h, req):
-            return self_h.do_open(lambda host, **kw: _IPv4HTTPSConnection(host, **kw), req)
-
-    ipv4_opener = urllib.request.build_opener(_IPv4HTTPSHandler())
-    post_data = urllib.parse.urlencode({"data": overpass_query}).encode("utf-8")
-
-    mirrors = [
-        "https://overpass.private.coffee/api/interpreter",
-        "https://lz4.overpass-api.de/api/interpreter",
-        "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
-    ]
-
-    osm_data = None
-    for url in mirrors:
-        try:
-            req = urllib.request.Request(
-                url,
-                data=post_data,
-                headers={
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AeroGlass-Nav/0.7.1",
-                    "Accept": "application/json",
-                    "Accept-Encoding": "gzip",
-                    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
-                }
-            )
-            with ipv4_opener.open(req, timeout=16.0) as resp:
-                raw = resp.read()
-                if raw[:2] == b"\x1f\x8b":
-                    raw = gzip.decompress(raw)
-                osm_data = json.loads(raw.decode("utf-8", errors="replace"))
-            if osm_data and isinstance(osm_data.get("elements"), list) and len(osm_data["elements"]) > 0:
-                print(f"[MSFS-GroundDB] Scaricati {len(osm_data['elements'])} elementi per {icao} da {url}")
-                break
-        except Exception as err:
-            print(f"[MSFS-GroundDB] Mirror {url} errore per {icao}: {err}")
-            continue
-
-    raw_node_stands = []
-    raw_way_stands = []
-    osm_runways = []
-
-    if osm_data and isinstance(osm_data.get("elements"), list):
-        for el in osm_data["elements"]:
-            el_type = el.get("type")
-            tags = el.get("tags") or {}
-            aeroway = tags.get("aeroway")
-            ref = str(tags.get("ref") or tags.get("name") or "").strip()
-
-            if el_type == "way" and isinstance(el.get("geometry"), list):
-                coords = [[float(pt["lat"]), float(pt["lon"])] for pt in el["geometry"] if "lat" in pt and "lon" in pt]
-                if len(coords) < 2:
-                    continue
-                if aeroway in ("taxiway", "taxilane"):
-                    layout["taxiways"].append({"ref": ref if aeroway == "taxiway" else "", "kind": aeroway, "coords": coords})
-                elif aeroway == "apron":
-                    layout["aprons"].append(coords)
-                elif aeroway == "runway" and not db_runways:
-                    surf_tag = str(tags.get("surface") or "asphalt").lower()
-                    osm_runways.append({
-                        "ref": ref or "RWY",
-                        "width": 45,
-                        "surface": "grass" if ("grass" in surf_tag or "turf" in surf_tag) else "asphalt",
-                        "coords": coords
-                    })
-                elif aeroway == "parking_position":
-                    layout["taxiways"].append({"ref": "", "kind": "taxilane", "coords": coords})
-                    nose_pt = coords[-1]
-                    if ref:
-                        raw_way_stands.append({"ref": ref, "lat": nose_pt[0], "lon": nose_pt[1]})
-
-            elif el_type == "node" and aeroway in ("parking_position", "gate", "helipad"):
-                if "lat" in el and "lon" in el:
-                    stand_ref = ref or ("H" if aeroway == "helipad" else "")
-                    if stand_ref:
-                        raw_node_stands.append({"ref": stand_ref, "lat": float(el["lat"]), "lon": float(el["lon"])})
-
-    seen_stands = []
-    for st in (raw_node_stands + raw_way_stands):
-        is_dup = any(
-            (s_ref == st["ref"] and abs(s_lat - st["lat"]) < 0.0006 and abs(s_lon - st["lon"]) < 0.0006)
-            or (abs(s_lat - st["lat"]) < 0.00008 and abs(s_lon - st["lon"]) < 0.00008)
-            for s_ref, s_lat, s_lon in seen_stands
-        )
-        if not is_dup:
-            seen_stands.append((st["ref"], st["lat"], st["lon"]))
-            layout["stands"].append(st)
-
-    if not layout["runways"] and osm_runways:
-        layout["runways"] = osm_runways
-
-    if not layout["taxiways"] and not layout["stands"]:
-        layout["source"] = "runways_only"
-
-    _save_to_sqlite_cache(icao, layout, db_lock)
-    return layout
 
 
 def _save_to_sqlite_cache(icao, layout, db_lock):

@@ -100,9 +100,19 @@ function renderNavAids(vors, ilsList) {
         }
     });
 
+    const destWp = (Array.isArray(flightPlan) && flightPlan.length >= 2) ? flightPlan[flightPlan.length - 1] : null;
+    const activeDestRwy = destWp && destWp.rwy ? String(destWp.rwy).trim().toUpperCase().replace(/^RWY\s*/i, '') : '';
+
     (ilsList || DEFAULT_ILS).forEach(ils => {
         if (ils.lat && ils.lon) {
             const latLng = L.latLng(ils.lat, ils.lon);
+            // Se sull'aeroporto di destinazione è attiva una pista specifica (es. 30), nasconde il badge della testata opposta (es. ILS 12)
+            if (destWp && destWp.lat && destWp.lon && activeDestRwy) {
+                const distToDest = latLng.distanceTo(L.latLng(destWp.lat, destWp.lon));
+                if (distToDest < 12000 && String(ils.rwy).trim().toUpperCase() !== activeDestRwy) {
+                    return;
+                }
+            }
             if (bufferedBounds.contains(latLng)) {
                 const marker = L.marker(latLng, { icon: createIlsIcon(ils.rwy, ils.ident), zIndexOffset: 450 }).addTo(map);
                 marker.bindPopup(

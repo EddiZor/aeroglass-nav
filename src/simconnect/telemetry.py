@@ -83,10 +83,8 @@ class TelemetryManager:
         try:
             with SIMCONNECT_GLOBAL_LOCK:
                 new_sm = SimConnect()
-                try:
-                    new_aq = AircraftRequests(new_sm, _time=900, _attemps=1)
-                except TypeError:
-                    new_aq = AircraftRequests(new_sm, _time=900)
+                # Usa i 4 tentativi standard di AircraftRequests così MSFS 2024 ha il tempo (~15ms) di rispondere sulla pipe
+                new_aq = AircraftRequests(new_sm, _time=800)
                 self.sm = new_sm
                 self.aq = new_aq
                 self._var_cache = {}
@@ -99,32 +97,12 @@ class TelemetryManager:
             return False
 
     def _safe_get(self, aq_obj, var_name):
-        """Legge una SimVar registrando la DataDefinition in MSFS 2024 UNA SOLA VOLTA per sessione."""
+        """Legge una SimVar tramite aq_obj.get() lasciando intatto il ciclo di vita di Python-SimConnect."""
         if aq_obj is None:
             return None
-        t0 = time.perf_counter()
         try:
             with SIMCONNECT_GLOBAL_LOCK:
-                sim_var = self._var_cache.get(var_name)
-                if sim_var is None:
-                    sim_var = aq_obj.find(var_name)
-                    if sim_var is not None:
-                        sim_var.time = 850
-                        sim_var.attemps = 1
-                        self._var_cache[var_name] = sim_var
-                if sim_var is not None:
-                    val = sim_var.value
-                    # Disattiva define() dopo la prima registrazione: impedisce a Python-SimConnect
-                    # di richiamare AddToDataDefinition e stampare "SIM def(...)" ad ogni ciclo
-                    if getattr(sim_var, "DATA_DEFINITION_ID", None) is not None and not getattr(sim_var, "_def_locked", False):
-                        sim_var.define = lambda: None
-                        sim_var._def_locked = True
-                else:
-                    val = aq_obj.get(var_name)
-            dt_ms = (time.perf_counter() - t0) * 1000.0
-            if dt_ms > 450.0:
-                log_diag("SIM_SLOW", f"SimVar {var_name} ha impiegato {dt_ms:.0f} ms")
-            return val
+                return aq_obj.get(var_name)
         except Exception as ex:
             err_msg = str(ex).lower()
             log_diag("SIM_ERR", f"Eccezione lettura SimVar {var_name}: {ex}")
@@ -151,7 +129,7 @@ class TelemetryManager:
                 lat = self._safe_get(aq_ref, "PLANE_LATITUDE")
                 lon = self._safe_get(aq_ref, "PLANE_LONGITUDE")
 
-                # Filtra sia None/(0,0) sia le coordinate equatoriali fittizie del Menu/Hangar di MSFS 2024 (es. 0°N, 80°E e 0°N, 90°E)
+                # Filtra None/(0,0) e le coordinate equatoriali fittizie del Menu/Hangar di MSFS 2024 (lat ~ 0, lon 75..95E)
                 is_menu_pos = False
                 if lat is None or lon is None:
                     is_menu_pos = True
@@ -160,14 +138,15 @@ class TelemetryManager:
                     if abs(f_lat) < 0.05 and (abs(f_lon) < 0.05 or 75.0 <= f_lon <= 95.0):
                         is_menu_pos = True
 
-                # Quando MSFS 2024 è nel Menu Principale o in caricamento, mantiene aperta la sessione SimConnect
-                # senza mai disconnettere/riconnettere (evita memory leak in MSFS 2024) e attende 4 secondi.
                 if is_menu_pos:
                     self._fail_count += 1
                     if self._fail_count == 1:
                         log_diag("SIM_MENU", f"MSFS 2024 in Menu/Caricamento (coord={lat},{lon}) — in attesa avvio volo.")
                         self._set_demo_state()
-                    time.sleep(4.0)
+                    if lat is None and self._fail_count >= 15:
+                        self._safe_disconnect()
+                        self._set_demo_state()
+                    time.sleep(2.0)
                     continue
 
                 if self._fail_count > 0:

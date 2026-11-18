@@ -1614,3 +1614,8 @@ body.mode-simple .top-pills-group #btnToggleWeather {
     font-size: 15px !important;
     user-select: text !important;
 }
+
+/* Disattivazione temporanea Orwill Co-Pilot */
+#orwill-panel, #orwillChatWidget, .orwill-widget, .orwill-panel {
+    display: none !important;
+}

@@ -310,13 +310,33 @@ function drawApproachFeather(waypoints) {
     if (dest.lat === null || dest.lon === null || prev.lat === null || prev.lon === null) return;
 
     const apt = findAirport(dest.ident);
-    const destRwy = dest.rwy || (apt && apt.rwy ? apt.rwy.split('/')[0] : '');
-    const matchedIls = (ilsData || []).find(i =>
-        (destRwy && i.rwy === destRwy && L.latLng(dest.lat, dest.lon).distanceTo(L.latLng(i.lat, i.lon)) < 15000) ||
-        L.latLng(dest.lat, dest.lon).distanceTo(L.latLng(i.lat, i.lon)) < 8000
-    );
+    const cleanRwy = (r) => String(r || '').trim().toUpperCase().replace(/^RWY\s*/i, '');
+    let destRwy = cleanRwy(dest.rwy);
+    if (!destRwy && dest.proc_name) {
+        const mRwy = String(dest.proc_name).match(/RWY\s*(\d{1,2}[LRC]?)/i);
+        if (mRwy) destRwy = mRwy[1].toUpperCase();
+    }
+    if (!destRwy && apt && apt.rwy) {
+        destRwy = cleanRwy(apt.rwy.split('/')[0]);
+    }
 
-    const finalCourse = matchedIls ? Number(matchedIls.course) : calculateBearing(prev.lat, prev.lon, dest.lat, dest.lon);
+    // Se conosciamo la pista di atterraggio (es. 30), accetta SOLO l'ILS di quella specifica testata
+    const matchedIls = (ilsData || []).find(i => {
+        const d = L.latLng(dest.lat, dest.lon).distanceTo(L.latLng(i.lat, i.lon));
+        if (destRwy) {
+            return cleanRwy(i.rwy) === destRwy && d < 15000;
+        }
+        return d < 8000;
+    });
+
+    let finalCourse = null;
+    if (matchedIls && matchedIls.course !== undefined) {
+        finalCourse = Number(matchedIls.course);
+    } else if (destRwy && /^\d{1,2}/.test(destRwy)) {
+        finalCourse = (parseInt(destRwy.match(/^\d{1,2}/)[0], 10) * 10) % 360;
+    } else {
+        finalCourse = calculateBearing(prev.lat, prev.lon, dest.lat, dest.lon);
+    }
     const reciprocal = (finalCourse + 180) % 360;
 
     const tip = [dest.lat, dest.lon];
@@ -805,6 +825,26 @@ function parsePlnXmlString(xmlText) {
         cruiseAlt = parseInt(parseFloat(cruiseNodes[0].textContent.trim()), 10) || 24000;
     }
 
+    const desMap = { "LEFT": "L", "RIGHT": "R", "CENTER": "C" };
+    const extractBlockRwy = (parentNode) => {
+        if (!parentNode) return "";
+        const num = parentNode.getElementsByTagName("RunwayNumberFP")[0]?.textContent?.trim() || "";
+        const des = parentNode.getElementsByTagName("RunwayDesignatorFP")[0]?.textContent?.trim() || "";
+        if (!num) return "";
+        return num.padStart(2, '0') + (desMap[des.toUpperCase()] || "");
+    };
+
+    // Legge i blocchi globali MSFS 2024 (<DepartureDetails>, <ArrivalDetails>, <ApproachDetails>)
+    const depDetailsNode = xmlDoc.getElementsByTagName("DepartureDetails")[0] || null;
+    const arrDetailsNode = xmlDoc.getElementsByTagName("ArrivalDetails")[0] || null;
+    const apprDetailsNode = xmlDoc.getElementsByTagName("ApproachDetails")[0] || null;
+
+    const globalDepRwy = extractBlockRwy(depDetailsNode);
+    const globalSidName = depDetailsNode?.getElementsByTagName("DepartureFP")[0]?.textContent?.trim() || "";
+    const globalStarName = arrDetailsNode?.getElementsByTagName("ArrivalFP")[0]?.textContent?.trim() || "";
+    const globalArrRwy = extractBlockRwy(apprDetailsNode) || extractBlockRwy(arrDetailsNode);
+    const globalApprType = apprDetailsNode?.getElementsByTagName("ApproachTypeFP")[0]?.textContent?.trim() || "";
+
     const parsedWaypoints = [];
     const depNodes = xmlDoc.getElementsByTagName("DepartureID");
     if (depNodes.length > 0 && depNodes[0].textContent) {
@@ -818,6 +858,9 @@ function parsePlnXmlString(xmlText) {
             lon: resolved ? resolved.lon : null,
             alt_ft: apt ? (apt.elev || 0) : 0,
             type: "DEP",
+            rwy: globalDepRwy,
+            proc_type: "SID",
+            proc_name: globalSidName || (globalDepRwy ? `RWY ${globalDepRwy}` : "DEP"),
             metar: resolved ? resolved.metar : ""
         });
     }
@@ -898,11 +941,29 @@ function parsePlnXmlString(xmlText) {
         }
     });
 
+    if (parsedWaypoints.length >= 2) {
+        if (globalSidName && parsedWaypoints[1].proc_type === "ENR") {
+            parsedWaypoints[1].proc_type = "SID";
+            parsedWaypoints[1].proc_name = globalSidName;
+        }
+        if (globalStarName) {
+            const lastWpt = parsedWaypoints[parsedWaypoints.length - 1];
+            if (lastWpt.type === "WPT") {
+                lastWpt.proc_type = "STAR";
+                lastWpt.proc_name = globalStarName;
+            }
+        }
+    }
+
     const destNodes = xmlDoc.getElementsByTagName("DestinationID");
     if (destNodes.length > 0 && destNodes[0].textContent) {
         const destCode = destNodes[0].textContent.trim();
         const resolved = resolveKnownCoords(destCode);
         const apt = findAirport(destCode);
+        const apprLabel = globalApprType
+            ? (globalArrRwy ? `${globalApprType} RWY ${globalArrRwy}` : globalApprType)
+            : (globalArrRwy ? `APPR RWY ${globalArrRwy}` : "APPR");
+
         if (parsedWaypoints.length === 0 || parsedWaypoints[parsedWaypoints.length - 1].ident !== destCode) {
             parsedWaypoints.push({
                 ident: destCode,
@@ -911,16 +972,23 @@ function parsePlnXmlString(xmlText) {
                 lon: resolved ? resolved.lon : null,
                 alt_ft: apt ? (apt.elev || 0) : 0,
                 type: "DEST",
+                rwy: globalArrRwy,
+                proc_type: "APPR",
+                proc_name: apprLabel,
                 metar: resolved ? resolved.metar : ""
             });
         } else {
-            parsedWaypoints[parsedWaypoints.length - 1].type = "DEST";
-            parsedWaypoints[parsedWaypoints.length - 1].alt_ft = apt ? (apt.elev || 0) : 0;
+            const lastDest = parsedWaypoints[parsedWaypoints.length - 1];
+            lastDest.type = "DEST";
+            lastDest.alt_ft = apt ? (apt.elev || 0) : 0;
+            if (globalArrRwy) lastDest.rwy = globalArrRwy;
+            lastDest.proc_type = "APPR";
+            lastDest.proc_name = apprLabel;
             if (resolved) {
-                parsedWaypoints[parsedWaypoints.length - 1].lat = resolved.lat;
-                parsedWaypoints[parsedWaypoints.length - 1].lon = resolved.lon;
-                parsedWaypoints[parsedWaypoints.length - 1].name = resolved.name;
-                parsedWaypoints[parsedWaypoints.length - 1].metar = resolved.metar;
+                lastDest.lat = resolved.lat;
+                lastDest.lon = resolved.lon;
+                lastDest.name = resolved.name;
+                lastDest.metar = resolved.metar;
             }
         }
     }
