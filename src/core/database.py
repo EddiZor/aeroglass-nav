@@ -157,13 +157,14 @@ def init_db():
         except Exception as mig_err:
             print("[Database] Avviso migrazione piste:", mig_err)
 
-        # 8. Pulizia automatica dei record vuoti o procedurali in airport_ground_cache
+        # 8. Pulizia automatica dei record vuoti, procedurali o runways_only in airport_ground_cache
         try:
             cursor.execute("""
                 DELETE FROM airport_ground_cache
                 WHERE layout_json IS NULL
                    OR layout_json = ''
                    OR layout_json LIKE '%"source": "procedural"%'
+                   OR layout_json LIKE '%"source": "runways_only"%'
                    OR (layout_json LIKE '%"runways": []%' AND layout_json LIKE '%"taxiways": []%')
                    OR (layout_json LIKE '%"taxiways": []%' AND layout_json LIKE '%"stands": []%')
             """)

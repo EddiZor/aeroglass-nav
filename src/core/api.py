@@ -751,99 +751,107 @@ class AeroGlassAPI:
             return {"success": False, "error": str(e)}
 
     def get_airport_ground_layout(self, icao):
-            """Restituisce istantaneamente (1 ms) il layout di terra dalla cache SQLite locale o le piste esatte da world_runways."""
-            import json
-            import math
+        """Restituisce il layout di terra dalla cache SQLite locale o lo estrae con msfs_ground_db."""
+        import json
+        import math
 
-            icao = str(icao or "").strip().upper()
-            if not icao:
-                return {"success": False, "error": "ICAO non valido"}
+        icao = str(icao or "").strip().upper()
+        if not icao:
+            return {"success": False, "error": "ICAO non valido"}
 
-            # 1. Se il layout completo (OSM o MSFS) è già in airport_ground_cache, lo restituisce in 1 ms
-            try:
-                with self._db_lock:
-                    with get_connection() as conn:
-                        row = conn.execute("SELECT layout_json FROM airport_ground_cache WHERE icao = ?", (icao,)).fetchone()
-                        if row and row["layout_json"]:
-                            cached_layout = json.loads(row["layout_json"])
-                            if cached_layout.get("source") in ("osm", "msfs") and (
-                                cached_layout.get("taxiways") or cached_layout.get("stands") or cached_layout.get("aprons")
-                            ):
-                                return {"success": True, "layout": cached_layout}
-            except Exception:
-                pass
+        # 1. Se il layout completo (OSM o MSFS) è già in airport_ground_cache, lo restituisce in 1 ms
+        try:
+            with self._db_lock:
+                with get_connection() as conn:
+                    row = conn.execute("SELECT layout_json FROM airport_ground_cache WHERE icao = ?", (icao,)).fetchone()
+                    if row and row["layout_json"]:
+                        cached_layout = json.loads(row["layout_json"])
+                        if cached_layout.get("source") in ("osm", "msfs") and (
+                            cached_layout.get("taxiways") or cached_layout.get("stands") or cached_layout.get("aprons")
+                        ):
+                            return {"success": True, "layout": cached_layout}
+        except Exception:
+            pass
 
-            lat, lon, apt_name = None, None, icao
-            db_runways = []
+        lat, lon, apt_name = None, None, icao
+        db_runways = []
 
-            # 2. Recupera coordinate e piste reali dal database SQLite locale
-            try:
-                with self._db_lock:
-                    with get_connection() as conn:
-                        row = conn.execute("SELECT name, lat, lon FROM world_airports WHERE icao = ?", (icao,)).fetchone()
-                        if row:
-                            apt_name = row["name"] or icao
-                            lat, lon = float(row["lat"]), float(row["lon"])
+        # 2. Recupera coordinate e piste reali dal database SQLite locale
+        try:
+            with self._db_lock:
+                with get_connection() as conn:
+                    row = conn.execute("SELECT name, lat, lon FROM world_airports WHERE icao = ?", (icao,)).fetchone()
+                    if row:
+                        apt_name = row["name"] or icao
+                        lat, lon = float(row["lat"]), float(row["lon"])
 
-                        if lat is None or lon is None:
-                            c_row = conn.execute("SELECT name, lat, lon FROM cached_airports WHERE icao = ?", (icao,)).fetchone()
-                            if c_row:
-                                apt_name = c_row["name"] or icao
-                                lat, lon = float(c_row["lat"]), float(c_row["lon"])
+                    if lat is None or lon is None:
+                        c_row = conn.execute("SELECT name, lat, lon FROM cached_airports WHERE icao = ?", (icao,)).fetchone()
+                        if c_row:
+                            apt_name = c_row["name"] or icao
+                            lat, lon = float(c_row["lat"]), float(c_row["lon"])
 
-                        rwy_rows = [dict(r) for r in conn.execute("SELECT * FROM world_runways WHERE apt_icao = ?", (icao,)).fetchall()]
-                        for idx, r in enumerate(rwy_rows):
-                            le_id = str(r.get("le_ident") or "").strip()
-                            he_id = str(r.get("he_ident") or "").strip()
-                            rwy_ref = f"{le_id}/{he_id}" if (le_id and he_id) else (le_id or he_id or "RWY")
-                            surf_raw = str(r.get("surface") or "asphalt").lower()
-                            surf = "grass" if ("grass" in surf_raw or "turf" in surf_raw or "grs" in surf_raw) else "asphalt"
-                            width_m = max(18.0, float(r.get("width_ft") or 148) * 0.3048)
+                    rwy_rows = [dict(r) for r in conn.execute("SELECT * FROM world_runways WHERE apt_icao = ?", (icao,)).fetchall()]
+                    for idx, r in enumerate(rwy_rows):
+                        le_id = str(r.get("le_ident") or "").strip()
+                        he_id = str(r.get("he_ident") or "").strip()
+                        rwy_ref = f"{le_id}/{he_id}" if (le_id and he_id) else (le_id or he_id or "RWY")
+                        surf_raw = str(r.get("surface") or "asphalt").lower()
+                        surf = "grass" if ("grass" in surf_raw or "turf" in surf_raw or "grs" in surf_raw) else "asphalt"
+                        width_m = max(18.0, float(r.get("width_ft") or 148) * 0.3048)
 
-                            le_lat, le_lon = r.get("le_lat"), r.get("le_lon")
-                            he_lat, he_lon = r.get("he_lat"), r.get("he_lon")
+                        le_lat, le_lon = r.get("le_lat"), r.get("le_lon")
+                        he_lat, he_lon = r.get("he_lat"), r.get("he_lon")
 
-                            if le_lat is not None and le_lon is not None and he_lat is not None and he_lon is not None:
-                                coords = [[float(le_lat), float(le_lon)], [float(he_lat), float(he_lon)]]
-                            elif lat is not None and lon is not None:
-                                hdg = float(r.get("le_hdg") or 0.0)
-                                if hdg <= 0.0 and len(le_id) >= 2 and le_id[:2].isdigit():
-                                    hdg = float(int(le_id[:2]) * 10)
-                                len_ft = float(r.get("length_ft") or 4500)
-                                half_deg_lat = ((len_ft / 6076.12) / 2.0) / 60.0
-                                cos_lat = max(0.15, math.cos(math.radians(lat)))
-                                hdg_rad = math.radians(hdg)
-                                d_lat = half_deg_lat * math.cos(hdg_rad)
-                                d_lon = (half_deg_lat * math.sin(hdg_rad)) / cos_lat
-                                coords = [[round(lat - d_lat, 6), round(lon - d_lon, 6)],
-                                        [round(lat + d_lat, 6), round(lon + d_lon, 6)]]
-                            else:
-                                continue
+                        if le_lat is not None and le_lon is not None and he_lat is not None and he_lon is not None:
+                            coords = [[float(le_lat), float(le_lon)], [float(he_lat), float(he_lon)]]
+                        elif lat is not None and lon is not None:
+                            hdg = float(r.get("le_hdg") or 0.0)
+                            if hdg <= 0.0 and len(le_id) >= 2 and le_id[:2].isdigit():
+                                hdg = float(int(le_id[:2]) * 10)
+                            len_ft = float(r.get("length_ft") or 4500)
+                            half_deg_lat = ((len_ft / 6076.12) / 2.0) / 60.0
+                            cos_lat = max(0.15, math.cos(math.radians(lat)))
+                            hdg_rad = math.radians(hdg)
+                            d_lat = half_deg_lat * math.cos(hdg_rad)
+                            d_lon = (half_deg_lat * math.sin(hdg_rad)) / cos_lat
+                            coords = [[round(lat - d_lat, 6), round(lon - d_lon, 6)],
+                                      [round(lat + d_lat, 6), round(lon + d_lon, 6)]]
+                        else:
+                            continue
 
-                            db_runways.append({
-                                "ref": rwy_ref,
-                                "width": round(width_m, 1),
-                                "surface": surf,
-                                "coords": coords
-                            })
-            except Exception as db_exc:
-                print(f"[GroundMap] Errore lettura piste SQLite per {icao}:", db_exc)
+                        db_runways.append({
+                            "ref": rwy_ref,
+                            "width": round(width_m, 1),
+                            "surface": surf,
+                            "coords": coords
+                        })
+        except Exception as db_exc:
+            print(f"[GroundMap] Errore lettura piste SQLite per {icao}:", db_exc)
 
-            if lat is None or lon is None:
-                return {"success": False, "error": f"Aeroporto {icao} non trovato nel database"}
+        if lat is None or lon is None:
+            return {"success": False, "error": f"Aeroporto {icao} non trovato nel database"}
 
-            layout = {
+        # 3. Estrae taxiway e parcheggi (da pacchetti MSFS 2024 o rete) e popola SEMPRE airport_ground_cache
+        try:
+            from src.core.msfs_ground_db import fetch_and_cache_airport_ground
+            full_layout = fetch_and_cache_airport_ground(icao, apt_name, lat, lon, db_runways, self._db_lock)
+            return {"success": True, "layout": full_layout}
+        except Exception as ext_err:
+            print(f"[GroundMap] Errore estrazione layout per {icao}:", ext_err)
+            fallback_layout = {
                 "icao": icao,
                 "name": apt_name,
                 "lat": lat,
                 "lon": lon,
-                "source": "sqlite_only",
+                "source": "runways_only",
                 "runways": db_runways,
                 "taxiways": [],
                 "aprons": [],
                 "stands": []
             }
-            return {"success": True, "layout": layout}
+            self.save_airport_ground_layout(icao, fallback_layout)
+            return {"success": True, "layout": fallback_layout}
 
     def get_online_network_traffic_atc(self):
         from concurrent.futures import ThreadPoolExecutor
