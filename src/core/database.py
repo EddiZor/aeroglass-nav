@@ -3,7 +3,7 @@ import sqlite3
 from contextlib import contextmanager
 
 # Punta direttamente al database nella cartella src/core/ del progetto
-DB_PATH = os.path.join(os.path.dirname(__file__), "aeroglass.db")
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "aeroglass.db")
 
 
 @contextmanager
@@ -24,7 +24,7 @@ def get_connection():
 
 
 def init_db():
-    """Inizializza le tabelle del database se non esistono."""
+    """Inizializza le tabelle del database se non esistono e ripulisce eventuali cache ground incomplete."""
     with get_connection() as conn:
         cursor = conn.cursor()
 
@@ -124,4 +124,26 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_world_rwy_apt ON world_runways (apt_icao);
             CREATE INDEX IF NOT EXISTS idx_world_freq_apt ON world_frequencies (apt_icao);
         """)
+
+        # 6. Migrazione automatica colonne coordinate soglie pista se il DB preesistente non le aveva
+        try:
+            existing_cols = {row["name"] for row in cursor.execute("PRAGMA table_info(world_runways)").fetchall()}
+            for col_name in ("le_lat", "le_lon", "he_lat", "he_lon"):
+                if col_name not in existing_cols:
+                    cursor.execute(f"ALTER TABLE world_runways ADD COLUMN {col_name} REAL")
+        except Exception:
+            pass
+
+        # 7. Pulizia automatica dei record vuoti salvati in precedenza in airport_ground_cache
+        try:
+            cursor.execute("""
+                DELETE FROM airport_ground_cache
+                WHERE layout_json IS NULL
+                   OR layout_json = ''
+                   OR (layout_json LIKE '%"runways": []%' AND layout_json LIKE '%"taxiways": []%')
+                   OR (layout_json LIKE '%"taxiways": []%' AND layout_json LIKE '%"stands": []%')
+            """)
+        except Exception:
+            pass
+
         conn.commit()

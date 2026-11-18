@@ -590,15 +590,23 @@ async function searchAndCenterAirport(query) {
     const q = (query || '').trim().toUpperCase();
     if (!q) return;
 
+    const centerOnApt = (icao, lat, lon, name, metar) => {
+        if (typeof map === 'undefined' || !map) return;
+        if (typeof setFollowState === 'function') setFollowState(0);
+        lastRenderedGroundKey = null;
+        map.setView([lat, lon], 14, { animate: true });
+        if (typeof openQuickMetarPopup === 'function') {
+            openQuickMetarPopup(icao, lat, lon, name, metar || '');
+        }
+        setTimeout(() => {
+            if (typeof evaluateAirportGroundMap === 'function') evaluateAirportGroundMap();
+        }, 350);
+    };
+
     let found = (typeof airportsData !== 'undefined' ? airportsData : []).find(a => a.icao === q || (a.name && a.name.toUpperCase().includes(q)));
     
     if (found && found.lat !== undefined && found.lon !== undefined) {
-        if (typeof map !== 'undefined' && map) {
-            map.setView([found.lat, found.lon], 13, { animate: true });
-            if (typeof openQuickMetarPopup === 'function') {
-                openQuickMetarPopup(found.icao, found.lat, found.lon, found.name, found.metar || '');
-            }
-        }
+        centerOnApt(found.icao, found.lat, found.lon, found.name, found.metar || '');
         return;
     }
 
@@ -607,12 +615,7 @@ async function searchAndCenterAirport(query) {
             if (q.length >= 3 && window.pywebview.api.resolve_icao) {
                 const res = await window.pywebview.api.resolve_icao(q);
                 if (res && res.success && res.lat !== undefined && res.lon !== undefined) {
-                    if (typeof map !== 'undefined' && map) {
-                        map.setView([res.lat, res.lon], 13, { animate: true });
-                        if (typeof openQuickMetarPopup === 'function') {
-                            openQuickMetarPopup(res.icao, res.lat, res.lon, res.name, res.metar || '');
-                        }
-                    }
+                    centerOnApt(res.icao, res.lat, res.lon, res.name, res.metar || '');
                     return;
                 }
             }
@@ -620,11 +623,8 @@ async function searchAndCenterAirport(query) {
                 const searchRes = await window.pywebview.api.search_world_airports(q);
                 if (searchRes && searchRes.success && Array.isArray(searchRes.results) && searchRes.results.length > 0) {
                     const apt = searchRes.results[0];
-                    if (apt.lat !== undefined && apt.lon !== undefined && typeof map !== 'undefined' && map) {
-                        map.setView([apt.lat, apt.lon], 13, { animate: true });
-                        if (typeof openQuickMetarPopup === 'function') {
-                            openQuickMetarPopup(apt.icao, apt.lat, apt.lon, apt.name, '');
-                        }
+                    if (apt.lat !== undefined && apt.lon !== undefined) {
+                        centerOnApt(apt.icao, apt.lat, apt.lon, apt.name, '');
                     }
                 }
             }
@@ -789,15 +789,22 @@ function findNearestAirportAtCenter(lat, lon) {
             return { icao, name: data.name, lat: data.lat, lon: data.lon, custom: data };
         }
     }
-    // Cerca tra gli aeroporti caricati in memoria nell'area circostante
     if (typeof airportsData !== 'undefined' && Array.isArray(airportsData)) {
         let closest = null;
-        let minDist = 0.05; // ~3 miglia nautiche
+        let minWeightedDist = 0.085;
         for (const apt of airportsData) {
             if (!apt.icao || apt.lat === undefined || apt.lon === undefined) continue;
-            const dist = Math.hypot(lat - apt.lat, lon - apt.lon);
-            if (dist < minDist) {
-                minDist = dist;
+            const rawDist = Math.hypot(lat - apt.lat, lon - apt.lon);
+            if (rawDist > 0.085) continue;
+            // Dà priorità agli scali principali/medi ed evita che piccoli eliporti con trattino (es. IT-0012) rubino il focus
+            let weight = 1.0;
+            if (apt.type === 'large_airport') weight = 0.5;
+            else if (apt.type === 'medium_airport') weight = 0.75;
+            else if (apt.icao.includes('-')) weight = 1.8;
+
+            const weightedDist = rawDist * weight;
+            if (weightedDist < minWeightedDist) {
+                minWeightedDist = weightedDist;
                 closest = { icao: apt.icao, name: apt.name || apt.icao, lat: apt.lat, lon: apt.lon, custom: null };
             }
         }
@@ -806,14 +813,20 @@ function findNearestAirportAtCenter(lat, lon) {
     return null;
 }
 
+let _groundFetchInFlight = null;
+
 async function evaluateAirportGroundMap() {
-    if (!groundMapEnabled || typeof map === 'undefined' || !map || !groundLayerGroup) return;
+    if (!groundMapEnabled || typeof map === 'undefined' || !map) return;
+    if (!groundLayerGroup && typeof L !== 'undefined') {
+        groundLayerGroup = L.layerGroup().addTo(map);
+    }
+    if (!groundLayerGroup) return;
 
     const zoom = map.getZoom();
     const badge = document.getElementById('aptGroundBadge');
     const badgeName = document.getElementById('aptGroundName');
 
-    if (zoom < 13.5) {
+    if (zoom < 12.5) {
         if (lastRenderedGroundKey !== null) {
             groundLayerGroup.clearLayers();
             lastRenderedGroundKey = null;
@@ -825,7 +838,6 @@ async function evaluateAirportGroundMap() {
     const center = map.getCenter();
     let nearApt = findNearestAirportAtCenter(center.lat, center.lng);
 
-    // Se non è nell'array locale, interroga il database mondiale SQLite tramite backend Python
     if (!nearApt && window.pywebview && window.pywebview.api && window.pywebview.api.get_nearest_airport) {
         try {
             const res = await window.pywebview.api.get_nearest_airport(center.lat, center.lng);
@@ -850,28 +862,48 @@ async function evaluateAirportGroundMap() {
         return;
     }
 
-    if (lastRenderedGroundKey === nearApt.icao) return;
-    lastRenderedGroundKey = nearApt.icao;
+    if (lastRenderedGroundKey === nearApt.icao || _groundFetchInFlight === nearApt.icao) return;
 
     if (badge && badgeName) {
         badge.style.display = 'flex';
-        badgeName.innerText = `${nearApt.icao} - ${nearApt.name || 'GROUND CHART'}`;
+        badgeName.innerText = `⏳ ${nearApt.icao} - ${nearApt.name || 'GROUND CHART'}`;
     }
 
-if (nearApt.custom) {
+    if (nearApt.custom) {
+        lastRenderedGroundKey = nearApt.icao;
+        if (badgeName) badgeName.innerText = `${nearApt.icao} - ${nearApt.name || 'GROUND CHART'}`;
         renderCustomAirportLayout(nearApt.custom);
-    } else {
-        // Interroga in tempo reale la Overpass API di OpenStreetMap via backend Python per copertura mondiale
-        if (window.pywebview && window.pywebview.api && window.pywebview.api.get_airport_ground_layout) {
-            window.pywebview.api.get_airport_ground_layout(nearApt.icao).then(res => {
-                if (res && res.success && res.layout) {
-                    renderCustomAirportLayout(res.layout);
+        return;
+    }
+
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.get_airport_ground_layout) {
+        const targetIcao = nearApt.icao;
+        _groundFetchInFlight = targetIcao;
+        try {
+            const res = await window.pywebview.api.get_airport_ground_layout(targetIcao);
+            _groundFetchInFlight = null;
+            if (res && res.success && res.layout) {
+                const ly = res.layout;
+                const hasFeatures = (ly.runways && ly.runways.length > 0) ||
+                                    (ly.taxiways && ly.taxiways.length > 0) ||
+                                    (ly.aprons && ly.aprons.length > 0) ||
+                                    (ly.stands && ly.stands.length > 0);
+                if (hasFeatures) {
+                    lastRenderedGroundKey = targetIcao;
+                    if (badgeName) badgeName.innerText = `${targetIcao} - ${nearApt.name || ly.name || 'GROUND CHART'}`;
+                    renderCustomAirportLayout(ly);
                 } else {
+                    lastRenderedGroundKey = null;
                     if (groundLayerGroup) groundLayerGroup.clearLayers();
                 }
-            }).catch(() => {
+            } else {
+                lastRenderedGroundKey = null;
                 if (groundLayerGroup) groundLayerGroup.clearLayers();
-            });
+            }
+        } catch (err) {
+            _groundFetchInFlight = null;
+            lastRenderedGroundKey = null;
+            if (groundLayerGroup) groundLayerGroup.clearLayers();
         }
     }
 }

@@ -686,19 +686,28 @@ class AeroGlassAPI:
             return {"success": False, "error": str(e)}
 
     def get_nearest_airport(self, lat, lon):
-        """Trova l'aeroporto più vicino alle coordinate date (lat, lon) nel database mondiale SQLite."""
+        """Trova l'aeroporto più vicino alle coordinate date (lat, lon) nel database mondiale SQLite,
+           dando priorità agli aeroporti principali/medi rispetto a eliporti o codici minori."""
         try:
             lat = float(lat)
             lon = float(lon)
             with self._db_lock:
                 with get_connection() as conn:
                     row = conn.execute("""
-                        SELECT icao, name, lat, lon, elev_ft 
-                        FROM world_airports 
+                        SELECT icao, name, lat, lon, elev_ft, type
+                        FROM world_airports
                         WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?
-                        ORDER BY ((lat - ?) * (lat - ?) + (lon - ?) * (lon - ?)) ASC
+                          AND type IN ('large_airport', 'medium_airport', 'small_airport')
+                        ORDER BY (
+                            ((lat - ?) * (lat - ?) + (lon - ?) * (lon - ?)) *
+                            CASE type
+                                WHEN 'large_airport' THEN 0.35
+                                WHEN 'medium_airport' THEN 0.65
+                                ELSE 1.0
+                            END
+                        ) ASC
                         LIMIT 1
-                    """, (lat - 3.0, lat + 3.0, lon - 3.0, lon + 3.0, lat, lat, lon, lon)).fetchone()
+                    """, (lat - 0.12, lat + 0.12, lon - 0.16, lon + 0.16, lat, lat, lon, lon)).fetchone()
                     if row:
                         return {
                             "success": True,
@@ -716,8 +725,10 @@ class AeroGlassAPI:
 
     def get_airport_ground_layout(self, icao):
         """Restituisce il layout di terra (piste, taxiway, apron, stands) di un aeroporto.
-           Controlla prima la cache SQLite locale; se assente, interroga OpenStreetMap e salva in cache."""
+           Controlla prima la cache SQLite locale; se assente o incompleta, usa SQLite + OpenStreetMap."""
         import json
+        import math
+        import ssl
         import urllib.request
         import urllib.parse
 
@@ -725,21 +736,24 @@ class AeroGlassAPI:
         if not icao:
             return {"success": False, "error": "ICAO non valido"}
 
-        # 1. Controlla se il layout è già memorizzato nella cache SQLite locale
+        # 1. Controlla se il layout completo è già memorizzato nella cache SQLite locale
         try:
             with self._db_lock:
                 with get_connection() as conn:
                     row = conn.execute("SELECT layout_json FROM airport_ground_cache WHERE icao = ?", (icao,)).fetchone()
                     if row and row["layout_json"]:
                         cached_layout = json.loads(row["layout_json"])
-                        return {"success": True, "layout": cached_layout}
+                        has_osm = bool(cached_layout.get("taxiways") or cached_layout.get("aprons") or cached_layout.get("stands"))
+                        has_rwy = bool(cached_layout.get("runways"))
+                        if has_osm and has_rwy:
+                            return {"success": True, "layout": cached_layout}
         except Exception:
             pass
 
         lat, lon, apt_name = None, None, icao
         db_runways = []
 
-        # 2. Recupera coordinate e piste dal database SQLite locale
+        # 2. Recupera coordinate e piste dal database SQLite locale (con calcolo soglie se le_lat/he_lat sono NULL)
         try:
             with self._db_lock:
                 with get_connection() as conn:
@@ -747,19 +761,62 @@ class AeroGlassAPI:
                     if row:
                         apt_name = row["name"] or icao
                         lat, lon = float(row["lat"]), float(row["lon"])
-                    
-                    rwy_rows = conn.execute("SELECT le_ident, he_ident, length_ft, width_ft, surface, le_lat, le_lon, he_lat, he_lon FROM world_runways WHERE apt_icao = ?", (icao,)).fetchall()
-                    for r in rwy_rows:
-                        if r["le_lat"] is not None and r["le_lon"] is not None and r["he_lat"] is not None and r["he_lon"] is not None:
-                            rwy_ref = f"{r['le_ident']}/{r['he_ident']}" if r['le_ident'] and r['he_ident'] else "RWY"
-                            db_runways.append({
-                                "ref": rwy_ref,
-                                "width": float(r["width_ft"] or 150) * 0.3048,
-                                "surface": str(r["surface"] or "asphalt").lower(),
-                                "coords": [[float(r["le_lat"]), float(r["le_lon"])], [float(r["he_lat"]), float(r["he_lon"])]]
-                            })
-        except Exception:
-            pass
+
+                    if lat is None or lon is None:
+                        c_row = conn.execute("SELECT name, lat, lon FROM cached_airports WHERE icao = ?", (icao,)).fetchone()
+                        if c_row:
+                            apt_name = c_row["name"] or icao
+                            lat, lon = float(c_row["lat"]), float(c_row["lon"])
+
+                    rwy_rows = [dict(r) for r in conn.execute("SELECT * FROM world_runways WHERE apt_icao = ?", (icao,)).fetchall()]
+                    for idx, r in enumerate(rwy_rows):
+                        le_id = str(r.get("le_ident") or "").strip()
+                        he_id = str(r.get("he_ident") or "").strip()
+                        rwy_ref = f"{le_id}/{he_id}" if (le_id and he_id) else (le_id or he_id or "RWY")
+                        surf_raw = str(r.get("surface") or "asphalt").lower()
+                        surf = "grass" if ("grass" in surf_raw or "turf" in surf_raw) else "asphalt"
+                        width_m = max(18.0, float(r.get("width_ft") or 148) * 0.3048)
+
+                        le_lat = r.get("le_lat")
+                        le_lon = r.get("le_lon")
+                        he_lat = r.get("he_lat")
+                        he_lon = r.get("he_lon")
+
+                        if le_lat is not None and le_lon is not None and he_lat is not None and he_lon is not None:
+                            coords = [[float(le_lat), float(le_lon)], [float(he_lat), float(he_lon)]]
+                        elif lat is not None and lon is not None:
+                            # Calcolo trigonometrico delle soglie pista quando il DB contiene solo lunghezza e prua
+                            hdg = float(r.get("le_hdg") or 0.0)
+                            if hdg <= 0.0 and len(le_id) >= 2 and le_id[:2].isdigit():
+                                hdg = float(int(le_id[:2]) * 10)
+                            len_ft = float(r.get("length_ft") or 4500)
+                            half_deg_lat = ((len_ft / 6076.12) / 2.0) / 60.0
+                            cos_lat = max(0.15, math.cos(math.radians(lat)))
+                            hdg_rad = math.radians(hdg)
+
+                            # Offset laterale automatico per piste parallele (L / R)
+                            lat_offset_m = -120.0 if le_id.endswith("L") else (120.0 if le_id.endswith("R") else (idx * 60.0 if idx > 0 else 0.0))
+                            perp_rad = hdg_rad + (math.pi / 2.0)
+                            off_dlat = (lat_offset_m / 1852.0) / 60.0 * math.cos(perp_rad)
+                            off_dlon = ((lat_offset_m / 1852.0) / 60.0 * math.sin(perp_rad)) / cos_lat
+
+                            c_lat = lat + off_dlat
+                            c_lon = lon + off_dlon
+                            d_lat = half_deg_lat * math.cos(hdg_rad)
+                            d_lon = (half_deg_lat * math.sin(hdg_rad)) / cos_lat
+                            coords = [[round(c_lat - d_lat, 6), round(c_lon - d_lon, 6)],
+                                      [round(c_lat + d_lat, 6), round(c_lon + d_lon, 6)]]
+                        else:
+                            continue
+
+                        db_runways.append({
+                            "ref": rwy_ref,
+                            "width": round(width_m, 1),
+                            "surface": surf,
+                            "coords": coords
+                        })
+        except Exception as db_exc:
+            print(f"[GroundMap] Errore lettura piste SQLite per {icao}:", db_exc)
 
         if lat is None or lon is None:
             return {"success": False, "error": f"Aeroporto {icao} non trovato nel database"}
@@ -774,76 +831,107 @@ class AeroGlassAPI:
             "stands": []
         }
 
-        # 3. Interroga la Overpass API di OpenStreetMap per taxiway, apron e piazzole
-        overpass_query = f"""
-        [out:json][timeout:8];
-        (
-          way["aeroway"="taxiway"](around:3500,{lat},{lon});
-          way["aeroway"="apron"](around:3500,{lat},{lon});
-          way["aeroway"="parking_position"](around:3500,{lat},{lon});
-          node["aeroway"="parking_position"](around:3500,{lat},{lon});
-          way["aeroway"="runway"](around:3500,{lat},{lon});
-        );
-        out body;
-        >;
-        out skel qt;
-        """
+        # 3. Interroga Overpass API (OpenStreetMap) con Bounding Box veloce, out geom e multi-mirror
+        dlat = 0.036
+        dlon = 0.050
+        overpass_query = (
+            f"[out:json][timeout:14][bbox:{lat - dlat:.5f},{lon - dlon:.5f},{lat + dlat:.5f},{lon + dlon:.5f}];"
+            f"(way[\"aeroway\"~\"^(runway|taxiway|apron|parking_position)$\"];"
+            f"node[\"aeroway\"~\"^(parking_position|gate|helipad)$\"];);"
+            f"out geom qt;"
+        )
 
-        url = "https://overpass-api.de/api/interpreter"
+        overpass_mirrors = [
+            "https://overpass-api.de/api/interpreter",
+            "https://lz4.overpass-api.de/api/interpreter",
+            "https://overpass.kumi.systems/api/interpreter"
+        ]
 
-        try:
-            data_encoded = urllib.parse.urlencode({'data': overpass_query}).encode('utf-8')
-            req = urllib.request.Request(url, data=data_encoded, headers={"User-Agent": "AeroGlass-Nav/0.7"})
-            with urllib.request.urlopen(req, timeout=12) as resp:
-                osm_data = json.loads(resp.read().decode("utf-8", errors="replace"))
+        osm_data = None
+        ssl_ctx = ssl._create_unverified_context()
+        data_encoded = urllib.parse.urlencode({"data": overpass_query}).encode("utf-8")
 
+        for mirror_url in overpass_mirrors:
+            try:
+                req = urllib.request.Request(
+                    mirror_url,
+                    data=data_encoded,
+                    headers={"User-Agent": "Mozilla/5.0 AeroGlass-Nav/0.7"}
+                )
+                with urllib.request.urlopen(req, timeout=12, context=ssl_ctx) as resp:
+                    osm_data = json.loads(resp.read().decode("utf-8", errors="replace"))
+                if osm_data and "elements" in osm_data:
+                    break
+            except Exception as mirror_err:
+                print(f"[GroundMap] Mirror {mirror_url} non disponibile per {icao}: {mirror_err}")
+                continue
+
+        osm_runways = []
+        if osm_data and isinstance(osm_data.get("elements"), list):
             nodes_map = {}
-            for el in osm_data.get("elements", []):
-                if el.get("type") == "node":
+            for el in osm_data["elements"]:
+                if el.get("type") == "node" and "lat" in el and "lon" in el:
                     nodes_map[el["id"]] = [float(el["lat"]), float(el["lon"])]
 
-            for el in osm_data.get("elements", []):
-                if el.get("type") == "way":
-                    tags = el.get("tags") or {}
-                    node_ids = el.get("nodes", [])
-                    coords = [nodes_map[nid] for nid in node_ids if nid in nodes_map]
+            for el in osm_data["elements"]:
+                el_type = el.get("type")
+                tags = el.get("tags") or {}
+                aeroway = tags.get("aeroway")
+                ref = tags.get("ref") or tags.get("name") or ""
+
+                if el_type == "way":
+                    if "geometry" in el and isinstance(el["geometry"], list):
+                        coords = [[float(pt["lat"]), float(pt["lon"])] for pt in el["geometry"] if "lat" in pt and "lon" in pt]
+                    else:
+                        coords = [nodes_map[nid] for nid in el.get("nodes", []) if nid in nodes_map]
+
                     if len(coords) < 2:
                         continue
-
-                    aeroway = tags.get("aeroway")
-                    ref = tags.get("ref") or tags.get("name") or ""
 
                     if aeroway == "taxiway":
                         layout["taxiways"].append({"ref": ref, "coords": coords})
                     elif aeroway == "apron":
                         layout["aprons"].append(coords)
-                    elif aeroway == "runway" and not layout["runways"]:
-                        layout["runways"].append({"ref": ref or "RWY", "width": 45, "surface": "asphalt", "coords": coords})
+                    elif aeroway == "runway":
+                        surf_tag = str(tags.get("surface") or "asphalt").lower()
+                        osm_runways.append({
+                            "ref": ref or "RWY",
+                            "width": 45,
+                            "surface": "grass" if ("grass" in surf_tag or "turf" in surf_tag) else "asphalt",
+                            "coords": coords
+                        })
                     elif aeroway == "parking_position":
                         mid = coords[len(coords) // 2]
-                        layout["stands"].append({"ref": ref or "GATE", "lat": mid[0], "lon": mid[1]})
+                        layout["stands"].append({"ref": ref or "STAND", "lat": mid[0], "lon": mid[1]})
 
-                elif el.get("type") == "node":
-                    tags = el.get("tags") or {}
-                    if tags.get("aeroway") == "parking_position":
-                        ref = tags.get("ref") or tags.get("name") or "GATE"
-                        layout["stands"].append({"ref": ref, "lat": float(el["lat"]), "lon": float(el["lon"])})
-        except Exception as net_err:
-            print(f"Avviso Overpass API per {icao} (uso dati locali/piste):", net_err)
+                elif el_type == "node" and aeroway in ("parking_position", "gate", "helipad"):
+                    if "lat" in el and "lon" in el:
+                        stand_ref = ref or ("H" if aeroway == "helipad" else "GATE")
+                        layout["stands"].append({
+                            "ref": stand_ref,
+                            "lat": float(el["lat"]),
+                            "lon": float(el["lon"])
+                        })
 
-        # 4. Salva SEMPRE il layout (anche se OSM fallisce) nella cache SQLite locale
-        try:
-            layout_json_str = json.dumps(layout)
-            with self._db_lock:
-                with get_connection() as conn:
-                    conn.execute(
-                        "INSERT OR REPLACE INTO airport_ground_cache (icao, layout_json) VALUES (?, ?)",
-                        (icao, layout_json_str)
-                    )
-                    conn.commit()
-            print(f"Layout di terra per {icao} memorizzato con successo nella cache SQLite.")
-        except Exception as db_err:
-            print("Errore scrittura cache SQLite:", db_err)
+        # Se OSM ha restituito geometrie esatte delle piste, le usa al posto di quelle stimate
+        if osm_runways:
+            layout["runways"] = osm_runways
+
+        # 4. Salva nella cache SQLite SOLO se abbiamo ottenuto dati validi (evita di salvare cache vuote)
+        has_osm_features = bool(layout["taxiways"] or layout["aprons"] or layout["stands"] or osm_runways)
+        if has_osm_features:
+            try:
+                layout_json_str = json.dumps(layout)
+                with self._db_lock:
+                    with get_connection() as conn:
+                        conn.execute(
+                            "INSERT OR REPLACE INTO airport_ground_cache (icao, layout_json) VALUES (?, ?)",
+                            (icao, layout_json_str)
+                        )
+                        conn.commit()
+                print(f"[GroundMap] Layout completo per {icao} salvato in cache SQLite ({len(layout['runways'])} piste, {len(layout['taxiways'])} twy, {len(layout['stands'])} stand).")
+            except Exception as db_err:
+                print("[GroundMap] Errore scrittura cache SQLite:", db_err)
 
         return {"success": True, "layout": layout}
 
@@ -1570,6 +1658,23 @@ class AeroGlassAPI:
             data = dict(self._telemetry.get_data())
         except Exception:
             data = dict(DummyTelemetry().get_data())
+
+        # Filtra le coordinate dummy (0°, 0° o 0°, 80°E nell'Oceano Indiano) inviate da MSFS 2024 nel Menu Principale
+        lat = data.get("lat")
+        lon = data.get("lon")
+        if lat is not None and lon is not None:
+            try:
+                f_lat, f_lon = float(lat), float(lon)
+                is_zero_origin = (abs(f_lat) < 0.1 and abs(f_lon) < 0.1)
+                is_msfs_menu_ocean = (-4.0 <= f_lat <= 4.0 and 77.0 <= f_lon <= 83.0 and str(data.get("aircraft") or "").strip() in ("MSFS 2024", "MSFS", ""))
+                if is_zero_origin or is_msfs_menu_ocean:
+                    data["lat"] = None
+                    data["lon"] = None
+                    data["connected"] = False
+                    data["mode"] = "DEMO"
+            except Exception:
+                pass
+
         data["fpl_ts"] = self._fpl_ts
         data["efb_ip"] = self.efb_ip
         data["efb_port"] = self.efb_port
