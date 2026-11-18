@@ -139,8 +139,8 @@ const SYNTHETIC_TOOLTIPS = {
         en: "🧭 Compass Rose: Points to True North (Click to reset North Up 360°)"
     },
     btnToggleGroundMap: {
-        it: "🛫 Mappa Aeroporto (Taxiway & Parcheggi): Mostra/nascondi layout interno o zooma sull'aeroporto",
-        en: "🛫 Airport Ground Map (Taxiways & Parking): Toggle internal layout or zoom to active airport"
+        it: "📲 Invia a MSFS: Carica direttamente il Piano di Volo attivo nel sistema di navigazione dell'aeromobile in uso",
+        en: "📲 Send to MSFS: Directly load the active Flight Plan into the current aircraft's navigation system"
     },
     btnToggleWeather: {
         it: "💨 Meteo & Venti: Mostra/nascondi vettori vento lungo la rotta e clicca sugli aeroporti per il METAR rapido",
@@ -721,25 +721,12 @@ function ensureGroundMapUI() {
         if (pillsGroup) {
             const btn = document.createElement('button');
             btn.id = 'btnToggleGroundMap';
-            btn.className = 'top-btn active';
-            btn.innerHTML = '🛫 <span>Taxi</span>';
-            btn.onclick = (e) => {
-                if (e.shiftKey) {
-                    groundMapEnabled = !groundMapEnabled;
-                    btn.classList.toggle('active', groundMapEnabled);
-                    btn.innerHTML = '🛫 <span>Taxi</span>';
-                    if (!groundMapEnabled && groundLayerGroup) {
-                        groundLayerGroup.clearLayers();
-                        lastRenderedGroundKey = null;
-                        const b = document.getElementById('aptGroundBadge');
-                        if (b) b.style.display = 'none';
-                    } else {
-                        evaluateAirportGroundMap();
-                    }
-                    return;
-                }
-                zoomToClosestOrActiveAirport();
-            };
+            btn.className = 'top-btn';
+            btn.style.borderColor = 'rgba(0, 210, 255, 0.55)';
+            btn.style.color = '#00d2ff';
+            const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+            btn.innerHTML = isEn ? '📲 <span>Send to Sim</span>' : '📲 <span>Invia a MSFS</span>';
+            btn.onclick = () => sendFlightPlanToAircraftNav();
             const navaidsBtn = document.getElementById('btnToggleNavaids');
             if (navaidsBtn && navaidsBtn.parentNode === pillsGroup) {
                 pillsGroup.insertBefore(btn, navaidsBtn.nextSibling);
@@ -758,28 +745,93 @@ function ensureGroundMapUI() {
     }
 }
 
-function zoomToClosestOrActiveAirport() {
-    if (typeof map === 'undefined' || !map) return;
-    groundMapEnabled = true;
-    const btn = document.getElementById('btnToggleGroundMap');
-    if (btn) {
-        btn.classList.add('active');
-        btn.innerHTML = '🛫 <span>Taxi</span>';
+let _navToastTimer = null;
+
+function showAeroNavToast(message, isWarning = true, durationMs = 3000) {
+    let toast = document.getElementById('aeroNavSystemToast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'aeroNavSystemToast';
+        toast.className = 'glass-panel';
+        toast.style.cssText = 'position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:4500;padding:10px 18px;border-radius:10px;font-family:Consolas,monospace;font-size:12px;font-weight:700;display:none;align-items:center;gap:10px;box-shadow:0 10px 30px rgba(0,0,0,0.75);backdrop-filter:blur(14px);transition:opacity 0.25s ease;pointer-events:none;';
+        document.body.appendChild(toast);
     }
 
-    if (Array.isArray(flightPlan) && flightPlan.length > 0) {
-        const dep = flightPlan[0];
-        const arr = flightPlan[flightPlan.length - 1];
-        const c = map.getCenter();
-        const dDep = Math.hypot(c.lat - dep.lat, c.lng - dep.lon);
-        const dArr = Math.hypot(c.lat - arr.lat, c.lng - arr.lon);
-        const target = (dDep < 0.03 && arr) ? arr : dep;
-        map.setView([target.lat, target.lon], 15, { animate: true });
+    if (_navToastTimer) {
+        clearTimeout(_navToastTimer);
+        _navToastTimer = null;
+    }
+
+    if (isWarning) {
+        toast.style.background = 'rgba(28, 19, 14, 0.96)';
+        toast.style.border = '1.5px solid #f59e0b';
+        toast.style.color = '#fbbf24';
+    } else {
+        toast.style.background = 'rgba(13, 25, 22, 0.96)';
+        toast.style.border = '1.5px solid #34d399';
+        toast.style.color = '#34d399';
+    }
+
+    toast.innerHTML = message;
+    toast.style.display = 'flex';
+    toast.style.opacity = '1';
+
+    _navToastTimer = setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => {
+            toast.style.display = 'none';
+        }, 250);
+    }, durationMs);
+}
+
+async function sendFlightPlanToAircraftNav() {
+    const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+
+    if (!Array.isArray(flightPlan) || flightPlan.length < 2) {
+        showAeroNavToast(
+            isEn
+                ? '⚠️ No active flight plan to send (add at least Departure and Destination).'
+                : '⚠️ Nessun piano di volo attivo da inviare (inserisci almeno Partenza e Destinazione).',
+            true,
+            3000
+        );
         return;
     }
 
-    if (map.getZoom() < 15) {
-        map.setZoom(15);
+    if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.send_flight_plan_to_msfs) {
+        return;
+    }
+
+    try {
+        const res = await window.pywebview.api.send_flight_plan_to_msfs(flightPlan);
+        if (!res) return;
+
+        if (res.no_nav_system) {
+            const acft = res.aircraft || 'MSFS 2024';
+            showAeroNavToast(
+                isEn
+                    ? `⚠️ Current aircraft (<b>${acft}</b>) does not have a navigation system.`
+                    : `⚠️ L'aeromobile in uso (<b>${acft}</b>) non dispone di un sistema di navigazione.`,
+                true,
+                3000
+            );
+            return;
+        }
+
+        if (res.success) {
+            const acft = res.aircraft || 'MSFS 2024';
+            showAeroNavToast(
+                isEn
+                    ? `✅ Flight Plan <b>${res.dep} ➔ ${res.dest}</b> (${res.waypoints_count} WPT) sent to <b>${acft}</b> navigation system!`
+                    : `✅ Piano di volo <b>${res.dep} ➔ ${res.dest}</b> (${res.waypoints_count} WPT) inviato al sistema di navigazione di <b>${acft}</b>!`,
+                false,
+                3000
+            );
+        } else {
+            showAeroNavToast(`⚠️ ${res.message || 'Impossibile inviare il piano di volo.'}`, true, 3000);
+        }
+    } catch (err) {
+        showAeroNavToast('⚠️ Errore di comunicazione con il simulatore.', true, 3000);
     }
 }
 

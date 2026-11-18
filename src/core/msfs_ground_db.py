@@ -76,20 +76,35 @@ def _find_modern_simconnect_dll():
 def fetch_from_msfs2024_simconnect(icao, fallback_lat, fallback_lon, fallback_name):
     """Interroga direttamente MSFS 2024 in esecuzione per ottenere TAXI_PARKING, TAXI_POINT, TAXI_PATH e TAXI_NAME
        dello scenario attivo (inclusi gli aeroporti streamed dal cloud di MSFS 2024)."""
+    from src.core.diagnostics import log_diag, SIMCONNECT_GLOBAL_LOCK
+
     dll, dll_path = _find_modern_simconnect_dll()
     if not dll:
         return None
 
     h_sim = ctypes.c_void_p()
     try:
+        dll.SimConnect_Open.argtypes = [ctypes.POINTER(ctypes.c_void_p), ctypes.c_char_p, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_uint32]
+        dll.SimConnect_Open.restype = ctypes.c_long
+        dll.SimConnect_AddToFacilityDefinition.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_char_p]
+        dll.SimConnect_AddToFacilityDefinition.restype = ctypes.c_long
+        dll.SimConnect_RequestFacilityData.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_char_p, ctypes.c_char_p]
+        dll.SimConnect_RequestFacilityData.restype = ctypes.c_long
+        dll.SimConnect_GetNextDispatch.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(ctypes.c_uint32)]
+        dll.SimConnect_GetNextDispatch.restype = ctypes.c_long
+        dll.SimConnect_Close.argtypes = [ctypes.c_void_p]
+        dll.SimConnect_Close.restype = ctypes.c_long
+
         res = dll.SimConnect_Open(
             ctypes.byref(h_sim),
             b"AeroGlass-Nav GroundDB",
             None, 0, None, 0
         )
         if res != 0 or not h_sim.value:
+            log_diag("FACILITY_REQ", f"SimConnect non connesso per {icao} (hr={res})")
             return None
-    except Exception:
+    except Exception as open_err:
+        log_diag("FACILITY_ERR", f"Eccezione SimConnect_Open per {icao}: {open_err}")
         return None
 
     try:
@@ -228,10 +243,12 @@ def fetch_from_msfs2024_simconnect(icao, fallback_lat, fallback_lon, fallback_na
                 "stands": list(parking_spots.values())
             }
     except Exception as sc_err:
+        log_diag("FACILITY_ERR", f"Avviso SimConnect Facility Data per {icao}: {sc_err}")
         print(f"[MSFS-GroundDB] Avviso SimConnect Facility Data per {icao}:", sc_err)
     finally:
         try:
-            dll.SimConnect_Close(h_sim)
+            if h_sim and h_sim.value:
+                dll.SimConnect_Close(h_sim)
         except Exception:
             pass
     return None
@@ -474,10 +491,14 @@ def _extract_bgl_airport_children(data, apt_start, apt_end, icao, apt_lat, apt_l
 # 3. RISOLUZIONE COMPLETA E FALLBACK IPv4 VELOCE (QUANDO MSFS 2024 È CHIUSO)
 # ==============================================================================
 def fetch_and_cache_airport_ground(icao, apt_name, lat, lon, db_runways, db_lock):
+    from src.core.diagnostics import log_diag, SIMCONNECT_GLOBAL_LOCK
     icao = str(icao or "").strip().upper()
 
-    # A. Canale 1: Se MSFS 2024 è aperto, estrae direttamente dal simulatore via SimConnect Facility Data
-    sc_layout = fetch_from_msfs2024_simconnect(icao, lat, lon, apt_name)
+    # A. Canale 1: Se MSFS 2024 è aperto, estrae in mutua esclusione dal simulatore via SimConnect Facility Data
+    with SIMCONNECT_GLOBAL_LOCK:
+        log_diag("FACILITY_REQ", f"Inizio estrazione SimConnect Facility Data per {icao}")
+        sc_layout = fetch_from_msfs2024_simconnect(icao, lat, lon, apt_name)
+        log_diag("FACILITY_END", f"Fine estrazione SimConnect Facility Data per {icao} (trovato={bool(sc_layout)})")
     if sc_layout:
         sc_layout["runways"] = db_runways
         _save_to_sqlite_cache(icao, sc_layout, db_lock)

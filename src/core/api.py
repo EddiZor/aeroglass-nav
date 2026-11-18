@@ -1472,6 +1472,56 @@ class AeroGlassAPI:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    def send_flight_plan_to_msfs(self, flight_plan=None):
+        """Esporta il piano di volo attivo e lo invia direttamente al sistema di navigazione dell'aeromobile in MSFS 2024."""
+        import shutil
+        import subprocess
+
+        fpl = flight_plan if (isinstance(flight_plan, list) and len(flight_plan) >= 2) else self.flight_plan
+        if not fpl or len(fpl) < 2:
+            return {
+                "success": False,
+                "no_fpl": True,
+                "message": "Nessun piano di volo attivo da inviare (inserisci almeno Partenza e Destinazione)."
+            }
+
+        exp_res = self.export_pln_file(fpl)
+        if not exp_res.get("success") or not exp_res.get("path"):
+            return {
+                "success": False,
+                "message": exp_res.get("error", "Errore durante la generazione del file .pln.")
+            }
+
+        pln_path = exp_res["path"]
+        dep = str(fpl[0].get("ident") or "DEP").strip().upper()
+        dest = str(fpl[-1].get("ident") or "DEST").strip().upper()
+
+        try:
+            downloads_dir = os.path.dirname(pln_path)
+            quick_pln = os.path.join(downloads_dir, "00_AeroGlass_Active.pln")
+            shutil.copyfile(pln_path, quick_pln)
+            shutil.copyfile(pln_path, os.path.splitext(quick_pln)[0])
+            shutil.copyfile(pln_path, os.path.splitext(pln_path)[0])
+            subprocess.run(["clip.exe"], input=quick_pln.encode("utf-8"), check=False)
+        except Exception:
+            quick_pln = pln_path
+
+        if hasattr(self._telemetry, "send_flight_plan_to_aircraft"):
+            sim_res = self._telemetry.send_flight_plan_to_aircraft(quick_pln)
+        else:
+            sim_res = {
+                "success": False,
+                "no_nav_system": True,
+                "aircraft": "MSFS 2024 (DEMO)",
+                "message": "L'aeromobile in uso non dispone di un sistema di navigazione attivo."
+            }
+
+        sim_res["dep"] = dep
+        sim_res["dest"] = dest
+        sim_res["waypoints_count"] = len(fpl)
+        sim_res["path"] = quick_pln
+        return sim_res
+
     def update_waypoint_altitude(self, index, new_alt):
         try:
             idx = int(index)
@@ -1584,7 +1634,7 @@ class AeroGlassAPI:
             try:
                 f_lat, f_lon = float(lat), float(lon)
                 is_zero_origin = (abs(f_lat) < 0.1 and abs(f_lon) < 0.1)
-                is_msfs_menu_ocean = (-4.0 <= f_lat <= 4.0 and 77.0 <= f_lon <= 83.0 and str(data.get("aircraft") or "").strip() in ("MSFS 2024", "MSFS", ""))
+                is_msfs_menu_ocean = (abs(f_lat) < 0.05 and 75.0 <= f_lon <= 95.0)
                 if is_zero_origin or is_msfs_menu_ocean:
                     data["lat"] = None
                     data["lon"] = None

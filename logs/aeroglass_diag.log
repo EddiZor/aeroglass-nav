@@ -1,0 +1,18 @@
+[2026-11-18 13:07:07.902] [STARTUP     ] [T:MainThread] [RAM:49% (15.7/31.8GB) | Commit:24.0/87.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-18 13:07:08.381] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:49% (15.8/31.8GB) | Commit:24.1/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-18 13:07:08.403] [SIM_MENU    ] [T:TelemetryPoll] [RAM:49% (15.8/31.8GB) | Commit:24.1/87.8GB] MSFS 2024 nel Menu Principale o in caricamento volo (polling ridotto a 4s).
+[2026-11-18 13:08:44.425] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:63% (20.2/31.8GB) | Commit:30.8/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-18 13:08:48.861] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:63% (20.2/31.8GB) | Commit:30.8/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-18 13:08:48.865] [SIM_MENU    ] [T:TelemetryPoll] [RAM:63% (20.2/31.8GB) | Commit:30.8/87.8GB] MSFS 2024 nel Menu Principale o in caricamento volo (polling ridotto a 4s).
+[2026-11-18 13:10:24.889] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:76% (24.2/31.8GB) | Commit:36.5/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-18 13:12:08.367] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:87% (27.7/31.8GB) | Commit:41.7/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-18 13:12:08.392] [SIM_MENU    ] [T:TelemetryPoll] [RAM:87% (27.7/31.8GB) | Commit:41.7/87.8GB] MSFS 2024 nel Menu Principale o in caricamento volo (polling ridotto a 4s).
+[2026-11-18 13:13:00.672] [SIM_LIVE    ] [T:TelemetryPoll] [RAM:91% (29.1/31.8GB) | Commit:47.3/87.8GB] Ricezione coordinate valide ripresa (-0.0000, 90.0003).
+[2026-11-18 13:13:00.788] [AIRCRAFT    ] [T:TelemetryPoll] [RAM:91% (29.2/31.8GB) | Commit:47.3/87.8GB] Aeromobile rilevato: Alpi Aviation Pioneer 400: Silver and Red
+[2026-11-18 13:13:00.791] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:91% (29.2/31.8GB) | Commit:47.2/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=0ft GS=143kt POS=(-0.0000,90.0003)
+[2026-11-18 13:13:02.931] [SIM_MENU    ] [T:TelemetryPoll] [RAM:92% (29.3/31.8GB) | Commit:47.7/87.8GB] MSFS 2024 nel Menu Principale o in caricamento volo (polling ridotto a 4s).
+[2026-11-18 13:14:39.658] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:98% (31.2/31.8GB) | Commit:57.7/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-18 14:25:14.374] [STARTUP     ] [T:MainThread] [RAM:61% (19.5/31.8GB) | Commit:25.7/87.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-18 14:25:14.837] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:61% (19.6/31.8GB) | Commit:25.8/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-18 14:25:14.855] [SIM_MENU    ] [T:TelemetryPoll] [RAM:61% (19.6/31.8GB) | Commit:25.8/87.8GB] MSFS 2024 nel Menu Principale o in caricamento volo (polling ridotto a 4s).
+[2026-11-18 14:25:37.212] [SIMCONNECT  ] [T:Thread-52 (execute)] [RAM:62% (19.8/31.8GB) | Commit:26.2/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
