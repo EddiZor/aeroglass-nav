@@ -1132,3 +1132,6 @@
 [2026-11-18 17:58:43.398] [SIM_MENU    ] [T:TelemetryPoll] [RAM:90% (28.6/31.8GB) | Commit:69.7/87.8GB] MSFS 2024 in Menu/Caricamento (coord=None,14.283109712107175) — in attesa avvio volo.
 [2026-11-18 17:58:45.566] [SIM_LIVE    ] [T:TelemetryPoll] [RAM:89% (28.6/31.8GB) | Commit:69.6/87.8GB] Ricezione coordinate valide ripresa (40.8802, 14.2831).
 [2026-11-18 17:59:12.491] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:91% (29.0/31.8GB) | Commit:70.0/87.8GB] ACFT=FenixA320 IAE SL ALT=293ft GS=0kt POS=(40.8802,14.2831)
+[2026-11-18 17:59:42.988] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:89% (28.4/31.8GB) | Commit:70.2/87.8GB] ACFT=FenixA320 IAE SL ALT=293ft GS=0kt POS=(40.8802,14.2831)
+[2026-11-18 18:00:13.778] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:89% (28.4/31.8GB) | Commit:70.1/87.8GB] ACFT=FenixA320 IAE SL ALT=293ft GS=0kt POS=(40.8802,14.2831)
+[2026-11-18 18:00:22.663] [SIMCONNECT  ] [T:Thread-544 (execute)] [RAM:86% (27.5/31.8GB) | Commit:69.5/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
