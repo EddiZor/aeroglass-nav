@@ -1,5 +1,5 @@
 // ============================================================================
-// 🎓 AEROGLASS-NAV — TOUR GUIDATO INTERATTIVO AD ALTA LEGGIBILITÀ (demo.js)
+// 🎓 AEROGLASS-NAV — TOUR GUIDATO INTERATTIVO BILINGUE IT / EN (demo.js)
 // ============================================================================
 
 window._demoTourActive = false;
@@ -8,36 +8,58 @@ let _demoAutoTimer = null;
 let _demoAutoPlay = true;
 const DEMO_AUTO_INTERVAL_MS = 9000;
 
+function isDemoEnglish() {
+    if (typeof window._demoLang === 'string') return window._demoLang === 'en';
+    if (typeof currentLang !== 'undefined') return currentLang === 'en';
+    if (typeof window.currentLang !== 'undefined') return window.currentLang === 'en';
+    const langBtn = document.getElementById('btnLangSelect');
+    if (langBtn && langBtn.textContent && langBtn.textContent.toUpperCase().includes('EN')) return true;
+    return localStorage.getItem('aeroglass_lang') === 'en';
+}
+
+function toggleDemoLanguage() {
+    const nextLang = isDemoEnglish() ? 'it' : 'en';
+    window._demoLang = nextLang;
+    if (typeof toggleLanguage === 'function') {
+        try { toggleLanguage(); } catch (e) {}
+    } else {
+        if (typeof currentLang !== 'undefined') currentLang = nextLang;
+        window.currentLang = nextLang;
+        localStorage.setItem('aeroglass_lang', nextLang);
+    }
+    renderCurrentDemoStep();
+}
+
 function getDemoSteps() {
-    const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+    const isEn = isDemoEnglish();
 
     if (isEn) {
         return [
             {
                 target: null,
-                badge: "WELCOME • v0.7.1",
+                badge: "WELCOME • v0.7.2",
                 title: "✈️ Welcome to AeroGlass-Nav",
                 body: `
                     <p><b>AeroGlass-Nav</b> is your tactical Flight Planner & Moving Map in <b>Dark Cockpit</b> style for Microsoft Flight Simulator 2024.</p>
                     <div class="demo-feature-grid">
-                        <div>🌍 <b>40,000+ World Airports</b> (SQLite + Progressive LOD)</div>
+                        <div>🌍 <b>40,000+ World Airports</b> (SQLite + Ground Charts)</div>
                         <div>🌐 <b>Live VATSIM & IVAO</b> (Nearby Traffic & ATC Radar)</div>
                         <div>📝 <b>EFB Scratchpad & Measure</b> (C.R.A.F.T. Pad & Ruler)</div>
                         <div>📉 <b>Multi-Step VNAV & ToD</b> (Terrain & Cloud Scanner)</div>
                     </div>
-                    <p class="demo-tip">💡 Use <b>← / →</b> arrows to navigate, <b>Space</b> for auto-play, or <b>Esc / F1</b> to exit at any time.</p>
+                    <p class="demo-tip">💡 Use <b>← / →</b> arrows to navigate, <b>Space</b> for auto-play, <b>🌐 IT/EN</b> to switch language, or <b>Esc / F1</b> to exit.</p>
                 `
             },
             {
                 target: "#sidebarPanel",
                 badge: "STEP 1 • FLIGHT PLANNING",
-                title: "🗺️ Flight Plan, SimBrief & .PLN",
+                title: "🗺️ Flight Plan, SimBrief, .PLN & MSFS Sync",
                 body: `
                     <p>Manage your entire route from the collapsible side panel:</p>
                     <ul>
                         <li><b>✈️ SimBrief OFP:</b> Download your latest flight plan with cruise altitudes, winds and METARs in one click.</li>
-                        <li><b>📂 Import / Export .PLN:</b> Load or drag-and-drop MSFS <code>.pln</code> files directly onto the map.</li>
-                        <li><b>🖐️ Rubber Banding:</b> Drag any leg on the map to insert intermediate waypoints on the fly.</li>
+                        <li><b>📂 Import / Export .PLN & Send to MSFS:</b> Load or drag-and-drop MSFS <code>.pln</code> files, or push the active route directly to the simulator.</li>
+                        <li><b>🖐️ Rubber Banding & Custom Waypoints:</b> Drag any leg on the map or save custom user waypoints in SQLite.</li>
                     </ul>
                 `
             },
@@ -46,7 +68,7 @@ function getDemoSteps() {
                 badge: "STEP 2 • QUICK SEARCH",
                 title: "🔍 Instant ICAO Search & Map Centering",
                 body: `
-                    <p>Type any <b>ICAO code</b> (e.g. <code>LIRQ</code>, <code>LIPZ</code>, <code>LIKL</code>), VOR or airport name and press <b>Enter</b>:</p>
+                    <p>Type any <b>ICAO code</b> (e.g. <code>LIPZ</code>, <code>LIRQ</code>, <code>LIKL</code>), VOR or airport name and press <b>Enter</b>:</p>
                     <ul>
                         <li>The map smoothly flies to the airport at tactical zoom.</li>
                         <li>Opens the live <b>METAR card</b> with <b>Recommended Runway</b> (headwind/crosswind) and clickable radio frequencies.</li>
@@ -56,13 +78,13 @@ function getDemoSteps() {
             {
                 target: "#btnToggleGroundMap",
                 badge: "STEP 3 • WORLD AIRPORTS & GROUND MAP",
-                title: "🛫 Progressive Declutter (LOD) & Runways",
+                title: "🛫 Progressive Declutter (LOD), Runways & Stands",
                 body: `
                     <p>The map automatically adapts airport density to your zoom level to keep the chart clean:</p>
                     <ul>
                         <li><b>Continental Zoom (&lt; 8):</b> Shows major hubs as discrete radar dots (hover to reveal ICAO).</li>
                         <li><b>Regional & VFR Zoom (&ge; 9.5):</b> Reveals medium airports and VFR airfields.</li>
-                        <li><b>Ground Map (&ge; 13.5):</b> Dynamically renders runway thresholds and surfaces directly from the SQLite database!</li>
+                        <li><b>Ground Map (&ge; 13.5):</b> Dynamically renders runway thresholds, surfaces, taxiways, and apron parking stands (including detailed layouts for <code>LIPZ</code>, <code>LIKL</code>, <code>LIPD</code>, <code>LITY</code>)!</li>
                     </ul>
                 `
             },
@@ -178,55 +200,26 @@ function getDemoSteps() {
             {
                 target: "#aeroCompassWidget",
                 badge: "STEP 11 • ERGONOMICS & EFB WI-FI",
-                title: "🧭 Compass Rose, UI Modes & Tablet Wi-Fi",
+                title: "🧭 Compass Rose, Orientation & Tablet Wi-Fi",
                 body: `
-                    <p>Tailor the interface to any cockpit lighting or screen setup:</p>
+                    <p>Tailor the interface to any cockpit setup or external device:</p>
                     <ul>
-                        <li><b>🧭 Compass Rose:</b> Rotates with the map in Track-Up mode; click it anytime to reset <b>North-Up (360°)</b>.</li>
-                        <li><b>🎛️ UI & Themes:</b> Switch between Extended/Simple modes and <b>Dark / Night / Day</b> cockpit themes.</li>
-                        <li><b>📱 EFB Wi-Fi:</b> Click the top-left EFB badge to scan the QR Code and open AeroGlass-Nav live on your iPad or Android tablet!</li>
+                        <li><b>🧭 Compass Rose & Map Mode:</b> Switch between <b>Free Map / North-Up / Track-Up</b>; click the compass anytime to reset <b>North-Up (360°)</b>.</li>
+                        <li><b>🌐 Language (IT / EN):</b> Switch the entire interface and guided tour language between Italian and English at any time.</li>
+                        <li><b>📱 EFB Wi-Fi:</b> Click the top EFB badge to scan the QR Code and open AeroGlass-Nav live on your iPad or Android tablet!</li>
                     </ul>
                 `
             },
             {
-                target: "#orwillChatWidget",
-                badge: "STEP 12 • AI CO-PILOT",
-                title: "🤖 Orwill: Virtual Co-Pilot & Dispatcher",
-                body: `
-                    <p>Your local heuristic AI assistant located in the bottom-left corner:</p>
-                    <ul>
-                        <li><b>💬 Aviation Expert:</b> Answers questions on airspace (ATZ, CTR, TMA), QNH, weather, and VNAV calculations.</li>
-                        <li><b>🌦️ ICAO Parser:</b> Automatically detects airport codes in your questions (e.g., "METAR LIPZ") and retrieves live weather.</li>
-                        <li><b>🌐 Gemini Bridge:</b> If a query is outside local rules, Orwill automatically copies your question to clipboard, opens Gemini, and assists you!</li>
-                    </ul>
-                `,
-                onEnter: () => {
-                    const body = document.getElementById('orwillBody');
-                    const arrow = document.getElementById('orwillToggleArrow');
-                    if (body && body.style.display !== 'flex') {
-                        body.style.display = 'flex';
-                        if (arrow) arrow.innerText = '▼';
-                    }
-                },
-                onLeave: () => {
-                    const body = document.getElementById('orwillBody');
-                    const arrow = document.getElementById('orwillToggleArrow');
-                    if (body && body.style.display === 'flex') {
-                        body.style.display = 'none';
-                        if (arrow) arrow.innerText = '▲';
-                    }
-                }
-            },
-            {
                 target: "#mapStyleSelect",
-                badge: "STEP 13 • PRO MAP LAYERS",
-                title: "🗺️ IFR, VFR, MAP, SAT, Day/Night & Relief",
+                badge: "STEP 12 • PRO MAP LAYERS & FILTERS",
+                title: "🗺️ IFR, VFR, MAP, SAT, Day/Night, Relief & Navaids",
                 body: `
-                    <p>Professional cartographic chart system:</p>
+                    <p>Multi-layer aeronautical cartographic engine:</p>
                     <ul>
-                        <li><b>🗺️ 4 Map Models:</b> Switch instantly between <b>IFR</b>, <b>VFR</b>, <b>MAP</b>, and <b>SAT</b> views.</li>
-                        <li><b>☀️/🌙 Day & Night:</b> Dedicated lighting modes to optimize cockpit night vision.</li>
-                        <li><b>⛰️ Relief:</b> Independent toggle for terrain hillshading overlays.</li>
+                        <li><b>🗺️ 4 Map Models:</b> Switch instantly between <b>IFR</b>, <b>VFR</b>, <b>MAP</b>, and <b>SAT</b> views with <b>☀️ Day / 🌙 Night</b> lighting and <b>⛰️ Relief</b> hillshading.</li>
+                        <li><b>📡 VOR/ILS & ⚙️ Filters:</b> Toggle radio navaids, approach cones, and customize visible map layers on the fly.</li>
+                        <li><b>✈️ Send to MSFS:</b> Push your active route directly to the simulator avionics in one click.</li>
                     </ul>
                 `
             }
@@ -236,29 +229,29 @@ function getDemoSteps() {
     return [
         {
             target: null,
-            badge: "BENVENUTO • v0.7.1",
+            badge: "BENVENUTO • v0.7.2",
             title: "✈️ Benvenuto in AeroGlass-Nav",
             body: `
                 <p><b>AeroGlass-Nav</b> è il tuo Flight Planner & Moving Map tattico in stile <b>Dark Cockpit</b> progettato per Microsoft Flight Simulator 2024.</p>
                 <div class="demo-feature-grid">
-                    <div>🌍 <b>40.000+ Aeroporti Mondiali</b> (SQLite + Declutter LOD)</div>
+                    <div>🌍 <b>40.000+ Aeroporti Mondiali</b> (SQLite + Ground Map)</div>
                     <div>🌐 <b>Traffico & ATC VATSIM/IVAO</b> (TWR, APP, CTR & Frequenze)</div>
                     <div>📝 <b>Scratchpad EFB & Righello</b> (Note ATC, Disegno & ETE)</div>
                     <div>📉 <b>Profilo VNAV & Cloud Scan</b> (Terreno, ToD e Nuvole)</div>
                 </div>
-                <p class="demo-tip">💡 Usa le frecce <b>← / →</b> per scorrere i passaggi, <b>Spazio</b> per lo scorrimento automatico o <b>Esc / F1</b> per chiudere.</p>
+                <p class="demo-tip">💡 Usa le frecce <b>← / →</b> per scorrere i passaggi, <b>Spazio</b> per lo scorrimento automatico, <b>🌐 IT/EN</b> per cambiare lingua o <b>Esc / F1</b> per chiudere.</p>
             `
         },
         {
             target: "#sidebarPanel",
             badge: "PASSO 1 • PIANIFICAZIONE VOLO",
-            title: "🗺️ Piano di Volo, SimBrief & File .PLN",
+            title: "🗺️ Piano di Volo, SimBrief, File .PLN & Sync MSFS",
             body: `
                 <p>Dal pannello laterale sinistro gestisci l'intera rotta e i Waypoint:</p>
                 <ul>
                     <li><b>✈️ SimBrief OFP:</b> Scarica con un clic l'ultimo piano di volo generato su SimBrief completo di quote, venti e METAR.</li>
-                    <li><b>📂 Importa / Esporta .PLN:</b> Carica o trascina (Drag & Drop) file <code>.pln</code> di MSFS direttamente sulla mappa.</li>
-                    <li><b>➕ Waypoints Utente:</b> Sezione a fisarmonica per salvare punti VFR personalizzati nel database SQLite o catturarli con un clic sulla mappa.</li>
+                    <li><b>📂 Importa / Esporta .PLN & Invia a MSFS:</b> Carica o trascina (Drag & Drop) file <code>.pln</code> sulla mappa, oppure invia la rotta direttamente al simulatore.</li>
+                    <li><b>➕ Waypoints Utente:</b> Sezione dedicata per salvare punti VFR personalizzati nel database SQLite o catturarli con un clic sulla mappa.</li>
                 </ul>
             `
         },
@@ -267,7 +260,7 @@ function getDemoSteps() {
             badge: "PASSO 2 • RICERCA ISTANTANEA",
             title: "🔍 Ricerca Rapida ICAO & Centratura Mappa",
             body: `
-                <p>Digita qualsiasi codice <b>ICAO</b> (es. <code>LIRQ</code>, <code>LIPZ</code>, <code>LIKL</code>, <code>LITY</code>), un VOR o il nome di una città e premi <b>Invio</b>:</p>
+                <p>Digita qualsiasi codice <b>ICAO</b> (es. <code>LIPZ</code>, <code>LIRQ</code>, <code>LIKL</code>, <code>LITY</code>), un VOR o il nome di una città e premi <b>Invio</b>:</p>
                 <ul>
                     <li>La mappa si centra automaticamente sullo scalo con zoom ravvicinato.</li>
                     <li>Si apre subito la scheda <b>METAR live</b> con il calcolo della <b>Pista Consigliata</b> in base al vento, lunghezze piste e frequenze radio cliccabili.</li>
@@ -276,14 +269,14 @@ function getDemoSteps() {
         },
         {
             target: "#btnToggleGroundMap",
-            badge: "PASSO 3 • AEROPORTI MONDIALI & PISTE",
-            title: "🛫 Declutter Intelligente (LOD) & Mappa Piste",
+            badge: "PASSO 3 • AEROPORTI MONDIALI & GROUND MAP",
+            title: "🛫 Declutter Intelligente (LOD), Piste & Piazzole",
             body: `
                 <p>Il motore cartografico regola automaticamente i dettagli in base al livello di zoom per mantenere la mappa sempre pulita:</p>
                 <ul>
                     <li><b>Zoom Continentale (&lt; 8):</b> Mostra solo i grandi scali come discreti pallini radar (passa il mouse per leggere il codice ICAO).</li>
                     <li><b>Zoom Regionale e VFR (&ge; 9.5):</b> Rivela progressivamente gli aeroporti medi e le aviosuperfici VFR.</li>
-                    <li><b>Ground Map (&ge; 13.5):</b> Disegna in tempo reale le piste orientate con testate e superficie attingendo al database SQLite mondiale (oltre ai layout completi di taxiway e stand per <code>LIKL</code>, <code>LIPD</code>, <code>LITY</code>).</li>
+                    <li><b>Ground Map (&ge; 13.5):</b> Disegna in tempo reale le piste orientate con testate, vie di rullaggio (taxiway) e piazzole di parcheggio (stand) per gli aeroporti supportati (inclusi <code>LIPZ</code>, <code>LIKL</code>, <code>LIPD</code>, <code>LITY</code>).</li>
                 </ul>
             `
         },
@@ -292,7 +285,7 @@ function getDemoSteps() {
             badge: "PASSO 4 • METEO E VENTI IN ROTTA",
             title: "💨 Vettori Vento & Bollettini METAR",
             body: `
-                <p>Attivando <b>💨 Meteo: ON</b> visualizzi la situazione atmosferica lungo il piano di volo:</p>
+                <p>Attivando <b>💨 WX / Meteo</b> visualizzi la situazione atmosferica lungo il piano di volo:</p>
                 <ul>
                     <li><b>Badge Vento in Quota:</b> Mostrano direzione/intensità del vento e calcolano la componente di <b>Vento Contrario (HW)</b>, <b>Vento in Coda (TW)</b> o <b>Traverso (XW)</b>.</li>
                     <li><b>Categorie di Volo:</b> Indicatori luminosi (<b style="color:#2ea043;">VFR</b>, <b style="color:#00d2ff;">MVFR</b>, <b style="color:#f85149;">IFR</b>, <b style="color:#e040fb;">LIFR</b>) sugli aeroporti in vista.</li>
@@ -304,7 +297,7 @@ function getDemoSteps() {
             badge: "PASSO 5 • RETI DI VOLO ONLINE",
             title: "🌐 Traffico Live VATSIM / IVAO & Copertura ATC",
             body: `
-                <p>Clicca su <b>🌐 Online</b> per ciclare tra <b>OFF</b>, <b>ON (Entrambi)</b>, <b>IVAO</b> e <b>VATSIM</b> (aggiornamento asincrono ogni 60 secondi):</p>
+                <p>Clicca sul selettore di rete per ciclare tra <b>OFF</b>, <b>ON (Entrambi)</b>, <b>IVAO</b> e <b>VATSIM</b> (aggiornamento asincrono ogni 60 secondi):</p>
                 <ul>
                     <li><b>Controllori ATC Online:</b> Visualizza sulla mappa Torri (<b>🗼 TWR</b> in verde), Avvicinamenti (<b>📡 APP</b> in ciano) e Centri Radar (<b>🕸️ CTR</b> in viola) con cerchi di copertura e frequenza radio.</li>
                     <li><b>Sintonia Rapida:</b> Clicca su qualsiasi badge ATC per inviare la frequenza direttamente alla casella <code>NEXT FREQ</code> dello Scratchpad EFB!</li>
@@ -317,7 +310,7 @@ function getDemoSteps() {
             badge: "PASSO 6 • CALIBRAZIONE RADAR",
             title: "🎚️ Slider Raggio, Opacità & Filtri ATC",
             body: `
-                <p>Clicca sul pulsante <b>🎚️</b> (o fai <b>Clic Destro</b> su <b>🌐 Online</b>) per aprire il pannello di calibrazione istantanea a 60 FPS:</p>
+                <p>Clicca sul pulsante <b>🎚️</b> per aprire il pannello di calibrazione istantanea a 60 FPS:</p>
                 <ul>
                     <li><b>⭕ Raggio Cerchi ATC (0%–250%):</b> Allarga o riduci gli anelli di copertura (a <code>0%</code> nasconde i cerchi lasciando solo i badge).</li>
                     <li><b>🔆 Opacità Copertura:</b> Regola la trasparenza dei cerchi sulla mappa.</li>
@@ -398,56 +391,27 @@ function getDemoSteps() {
         },
         {
             target: "#aeroCompassWidget",
-            badge: "PASSO 11 • BUSSOLA, TEMI & TABLET WI-FI",
-            title: "🧭 Rosa dei Venti, Temi Visivi & EFB Wi-Fi",
+            badge: "PASSO 11 • BUSSOLA, ORIENTAMENTO & TABLET WI-FI",
+            title: "🧭 Rosa dei Venti, Orientamento Mappa & EFB Wi-Fi",
             body: `
                 <p>Controllo totale dell'orientamento mappa e utilizzo multi-schermo:</p>
                 <ul>
-                    <li><b>🧭 Rosa dei Venti:</b> Ruota dinamicamente in modalità <i>Track-Up</i>; cliccala in qualsiasi momento per riallineare il <b>Nord in Alto (360°)</b>.</li>
-                    <li><b>🎛️ Vista & Temi:</b> Passa tra interfaccia <b>Estesa / Semplice</b> e temi <b>🌙 Dark / 🌑 Notte / ☀️ Giorno</b>.</li>
-                    <li><b>📱 EFB Wi-Fi:</b> Clicca sul primo pulsante in alto a sinistra per mostrare il <b>QR Code</b> e usare AeroGlass-Nav in diretta sul tuo iPad o tablet Android!</li>
+                    <li><b>🧭 Rosa dei Venti & Orientamento:</b> Scegli tra <b>Mappa Libera / Nord Su / Aereo Su (Track-Up)</b>; clicca la bussola in qualsiasi momento per riallineare il <b>Nord in Alto (360°)</b>.</li>
+                    <li><b>🌐 Lingua (IT / EN):</b> Commuta istantaneamente tutta l'interfaccia e il tour guidato tra Italiano e Inglese.</li>
+                    <li><b>📱 EFB Wi-Fi:</b> Clicca sul pulsante EFB per mostrare il <b>QR Code</b> e usare AeroGlass-Nav in diretta sul tuo iPad o tablet Android!</li>
                 </ul>
             `
         },
         {
-            target: "#orwillChatWidget",
-            badge: "PASSO 12 • CO-PILOTA IA",
-            title: "🤖 Orwill: Co-Pilota & Dispatcher Virtuale",
-            body: `
-                <p>Il tuo assistente IA euristico locale posizionato in basso a sinistra:</p>
-                <ul>
-                    <li><b>💬 Esperto Aeronautico:</b> Risponde a domande su spazi aerei (ATZ, CTR, TMA), QNH, meteo e calcoli di discesa.</li>
-                    <li><b>🌦️ Parser ICAO:</b> Estrae automaticamente i codici aeroportuali dalle tue frasi (es. "metar di lipz") e recupera il meteo live.</li>
-                    <li><b>🌐 Ponte con Gemini:</b> Se una domanda esce dalle regole locali, Orwill copia la domanda negli appunti, apre automaticamente il browser su Gemini e ti assiste!</li>
-                </ul>
-            `,
-            onEnter: () => {
-                const body = document.getElementById('orwillBody');
-                const arrow = document.getElementById('orwillToggleArrow');
-                if (body && body.style.display !== 'flex') {
-                    body.style.display = 'flex';
-                    if (arrow) arrow.innerText = '▼';
-                }
-            },
-            onLeave: () => {
-                const body = document.getElementById('orwillBody');
-                const arrow = document.getElementById('orwillToggleArrow');
-                if (body && body.style.display === 'flex') {
-                    body.style.display = 'none';
-                    if (arrow) arrow.innerText = '▲';
-                }
-            }
-        },
-        {
             target: "#mapStyleSelect",
-            badge: "PASSO 13 • SISTEMA MAPPE PRO",
-            title: "🗺️ IFR, VFR, MAP, SAT, Giorno/Notte & Rilievi",
+            badge: "PASSO 12 • SISTEMA MAPPE PRO & FILTRI",
+            title: "🗺️ IFR, VFR, MAP, SAT, Giorno/Notte, Rilievi & VOR/ILS",
             body: `
-                <p>Modelli cartografici professionali:</p>
+                <p>Motore cartografico aeronautico multi-layer:</p>
                 <ul>
-                    <li><b>🗺️ 4 Viste Dedicate:</b> Seleziona al volo tra <b>IFR</b>, <b>VFR</b>, <b>MAP</b> e <b>SAT</b>.</li>
-                    <li><b>☀️/🌙 Giorno & Notte:</b> Illuminazione regolabile per la massima visibilità in cabina.</li>
-                    <li><b>⛰️ Rilievi:</b> Overlay indipendente di ombreggiatura del terreno (Hillshading).</li>
+                    <li><b>🗺️ 4 Viste Dedicate:</b> Seleziona al volo tra <b>IFR</b>, <b>VFR</b>, <b>MAP</b> e <b>SAT</b> con illuminazione <b>☀️ Giorno / 🌙 Notte</b> e livello <b>⛰️ Rilievi</b> (Hillshading).</li>
+                    <li><b>📡 VOR/ILS & ⚙️ Filtri:</b> Visualizza radioassistenze, coni di avvicinamento ILS e filtra gli elementi visibili sulla carta.</li>
+                    <li><b>✈️ Invia a MSFS:</b> Trasmetti il piano di volo attivo direttamente all'avionica del simulatore con un solo clic.</li>
                 </ul>
             `
         }
@@ -644,6 +608,7 @@ function ensureDemoTourDOM() {
             <div class="demo-header-row">
                 <span class="demo-step-badge" id="demoStepBadge">PASSO 1 / 13</span>
                 <div style="display:flex;gap:6px;">
+                    <button class="demo-nav-btn" id="btnDemoLang" style="padding:3px 9px;font-size:11.5px;" onclick="toggleDemoLanguage()" title="Switch Language IT / EN">🌐 EN</button>
                     <button class="demo-nav-btn" id="btnDemoAutoPlay" style="padding:3px 9px;font-size:11.5px;" onclick="toggleDemoAutoPlay()">▶ Auto</button>
                     <button class="demo-close-btn" onclick="stopDemoTour()">✕ ESC</button>
                 </div>
@@ -679,7 +644,7 @@ function renderCurrentDemoStep() {
     }
 
     const step = steps[_demoStepIndex];
-    const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+    const isEn = isDemoEnglish();
 
     if (typeof step.onEnter === 'function') {
         try { step.onEnter(); } catch (e) {}
@@ -693,7 +658,9 @@ function renderCurrentDemoStep() {
     const prevBtn = document.getElementById('btnDemoPrev');
     const nextBtn = document.getElementById('btnDemoNext');
     const autoBtn = document.getElementById('btnDemoAutoPlay');
+    const langBtn = document.getElementById('btnDemoLang');
 
+    if (langBtn) langBtn.textContent = isEn ? '🌐 IT' : '🌐 EN';
     if (badgeEl) badgeEl.textContent = step.badge || `STEP ${_demoStepIndex + 1}`;
     if (titleEl) titleEl.innerHTML = step.title || '';
     if (bodyEl) bodyEl.innerHTML = step.body || '';
@@ -931,3 +898,5 @@ window.toggleDemoAutoPlay = toggleDemoAutoPlay;
 window.initDemoKeyboardShortcuts = initDemoKeyboardShortcuts;
 window.startDemo = startDemoTour;
 window.toggleDemo = toggleDemoTour;
+window.toggleDemoLanguage = toggleDemoLanguage;
+window.renderCurrentDemoStep = renderCurrentDemoStep;

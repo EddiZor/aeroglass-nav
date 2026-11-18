@@ -3333,8 +3333,14 @@ function applyTranslations() {
 }
 
 function toggleLanguage() {
-    currentLang = (currentLang === 'it') ? 'en' : 'it';
+    currentLang = currentLang === 'it' ? 'en' : 'it';
+    window.currentLang = currentLang;
+    window._demoLang = currentLang;
+    localStorage.setItem('aeroglass_lang', currentLang);
     applyTranslations();
+    if (window._demoTourActive && typeof window.renderCurrentDemoStep === 'function') {
+        window.renderCurrentDemoStep();
+    }
 }
 
 function initSidebarResizer() {
