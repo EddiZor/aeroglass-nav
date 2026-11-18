@@ -815,6 +815,103 @@ function findNearestAirportAtCenter(lat, lon) {
 
 let _groundFetchInFlight = null;
 
+async function fetchOsmGroundFromBrowser(icao, lat, lon, aptName, existingRunways) {
+    const s = (lat - 0.032).toFixed(5);
+    const w = (lon - 0.045).toFixed(5);
+    const n = (lat + 0.032).toFixed(5);
+    const e = (lon + 0.045).toFixed(5);
+    const query = `[out:json][timeout:10][bbox:${s},${w},${n},${e}];(way["aeroway"="runway"];way["aeroway"="taxiway"];way["aeroway"="taxilane"];way["aeroway"="apron"];way["aeroway"="parking_position"];node["aeroway"="parking_position"];node["aeroway"="gate"];node["aeroway"="helipad"];);out geom qt;`;
+
+    const mirrors = [
+        'https://overpass-api.de/api/interpreter',
+        'https://overpass.private.coffee/api/interpreter',
+        'https://maps.mail.ru/osm/tools/overpass/api/interpreter'
+    ];
+
+    for (const url of mirrors) {
+        try {
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 8000);
+            const resp = await fetch(`${url}?data=${encodeURIComponent(query)}`, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' },
+                signal: ctrl.signal
+            });
+            clearTimeout(timer);
+            if (!resp.ok) continue;
+            const data = await resp.json();
+            if (!data || !Array.isArray(data.elements) || data.elements.length === 0) continue;
+
+            const layout = {
+                icao,
+                name: aptName || icao,
+                lat,
+                lon,
+                source: 'osm',
+                runways: existingRunways || [],
+                taxiways: [],
+                aprons: [],
+                stands: []
+            };
+            const osmRunways = [];
+            const rawNodeStands = [];
+            const rawWayStands = [];
+
+            for (const el of data.elements) {
+                const tags = el.tags || {};
+                const aeroway = tags.aeroway;
+                const ref = String(tags.ref || tags.name || '').trim();
+
+                if (el.type === 'way' && Array.isArray(el.geometry)) {
+                    const coords = el.geometry.map(pt => [Number(pt.lat), Number(pt.lon)]);
+                    if (coords.length < 2) continue;
+
+                    if (aeroway === 'taxiway' || aeroway === 'taxilane') {
+                        layout.taxiways.push({ ref: aeroway === 'taxiway' ? ref : '', kind: aeroway, coords });
+                    } else if (aeroway === 'apron') {
+                        layout.aprons.push(coords);
+                    } else if (aeroway === 'runway') {
+                        const surf = String(tags.surface || 'asphalt').toLowerCase();
+                        osmRunways.push({
+                            ref: ref || 'RWY',
+                            width: 45,
+                            surface: (surf.includes('grass') || surf.includes('turf')) ? 'grass' : 'asphalt',
+                            coords
+                        });
+                    } else if (aeroway === 'parking_position') {
+                        layout.taxiways.push({ ref: '', kind: 'taxilane', coords });
+                        const nosePt = coords[coords.length - 1];
+                        if (ref) rawWayStands.push({ ref, lat: nosePt[0], lon: nosePt[1] });
+                    }
+                } else if (el.type === 'node' && (aeroway === 'parking_position' || aeroway === 'gate' || aeroway === 'helipad')) {
+                    if (el.lat !== undefined && el.lon !== undefined) {
+                        const stRef = ref || (aeroway === 'helipad' ? 'H' : '');
+                        if (stRef) {
+                            rawNodeStands.push({ ref: stRef, lat: Number(el.lat), lon: Number(el.lon) });
+                        }
+                    }
+                }
+            }
+
+            const seen = [];
+            for (const st of [...rawNodeStands, ...rawWayStands]) {
+                const dup = seen.some(s => (s.ref === st.ref && Math.abs(s.lat - st.lat) < 0.0006 && Math.abs(s.lon - st.lon) < 0.0006) ||
+                                           (Math.abs(s.lat - st.lat) < 0.00008 && Math.abs(s.lon - st.lon) < 0.00008));
+                if (!dup) {
+                    seen.push(st);
+                    layout.stands.push(st);
+                }
+            }
+
+            if (osmRunways.length > 0) layout.runways = osmRunways;
+            if (layout.taxiways.length > 0 || layout.aprons.length > 0 || layout.stands.length > 0) {
+                return layout;
+            }
+        } catch (err) {}
+    }
+    return null;
+}
+
 async function evaluateAirportGroundMap() {
     if (!groundMapEnabled || typeof map === 'undefined' || !map) return;
     if (!groundLayerGroup && typeof L !== 'undefined') {
@@ -884,17 +981,22 @@ async function evaluateAirportGroundMap() {
             _groundFetchInFlight = null;
             if (res && res.success && res.layout) {
                 const ly = res.layout;
-                const hasFeatures = (ly.runways && ly.runways.length > 0) ||
-                                    (ly.taxiways && ly.taxiways.length > 0) ||
-                                    (ly.aprons && ly.aprons.length > 0) ||
-                                    (ly.stands && ly.stands.length > 0);
-                if (hasFeatures) {
-                    lastRenderedGroundKey = targetIcao;
-                    if (badgeName) badgeName.innerText = `${targetIcao} - ${nearApt.name || ly.name || 'GROUND CHART'}`;
-                    renderCustomAirportLayout(ly);
-                } else {
-                    lastRenderedGroundKey = null;
-                    if (groundLayerGroup) groundLayerGroup.clearLayers();
+                lastRenderedGroundKey = targetIcao;
+                if (badgeName) badgeName.innerText = `${targetIcao} - ${nearApt.name || ly.name || 'GROUND CHART'}`;
+                renderCustomAirportLayout(ly);
+
+                // Se il backend ha usato il layout procedurale, scarica i dati OSM direttamente da Chromium e aggiorna la cache SQLite
+                if (ly.source !== 'osm') {
+                    fetchOsmGroundFromBrowser(targetIcao, ly.lat || nearApt.lat, ly.lon || nearApt.lon, nearApt.name || ly.name, ly.runways).then(osmLy => {
+                        if (osmLy) {
+                            if (lastRenderedGroundKey === targetIcao) {
+                                renderCustomAirportLayout(osmLy);
+                            }
+                            if (window.pywebview && window.pywebview.api && window.pywebview.api.save_airport_ground_layout) {
+                                window.pywebview.api.save_airport_ground_layout(targetIcao, osmLy);
+                            }
+                        }
+                    });
                 }
             } else {
                 lastRenderedGroundKey = null;

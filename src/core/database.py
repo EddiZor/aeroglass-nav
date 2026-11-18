@@ -134,12 +134,36 @@ def init_db():
         except Exception:
             pass
 
-        # 7. Pulizia automatica dei record vuoti salvati in precedenza in airport_ground_cache
+        # 7. Copia automatica delle piste con coordinate reali (le_lat/he_lat) da ~/.aeroglass_nav/aeroglass.db
+        try:
+            has_coords = cursor.execute("SELECT COUNT(*) FROM world_runways WHERE le_lat IS NOT NULL").fetchone()[0]
+            legacy_db = os.path.join(os.path.expanduser("~"), ".aeroglass_nav", "aeroglass.db")
+            if has_coords == 0 and os.path.isfile(legacy_db) and os.path.abspath(legacy_db) != os.path.abspath(DB_PATH):
+                conn.commit()
+                cursor.execute("ATTACH DATABASE ? AS legacy_home", (legacy_db,))
+                legacy_cols = {row["name"] for row in cursor.execute("PRAGMA legacy_home.table_info(world_runways)").fetchall()}
+                if "le_lat" in legacy_cols:
+                    cnt = cursor.execute("SELECT COUNT(*) FROM legacy_home.world_runways WHERE le_lat IS NOT NULL").fetchone()[0]
+                    if cnt > 0:
+                        cursor.execute("DELETE FROM world_runways")
+                        cursor.execute("""
+                            INSERT INTO world_runways (apt_icao, le_ident, he_ident, length_ft, width_ft, surface, lighted, le_hdg, he_hdg, le_lat, le_lon, he_lat, he_lon)
+                            SELECT apt_icao, le_ident, he_ident, length_ft, width_ft, surface, lighted, le_hdg, he_hdg, le_lat, le_lon, he_lat, he_lon
+                            FROM legacy_home.world_runways
+                        """)
+                        print(f"[Database] Migrate {cnt} piste con coordinate esatte da ~/.aeroglass_nav/aeroglass.db")
+                conn.commit()
+                cursor.execute("DETACH DATABASE legacy_home")
+        except Exception as mig_err:
+            print("[Database] Avviso migrazione piste:", mig_err)
+
+        # 8. Pulizia automatica dei record vuoti o procedurali in airport_ground_cache
         try:
             cursor.execute("""
                 DELETE FROM airport_ground_cache
                 WHERE layout_json IS NULL
                    OR layout_json = ''
+                   OR layout_json LIKE '%"source": "procedural"%'
                    OR (layout_json LIKE '%"runways": []%' AND layout_json LIKE '%"taxiways": []%')
                    OR (layout_json LIKE '%"taxiways": []%' AND layout_json LIKE '%"stands": []%')
             """)

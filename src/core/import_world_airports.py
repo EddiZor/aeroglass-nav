@@ -4,8 +4,8 @@ import os
 import sqlite3
 import urllib.request
 
-# Percorso identico a src/core/database.py (~/.aeroglass_nav/aeroglass.db)
-DB_PATH = os.path.join(os.path.expanduser("~"), ".aeroglass_nav", "aeroglass.db")
+# Percorso identico a src/core/database.py (src/core/aeroglass.db)
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "aeroglass.db")
 
 URLS = {
     "airports": "https://davidmegginson.github.io/ourairports-data/airports.csv",
