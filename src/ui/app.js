@@ -1037,7 +1037,12 @@ async function evaluateAirportGroundMap() {
                 if (badgeName) badgeName.innerText = `${targetIcao} - ${nearApt.name || ly.name || 'GROUND CHART'}`;
                 renderCustomAirportLayout(ly);
 
-                // Dati gestiti interamente dal database SQLite locale e da MSFS 2024
+                // Se il layout nel DB SQLite non ha i nomi (ref) sulle taxiway (es. LIRF),
+                // recupera in background i nomi reali da OSM e li abbina geometricamente
+                const realRefsCount = (ly.taxiways || []).filter(t => t.ref && !t._autoRef && String(t.ref).trim() !== '').length;
+                if ((ly.taxiways || []).length > 0 && realRefsCount === 0) {
+                    enrichLayoutTaxiwayRefsFromOsm(targetIcao, nearApt.lat, nearApt.lon, ly);
+                }
             } else {
                 lastRenderedGroundKey = null;
                 if (groundLayerGroup) groundLayerGroup.clearLayers();
@@ -1050,9 +1055,241 @@ async function evaluateAirportGroundMap() {
     }
 }
 
+const _osmRefEnrichCache = new Map();
+
+function _extractCleanTaxiwayRef(tags) {
+    if (!tags) return '';
+    let raw = String(tags.ref || tags['aeroway:ref'] || tags.loc_ref || tags.nat_ref || tags.name || '').trim();
+    if (!raw) return '';
+    // Pulisce prefissi descrittivi tipo "Taxiway A", "TWY B1", "Taxilane N2"
+    raw = raw.replace(/^(taxiway|taxilane|twy|raccordo|via di rullaggio)\s+/i, '').trim().toUpperCase();
+    // Accetta solo sigle aeronautiche compatte (es. A, B1, AA, N3, TWY A)
+    if (raw.length >= 1 && raw.length <= 5 && /^[A-Z0-9]+$/.test(raw)) {
+        return raw;
+    }
+    return '';
+}
+
+function _segAxisAngleDeg(lat1, lon1, lat2, lon2) {
+    const dLat = (lat2 - lat1) * 111320;
+    const dLon = (lon2 - lon1) * 111320 * Math.cos(lat1 * Math.PI / 180);
+    let ang = (Math.atan2(dLon, dLat) * 180 / Math.PI + 360) % 180;
+    return ang;
+}
+
+function _angleDiffUndirected(a1, a2) {
+    const d = Math.abs(a1 - a2) % 180;
+    return d > 90 ? 180 - d : d;
+}
+
+async function enrichLayoutTaxiwayRefsFromOsm(icao, lat, lon, layout) {
+    if (!icao || !layout || !Array.isArray(layout.taxiways) || layout.taxiways.length === 0) return;
+
+    if (_osmRefEnrichCache.has(icao)) {
+        const cachedSegs = _osmRefEnrichCache.get(icao);
+        if (cachedSegs && cachedSegs.length > 0 && _applyOsmRefsToLayout(layout, cachedSegs)) {
+            if (lastRenderedGroundKey === icao) renderCustomAirportLayout(layout);
+        }
+        return;
+    }
+
+    // Bounding box ampio (±0.052 lat, ±0.068 lon) per coprire grandi hub come LIRF
+    const s = (lat - 0.052).toFixed(5);
+    const w = (lon - 0.068).toFixed(5);
+    const n = (lat + 0.052).toFixed(5);
+    const e = (lon + 0.068).toFixed(5);
+    const query = `[out:json][timeout:8][bbox:${s},${w},${n},${e}];(way["aeroway"~"^(taxiway|taxilane)$"]["ref"];way["aeroway"~"^(taxiway|taxilane)$"]["name"];);out geom qt;`;
+
+    const mirrors = [
+        'https://overpass-api.de/api/interpreter',
+        'https://overpass.private.coffee/api/interpreter',
+        'https://maps.mail.ru/osm/tools/overpass/api/interpreter'
+    ];
+
+    for (const url of mirrors) {
+        try {
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 7500);
+            const resp = await fetch(`${url}?data=${encodeURIComponent(query)}`, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' },
+                signal: ctrl.signal
+            });
+            clearTimeout(timer);
+            if (!resp.ok) continue;
+            const data = await resp.json();
+            if (!data || !Array.isArray(data.elements)) continue;
+
+            const osmNamedSegs = [];
+            for (const el of data.elements) {
+                if (el.type !== 'way' || !Array.isArray(el.geometry) || el.geometry.length < 2) continue;
+                const ref = _extractCleanTaxiwayRef(el.tags);
+                if (!ref) continue;
+
+                for (let i = 1; i < el.geometry.length; i++) {
+                    const p1 = el.geometry[i - 1];
+                    const p2 = el.geometry[i];
+                    const mLat = (Number(p1.lat) + Number(p2.lat)) / 2;
+                    const mLon = (Number(p1.lon) + Number(p2.lon)) / 2;
+                    const ang = _segAxisAngleDeg(Number(p1.lat), Number(p1.lon), Number(p2.lat), Number(p2.lon));
+                    osmNamedSegs.push({ ref, lat: mLat, lon: mLon, ang });
+                }
+            }
+
+            _osmRefEnrichCache.set(icao, osmNamedSegs);
+            if (osmNamedSegs.length > 0 && _applyOsmRefsToLayout(layout, osmNamedSegs)) {
+                if (lastRenderedGroundKey === icao) {
+                    renderCustomAirportLayout(layout);
+                }
+            }
+            return;
+        } catch (err) {}
+    }
+}
+
+function _applyOsmRefsToLayout(layout, osmNamedSegs) {
+    if (!layout || !Array.isArray(layout.taxiways) || !Array.isArray(osmNamedSegs) || osmNamedSegs.length === 0) return false;
+    let matchedCount = 0;
+
+    // Pulisce eventuali lettere automatiche di fallback prima di applicare i nomi reali OSM
+    layout.taxiways.forEach(twy => {
+        if (twy._autoRef) {
+            twy.ref = '';
+            delete twy._autoRef;
+        }
+    });
+
+    layout.taxiways.forEach(twy => {
+        if (!Array.isArray(twy.coords) || twy.coords.length < 2) return;
+        const pFirst = twy.coords[0];
+        const pLast = twy.coords[twy.coords.length - 1];
+        const midPt = twy.coords[Math.floor(twy.coords.length / 2)];
+        const mLat = (pFirst[0] + pLast[0] + midPt[0]) / 3;
+        const mLon = (pFirst[1] + pLast[1] + midPt[1]) / 3;
+        const twyAng = _segAxisAngleDeg(pFirst[0], pFirst[1], pLast[0], pLast[1]);
+
+        let bestRef = '';
+        let bestDist = 34; // Raggio max di accoppiamento in metri
+
+        for (let i = 0; i < osmNamedSegs.length; i++) {
+            const os = osmNamedSegs[i];
+            if (Math.abs(mLat - os.lat) > 0.0004 || Math.abs(mLon - os.lon) > 0.0005) continue;
+            const dM = Math.hypot((mLat - os.lat) * 111320, (mLon - os.lon) * 111320 * Math.cos(mLat * Math.PI / 180));
+            if (dM < bestDist && _angleDiffUndirected(twyAng, os.ang) < 32) {
+                bestDist = dM;
+                bestRef = os.ref;
+            }
+        }
+
+        if (bestRef) {
+            twy.ref = bestRef;
+            matchedCount++;
+        }
+    });
+
+    return matchedCount > 0;
+}
+
+function ensureAirportTaxiwayRefs(layout) {
+    if (!layout || !Array.isArray(layout.taxiways) || layout.taxiways.length === 0) return;
+
+    // Se l'aeroporto possiede già nomi reali (non auto-generati), non sovrascriverli
+    const hasRealRefs = layout.taxiways.some(t => t.ref && !t._autoRef && String(t.ref).trim() !== '');
+    if (hasRealRefs) return;
+
+    const fastDist = (lat1, lon1, lat2, lon2) => {
+        return Math.hypot((lat2 - lat1) * 111320, (lon2 - lon1) * 111320 * Math.cos(lat1 * Math.PI / 180));
+    };
+
+    const stands = Array.isArray(layout.stands) ? layout.stands : [];
+    const segs = [];
+
+    layout.taxiways.forEach((twy, idx) => {
+        if (!Array.isArray(twy.coords) || twy.coords.length < 2) return;
+        let len = 0;
+        for (let i = 1; i < twy.coords.length; i++) {
+            len += fastDist(twy.coords[i - 1][0], twy.coords[i - 1][1], twy.coords[i][0], twy.coords[i][1]);
+        }
+        if (len < 18) return;
+
+        const pStart = twy.coords[0];
+        const pEnd = twy.coords[twy.coords.length - 1];
+
+        // Esclude i corti baffi di ingresso alle singole piazzole di parcheggio (< 85m vicini a uno stand)
+        if (len < 85 && stands.length > 0) {
+            const nearStand = stands.some(st =>
+                fastDist(pStart[0], pStart[1], st.lat, st.lon) < 36 ||
+                fastDist(pEnd[0], pEnd[1], st.lat, st.lon) < 36
+            );
+            if (nearStand) return;
+        }
+
+        const ang = _segAxisAngleDeg(pStart[0], pStart[1], pEnd[0], pEnd[1]);
+        segs.push({ idx, twy, pStart, pEnd, len, ang, visited: false });
+    });
+
+    // Raggruppa i segmenti connessi e collineari (stessa via di rullaggio spezzata agli incroci)
+    const branches = [];
+    for (let i = 0; i < segs.length; i++) {
+        if (segs[i].visited) continue;
+        segs[i].visited = true;
+        const cluster = [segs[i]];
+        const queue = [segs[i]];
+        let totalLen = segs[i].len;
+
+        while (queue.length > 0) {
+            const curr = queue.shift();
+            for (let j = 0; j < segs.length; j++) {
+                const cand = segs[j];
+                if (cand.visited) continue;
+                if (_angleDiffUndirected(curr.ang, cand.ang) > 25) continue;
+
+                const d1 = fastDist(curr.pStart[0], curr.pStart[1], cand.pStart[0], cand.pStart[1]);
+                const d2 = fastDist(curr.pStart[0], curr.pStart[1], cand.pEnd[0], cand.pEnd[1]);
+                const d3 = fastDist(curr.pEnd[0], curr.pEnd[1], cand.pStart[0], cand.pStart[1]);
+                const d4 = fastDist(curr.pEnd[0], curr.pEnd[1], cand.pEnd[0], cand.pEnd[1]);
+
+                if (Math.min(d1, d2, d3, d4) <= 26) {
+                    cand.visited = true;
+                    cluster.push(cand);
+                    queue.push(cand);
+                    totalLen += cand.len;
+                }
+            }
+        }
+
+        // Etichetta solo le diramazioni significative (>= 75m complessivi)
+        if (totalLen >= 75) {
+            branches.push({ cluster, totalLen });
+        }
+    }
+
+    // Ordina le vie di rullaggio dalla più lunga (principale) alla più corta (raccordi)
+    branches.sort((a, b) => b.totalLen - a.totalLen);
+
+    // Alfabeto standard ICAO per vie di rullaggio (escluse I, O, Q, U, X)
+    const ICAO_CHARS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'J', 'K', 'L', 'M', 'N', 'P', 'R', 'S', 'T', 'V', 'W', 'Y', 'Z'];
+
+    branches.forEach((br, bIdx) => {
+        let label = '';
+        if (bIdx < ICAO_CHARS.length) {
+            label = ICAO_CHARS[bIdx];
+        } else {
+            const pfx = ICAO_CHARS[bIdx % ICAO_CHARS.length];
+            const num = Math.floor(bIdx / ICAO_CHARS.length);
+            label = `${pfx}${num}`;
+        }
+        br.cluster.forEach(s => {
+            s.twy.ref = label;
+            s.twy._autoRef = true;
+        });
+    });
+}
+
 function renderCustomAirportLayout(layout) {
     if (!groundLayerGroup || !layout) return;
     groundLayerGroup.clearLayers();
+    ensureAirportTaxiwayRefs(layout);
 
     (layout.aprons || []).forEach(poly => {
         L.polygon(poly, {
@@ -1064,24 +1301,95 @@ function renderCustomAirportLayout(layout) {
         }).addTo(groundLayerGroup);
     });
 
+    const fastDistM = (lat1, lon1, lat2, lon2) => {
+        const dLat = (lat2 - lat1) * 111320;
+        const dLon = (lon2 - lon1) * 111320 * Math.cos(lat1 * Math.PI / 180);
+        return Math.hypot(dLat, dLon);
+    };
+
+    const getPolylineMidpointAndLength = (coords) => {
+        let totalLen = 0;
+        const segLens = [];
+        for (let i = 1; i < coords.length; i++) {
+            const d = fastDistM(coords[i - 1][0], coords[i - 1][1], coords[i][0], coords[i][1]);
+            segLens.push(d);
+            totalLen += d;
+        }
+        if (totalLen <= 0) return { mid: coords[0], len: 0 };
+
+        const half = totalLen / 2;
+        let acc = 0;
+        for (let i = 0; i < segLens.length; i++) {
+            if (acc + segLens[i] >= half && segLens[i] > 0) {
+                const ratio = (half - acc) / segLens[i];
+                return {
+                    mid: [
+                        coords[i][0] + (coords[i + 1][0] - coords[i][0]) * ratio,
+                        coords[i][1] + (coords[i + 1][1] - coords[i][1]) * ratio
+                    ],
+                    len: totalLen
+                };
+            }
+            acc += segLens[i];
+        }
+        return { mid: coords[Math.floor(coords.length / 2)], len: totalLen };
+    };
+
+    const twyCandidates = [];
+    const totalLenByRef = {};
+
     (layout.taxiways || []).forEach(twy => {
+        if (!Array.isArray(twy.coords) || twy.coords.length < 2) return;
+
         L.polyline(twy.coords, {
             color: '#f59e0b',
             weight: 4,
-            opacity: 0.85
+            opacity: 0.85,
+            interactive: false
         }).addTo(groundLayerGroup);
 
-        if (twy.ref && twy.coords.length >= 2) {
-            const mid = twy.coords[Math.floor(twy.coords.length / 2)];
-            L.marker(mid, {
-                icon: L.divIcon({
-                    className: 'apt-twy-label',
-                    html: twy.ref,
-                    iconSize: null
-                }),
-                interactive: false
-            }).addTo(groundLayerGroup);
-        }
+        const cleanRef = String(twy.ref || '').trim().toUpperCase();
+        if (!cleanRef) return;
+
+        const { mid, len } = getPolylineMidpointAndLength(twy.coords);
+        totalLenByRef[cleanRef] = (totalLenByRef[cleanRef] || 0) + len;
+        twyCandidates.push({ ref: cleanRef, lat: mid[0], lon: mid[1], len });
+    });
+
+    // Ordina i segmenti dal più lungo al più corto per posizionare le lettere sui rami principali
+    twyCandidates.sort((a, b) => b.len - a.len);
+
+    const SAME_REF_MIN_DIST_M = 280; // Distanza minima tra due cartelli con la STESSA lettera
+    const ANY_REF_MIN_DIST_M  = 50;  // Distanza minima tra cartelli di lettere DIVERSE agli incroci
+    const placedByRef = {};
+    const allPlaced = [];
+
+    twyCandidates.forEach(cand => {
+        const refList = placedByRef[cand.ref] || [];
+        // Massimo 1 cartello per raccordi corti (< 350m totali), massimo 2 per taxiway lunghe
+        const maxForThisRef = (totalLenByRef[cand.ref] || 0) >= 350 ? 2 : 1;
+
+        if (refList.length >= maxForThisRef) return;
+        if (cand.len < 22 && refList.length > 0) return;
+
+        const tooCloseSame = refList.some(p => fastDistM(cand.lat, cand.lon, p.lat, p.lon) < SAME_REF_MIN_DIST_M);
+        if (tooCloseSame) return;
+
+        const tooCloseAny = allPlaced.some(p => fastDistM(cand.lat, cand.lon, p.lat, p.lon) < ANY_REF_MIN_DIST_M);
+        if (tooCloseAny) return;
+
+        refList.push({ lat: cand.lat, lon: cand.lon });
+        placedByRef[cand.ref] = refList;
+        allPlaced.push({ lat: cand.lat, lon: cand.lon });
+
+        L.marker([cand.lat, cand.lon], {
+            icon: L.divIcon({
+                className: 'apt-twy-label',
+                html: cand.ref,
+                iconSize: null
+            }),
+            interactive: false
+        }).addTo(groundLayerGroup);
     });
 
     (layout.runways || []).forEach(rwy => {
