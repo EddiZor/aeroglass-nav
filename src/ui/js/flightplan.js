@@ -1017,8 +1017,98 @@ async function importPlnFile() {
     }
 }
 
-// --- INTEGRAZIONE SIMBRIEF & RICERCA RAPIDA ---
+// --- INTEGRAZIONE SIMBRIEF, PROTEZIONE PILOT ID & RICERCA RAPIDA ---
+let simbriefIdLocked = true;
+
+function setSimbriefIdLocked(locked) {
+    simbriefIdLocked = Boolean(locked);
+    const input = document.getElementById('simbriefIdInput');
+    const lockBtn = document.getElementById('btnLockSimbriefId');
+    const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+
+    if (input) {
+        input.readOnly = simbriefIdLocked;
+        input.style.cursor = simbriefIdLocked ? 'not-allowed' : 'text';
+        input.style.opacity = simbriefIdLocked ? '0.75' : '1';
+        input.style.borderColor = simbriefIdLocked ? 'rgba(239, 68, 68, 0.45)' : 'rgba(16, 185, 129, 0.75)';
+        if (!simbriefIdLocked) {
+            input.focus();
+            input.select();
+        } else {
+            input.blur();
+        }
+    }
+
+    if (lockBtn) {
+        if (simbriefIdLocked) {
+            lockBtn.style.background = 'rgba(239, 68, 68, 0.22)';
+            lockBtn.style.borderColor = '#ef4444';
+            lockBtn.style.color = '#f87171';
+            lockBtn.title = isEn
+                ? 'Pilot ID locked (click key to unlock editing)'
+                : 'Pilot ID protetto (clicca sulla chiave per sbloccare la digitazione)';
+        } else {
+            lockBtn.style.background = 'rgba(16, 185, 129, 0.24)';
+            lockBtn.style.borderColor = '#10b981';
+            lockBtn.style.color = '#34d399';
+            lockBtn.title = isEn
+                ? 'Editing unlocked (click key to save and lock)'
+                : 'Digitazione abilitata (clicca sulla chiave per salvare e bloccare)';
+        }
+    }
+}
+
+async function toggleSimbriefIdLock() {
+    const input = document.getElementById('simbriefIdInput');
+    if (simbriefIdLocked) {
+        setSimbriefIdLocked(false);
+    } else {
+        setSimbriefIdLocked(true);
+        if (input) {
+            const cleanId = (input.value || '').trim();
+            if (cleanId && window.pywebview && window.pywebview.api && window.pywebview.api.save_simbrief_id) {
+                try { await window.pywebview.api.save_simbrief_id(cleanId); } catch (e) {}
+            }
+        }
+    }
+}
+
+function ensureSimbriefLockUI() {
+    const input = document.getElementById('simbriefIdInput');
+    if (!input || !input.parentNode) return;
+
+    if (!document.getElementById('btnLockSimbriefId')) {
+        const btn = document.createElement('button');
+        btn.id = 'btnLockSimbriefId';
+        btn.type = 'button';
+        btn.innerHTML = '🔑';
+        btn.style.cssText = 'flex:0 0 auto; width:26px; height:26px; padding:0; margin-left:4px; border-radius:6px; border:1px solid #ef4444; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; font-size:12px; transition:all 0.2s ease;';
+        btn.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleSimbriefIdLock();
+        };
+        input.parentNode.insertBefore(btn, input.nextSibling);
+
+        // Permette di confermare e ribloccare premendo Invio durante la digitazione
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !simbriefIdLocked) {
+                e.preventDefault();
+                saveSimbriefId(input.value);
+            }
+        });
+    }
+    setSimbriefIdLocked(simbriefIdLocked);
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => setTimeout(ensureSimbriefLockUI, 100));
+} else {
+    setTimeout(ensureSimbriefLockUI, 100);
+}
+
 function setSimbriefCompactMode(isCompact) {
+    ensureSimbriefLockUI();
     const setupBox = document.getElementById('simbriefSetupBox');
     const compactBtn = document.getElementById('simbriefCompactBtn');
     const editIdBtn = document.getElementById('simbriefEditIdBtn');
@@ -1027,6 +1117,7 @@ function setSimbriefCompactMode(isCompact) {
         setupBox.style.display = 'none';
         compactBtn.style.display = 'inline-flex';
         editIdBtn.style.display = 'inline-flex';
+        setSimbriefIdLocked(true);
     } else {
         setupBox.style.display = 'flex';
         compactBtn.style.display = 'none';
@@ -1036,8 +1127,9 @@ function setSimbriefCompactMode(isCompact) {
 
 function showSimbriefBox() {
     setSimbriefCompactMode(false);
-    const input = document.getElementById('simbriefIdInput');
-    if (input) input.focus();
+    ensureSimbriefLockUI();
+    // Mantiene la casella bloccata (rossa) finché non si preme esplicitamente la chiave
+    setSimbriefIdLocked(true);
 }
 
 async function saveSimbriefId(val) {
@@ -1046,6 +1138,7 @@ async function saveSimbriefId(val) {
     if (window.pywebview && window.pywebview.api && window.pywebview.api.save_simbrief_id) {
         try { await window.pywebview.api.save_simbrief_id(cleanId); } catch (e) {}
     }
+    setSimbriefIdLocked(true);
     setSimbriefCompactMode(true);
 }
 
@@ -1057,6 +1150,7 @@ async function fetchSimbriefPlan() {
         if (res.success && res.flight_plan) {
             flightPlan = res.flight_plan;
             updateFlightPlanUI(res.alternate, true);
+            setSimbriefIdLocked(true);
             setSimbriefCompactMode(true);
         } else {
             setSimbriefCompactMode(false);

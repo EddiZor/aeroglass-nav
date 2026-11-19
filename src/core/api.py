@@ -1501,8 +1501,6 @@ class AeroGlassAPI:
             downloads_dir = os.path.dirname(pln_path)
             quick_pln = os.path.join(downloads_dir, "00_AeroGlass_Active.pln")
             shutil.copyfile(pln_path, quick_pln)
-            shutil.copyfile(pln_path, os.path.splitext(quick_pln)[0])
-            shutil.copyfile(pln_path, os.path.splitext(pln_path)[0])
             subprocess.run(["clip.exe"], input=quick_pln.encode("utf-8"), check=False)
         except Exception:
             quick_pln = pln_path

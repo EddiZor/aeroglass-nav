@@ -1176,3 +1176,122 @@
 [2026-11-18 18:22:51.701] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:79% (25.3/31.8GB) | Commit:70.2/87.8GB] ACFT=FenixA320 IAE SL ALT=293ft GS=0kt POS=(40.8802,14.2831)
 [2026-11-18 18:23:22.599] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:79% (25.3/31.8GB) | Commit:70.1/87.8GB] ACFT=FenixA320 IAE SL ALT=293ft GS=0kt POS=(40.8802,14.2831)
 [2026-11-18 18:23:31.483] [SIMCONNECT  ] [T:Thread-324 (execute)] [RAM:79% (25.2/31.8GB) | Commit:70.2/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-19 09:03:39.280] [STARTUP     ] [T:MainThread] [RAM:62% (19.9/31.8GB) | Commit:26.0/87.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-19 09:03:39.786] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:62% (20.0/31.8GB) | Commit:26.0/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 09:03:39.811] [SIM_MENU    ] [T:TelemetryPoll] [RAM:62% (20.0/31.8GB) | Commit:26.0/87.8GB] MSFS 2024 in Menu/Caricamento (coord=None,None) — in attesa avvio volo.
+[2026-11-19 09:04:07.839] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:63% (20.2/31.8GB) | Commit:26.6/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-19 09:04:10.277] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:63% (20.2/31.8GB) | Commit:26.6/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 09:04:10.279] [SIM_MENU    ] [T:TelemetryPoll] [RAM:63% (20.2/31.8GB) | Commit:26.6/87.8GB] MSFS 2024 in Menu/Caricamento (coord=None,None) — in attesa avvio volo.
+[2026-11-19 09:04:38.289] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:64% (20.4/31.8GB) | Commit:26.8/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-19 09:04:40.719] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:64% (20.4/31.8GB) | Commit:26.8/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 09:04:40.727] [SIM_MENU    ] [T:TelemetryPoll] [RAM:64% (20.4/31.8GB) | Commit:26.8/87.8GB] MSFS 2024 in Menu/Caricamento (coord=None,None) — in attesa avvio volo.
+[2026-11-19 09:05:08.738] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:64% (20.6/31.8GB) | Commit:26.8/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-19 09:05:11.175] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:64% (20.6/31.8GB) | Commit:26.8/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 09:05:11.184] [SIM_MENU    ] [T:TelemetryPoll] [RAM:64% (20.6/31.8GB) | Commit:26.8/87.8GB] MSFS 2024 in Menu/Caricamento (coord=None,None) — in attesa avvio volo.
+[2026-11-19 09:05:39.193] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:64% (20.6/31.8GB) | Commit:26.8/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-19 09:05:41.631] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:64% (20.6/31.8GB) | Commit:26.8/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 09:05:41.634] [SIM_MENU    ] [T:TelemetryPoll] [RAM:64% (20.6/31.8GB) | Commit:26.8/87.8GB] MSFS 2024 in Menu/Caricamento (coord=None,None) — in attesa avvio volo.
+[2026-11-19 09:06:09.644] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:64% (20.5/31.8GB) | Commit:26.7/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-19 09:06:12.085] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:64% (20.5/31.8GB) | Commit:26.7/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 09:06:12.088] [SIM_MENU    ] [T:TelemetryPoll] [RAM:64% (20.5/31.8GB) | Commit:26.7/87.8GB] MSFS 2024 in Menu/Caricamento (coord=None,None) — in attesa avvio volo.
+[2026-11-19 09:06:40.098] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:65% (20.6/31.8GB) | Commit:27.0/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-19 09:06:42.542] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:63% (20.1/31.8GB) | Commit:26.9/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 09:06:42.545] [SIM_MENU    ] [T:TelemetryPoll] [RAM:63% (20.1/31.8GB) | Commit:26.9/87.8GB] MSFS 2024 in Menu/Caricamento (coord=None,None) — in attesa avvio volo.
+[2026-11-19 09:06:46.400] [SIMCONNECT  ] [T:Thread-232 (execute)] [RAM:58% (18.5/31.8GB) | Commit:27.0/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-19 09:07:53.621] [STARTUP     ] [T:MainThread] [RAM:57% (18.3/31.8GB) | Commit:26.4/87.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-19 09:07:54.101] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:57% (18.3/31.8GB) | Commit:26.4/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 09:07:54.103] [SIM_MENU    ] [T:TelemetryPoll] [RAM:57% (18.3/31.8GB) | Commit:26.4/87.8GB] MSFS 2024 in Menu/Caricamento (coord=None,None) — in attesa avvio volo.
+[2026-11-19 09:08:22.116] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:58% (18.5/31.8GB) | Commit:26.7/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-19 09:08:24.551] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:58% (18.5/31.8GB) | Commit:26.7/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 09:08:24.555] [SIM_MENU    ] [T:TelemetryPoll] [RAM:58% (18.5/31.8GB) | Commit:26.7/87.8GB] MSFS 2024 in Menu/Caricamento (coord=None,None) — in attesa avvio volo.
+[2026-11-19 09:08:52.565] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:58% (18.4/31.8GB) | Commit:26.9/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-19 09:08:55.007] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:58% (18.4/31.8GB) | Commit:26.9/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 09:08:55.014] [SIM_MENU    ] [T:TelemetryPoll] [RAM:58% (18.4/31.8GB) | Commit:26.9/87.8GB] MSFS 2024 in Menu/Caricamento (coord=None,None) — in attesa avvio volo.
+[2026-11-19 09:09:23.026] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:58% (18.5/31.8GB) | Commit:26.7/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-19 09:09:25.466] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:58% (18.5/31.8GB) | Commit:26.7/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 09:09:25.474] [SIM_MENU    ] [T:TelemetryPoll] [RAM:58% (18.5/31.8GB) | Commit:26.7/87.8GB] MSFS 2024 in Menu/Caricamento (coord=None,None) — in attesa avvio volo.
+[2026-11-19 09:09:53.484] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:60% (19.2/31.8GB) | Commit:27.2/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-19 09:09:55.931] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:60% (19.2/31.8GB) | Commit:27.2/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 09:09:55.934] [SIM_MENU    ] [T:TelemetryPoll] [RAM:60% (19.2/31.8GB) | Commit:27.2/87.8GB] MSFS 2024 in Menu/Caricamento (coord=None,None) — in attesa avvio volo.
+[2026-11-19 09:10:23.945] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:66% (21.1/31.8GB) | Commit:30.2/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-19 09:10:26.389] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:67% (21.4/31.8GB) | Commit:31.2/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 09:10:26.393] [SIM_MENU    ] [T:TelemetryPoll] [RAM:67% (21.4/31.8GB) | Commit:31.2/87.8GB] MSFS 2024 in Menu/Caricamento (coord=None,None) — in attesa avvio volo.
+[2026-11-19 09:10:54.408] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:72% (22.9/31.8GB) | Commit:32.4/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-19 09:10:56.847] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:72% (22.9/31.8GB) | Commit:32.4/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 09:10:56.850] [SIM_MENU    ] [T:TelemetryPoll] [RAM:72% (22.9/31.8GB) | Commit:32.4/87.8GB] MSFS 2024 in Menu/Caricamento (coord=None,None) — in attesa avvio volo.
+[2026-11-19 09:32:08.050] [STARTUP     ] [T:MainThread] [RAM:54% (17.4/31.8GB) | Commit:25.6/87.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-19 09:32:08.536] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:55% (17.5/31.8GB) | Commit:25.7/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 09:32:08.538] [SIM_MENU    ] [T:TelemetryPoll] [RAM:55% (17.5/31.8GB) | Commit:25.7/87.8GB] MSFS 2024 in Menu/Caricamento (coord=None,None) — in attesa avvio volo.
+[2026-11-19 09:32:26.377] [SIMCONNECT  ] [T:Thread-48 (execute)] [RAM:55% (17.8/31.8GB) | Commit:26.3/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-19 09:34:48.150] [STARTUP     ] [T:MainThread] [RAM:52% (16.7/31.8GB) | Commit:25.7/87.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-19 09:34:48.635] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:52% (16.8/31.8GB) | Commit:25.7/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 09:34:48.654] [SIM_MENU    ] [T:TelemetryPoll] [RAM:52% (16.8/31.8GB) | Commit:25.7/87.8GB] MSFS 2024 in Menu/Caricamento (lat=None) — polling ridotto a 5s.
+[2026-11-19 09:35:00.352] [SIMCONNECT  ] [T:Thread-41 (execute)] [RAM:53% (17.0/31.8GB) | Commit:26.2/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-19 10:53:38.521] [STARTUP     ] [T:MainThread] [RAM:97% (30.8/31.8GB) | Commit:52.5/87.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-19 10:53:38.659] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:97% (30.8/31.8GB) | Commit:52.5/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 10:53:39.189] [AIRCRAFT    ] [T:TelemetryPoll] [RAM:96% (30.8/31.8GB) | Commit:52.4/87.8GB] Aeromobile rilevato: Alpi Aviation Pioneer 400: Silver and Red
+[2026-11-19 10:53:39.193] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:96% (30.8/31.8GB) | Commit:52.4/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 10:54:09.034] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:95% (30.4/31.8GB) | Commit:52.2/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 10:54:39.603] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:96% (30.7/31.8GB) | Commit:52.7/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 10:55:09.876] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:97% (30.8/31.8GB) | Commit:53.2/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 10:55:40.212] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:96% (30.8/31.8GB) | Commit:52.9/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 10:56:10.265] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:97% (30.9/31.8GB) | Commit:53.4/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 10:56:41.100] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:97% (30.9/31.8GB) | Commit:53.5/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 10:56:50.919] [FPL_SEND    ] [T:Thread-234 (_call)] [RAM:97% (30.9/31.8GB) | Commit:53.6/87.8GB] Richiesta invio piano di volo (C:\Users\zorzi\Downloads\00_AeroGlass_Active.pln) a Alpi Aviation Pioneer 400: Silver and Red
+[2026-11-19 10:56:51.369] [FPL_SEND    ] [T:Thread-234 (_call)] [RAM:97% (30.9/31.8GB) | Commit:53.6/87.8GB] Piano di volo inviato con successo a Alpi Aviation Pioneer 400: Silver and Red (simconnect_loaded=True)
+[2026-11-19 10:57:11.204] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:97% (31.0/31.8GB) | Commit:53.6/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 10:57:42.397] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:97% (30.9/31.8GB) | Commit:53.1/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 10:57:43.993] [FPL_SEND    ] [T:Thread-288 (_call)] [RAM:97% (30.9/31.8GB) | Commit:53.1/87.8GB] Richiesta invio piano di volo (C:\Users\zorzi\Downloads\00_AeroGlass_Active.pln) a Alpi Aviation Pioneer 400: Silver and Red
+[2026-11-19 10:57:44.442] [FPL_SEND    ] [T:Thread-288 (_call)] [RAM:97% (30.9/31.8GB) | Commit:53.1/87.8GB] Piano di volo inviato con successo a Alpi Aviation Pioneer 400: Silver and Red (simconnect_loaded=True)
+[2026-11-19 10:58:12.417] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:97% (30.9/31.8GB) | Commit:53.1/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 10:58:42.503] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:97% (30.9/31.8GB) | Commit:53.3/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 10:59:12.600] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:97% (30.8/31.8GB) | Commit:53.3/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 10:59:23.776] [FPL_SEND    ] [T:Thread-358 (_call)] [RAM:97% (30.9/31.8GB) | Commit:53.5/87.8GB] Richiesta invio piano di volo (C:\Users\zorzi\Downloads\00_AeroGlass_Active.pln) a Alpi Aviation Pioneer 400: Silver and Red
+[2026-11-19 10:59:24.235] [FPL_SEND    ] [T:Thread-358 (_call)] [RAM:97% (30.9/31.8GB) | Commit:53.5/87.8GB] Piano di volo inviato con successo a Alpi Aviation Pioneer 400: Silver and Red (simconnect_loaded=True)
+[2026-11-19 10:59:34.872] [SIM_MENU    ] [T:TelemetryPoll] [RAM:97% (30.9/31.8GB) | Commit:53.5/87.8GB] MSFS 2024 in Menu/Caricamento (lat=None) — polling ridotto a 5s.
+[2026-11-19 10:59:39.907] [SIM_LIVE    ] [T:TelemetryPoll] [RAM:97% (30.9/31.8GB) | Commit:53.6/87.8GB] Ricezione coordinate valide ripresa (45.5067, 12.3452).
+[2026-11-19 10:59:43.534] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:97% (30.9/31.8GB) | Commit:53.5/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 10:59:52.374] [FPL_SEND    ] [T:Thread-389 (_call)] [RAM:97% (30.9/31.8GB) | Commit:53.7/87.8GB] Richiesta invio piano di volo (C:\Users\zorzi\Downloads\00_AeroGlass_Active.pln) a Alpi Aviation Pioneer 400: Silver and Red
+[2026-11-19 10:59:52.876] [FPL_SEND    ] [T:Thread-389 (_call)] [RAM:97% (30.9/31.8GB) | Commit:53.6/87.8GB] Piano di volo inviato con successo a Alpi Aviation Pioneer 400: Silver and Red (simconnect_loaded=True)
+[2026-11-19 11:00:14.004] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:97% (31.1/31.8GB) | Commit:53.8/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:00:44.769] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:97% (31.0/31.8GB) | Commit:53.9/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:01:15.286] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:97% (30.9/31.8GB) | Commit:53.9/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:01:22.130] [SIM_MENU    ] [T:TelemetryPoll] [RAM:97% (30.9/31.8GB) | Commit:54.0/87.8GB] MSFS 2024 in Menu/Caricamento (lat=None) — polling ridotto a 5s.
+[2026-11-19 11:01:32.266] [SIM_LIVE    ] [T:TelemetryPoll] [RAM:97% (31.0/31.8GB) | Commit:54.1/87.8GB] Ricezione coordinate valide ripresa (45.5067, 12.3452).
+[2026-11-19 11:01:45.355] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:96% (30.8/31.8GB) | Commit:54.5/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:02:16.291] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:97% (30.9/31.8GB) | Commit:54.8/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:02:46.986] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:97% (30.9/31.8GB) | Commit:54.6/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:03:17.929] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:97% (30.9/31.8GB) | Commit:54.6/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:03:48.772] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:97% (30.9/31.8GB) | Commit:54.7/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:04:19.557] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:97% (30.9/31.8GB) | Commit:54.9/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:04:50.521] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:97% (30.9/31.8GB) | Commit:54.6/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:05:13.687] [SIMCONNECT  ] [T:Thread-716 (execute)] [RAM:97% (31.0/31.8GB) | Commit:54.8/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-19 11:07:34.237] [STARTUP     ] [T:MainThread] [RAM:96% (30.6/31.8GB) | Commit:54.2/87.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-19 11:07:34.366] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:96% (30.6/31.8GB) | Commit:54.2/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 11:07:35.088] [AIRCRAFT    ] [T:TelemetryPoll] [RAM:96% (30.7/31.8GB) | Commit:54.3/87.8GB] Aeromobile rilevato: Alpi Aviation Pioneer 400: Silver and Red
+[2026-11-19 11:07:35.098] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:96% (30.7/31.8GB) | Commit:54.3/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:07:46.509] [FPL_SEND    ] [T:Thread-41 (_call)] [RAM:97% (31.1/31.8GB) | Commit:55.3/87.8GB] Richiesta invio piano di volo (C:\Users\zorzi\Downloads\00_AeroGlass_Active.pln) a Alpi Aviation Pioneer 400: Silver and Red
+[2026-11-19 11:07:46.977] [FPL_SEND    ] [T:Thread-41 (_call)] [RAM:97% (31.0/31.8GB) | Commit:55.2/87.8GB] Piano di volo inviato con successo a Alpi Aviation Pioneer 400: Silver and Red (simconnect_loaded=True)
+[2026-11-19 11:08:05.910] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:97% (30.9/31.8GB) | Commit:55.0/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:08:36.841] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:97% (30.9/31.8GB) | Commit:54.8/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:09:07.131] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:97% (30.8/31.8GB) | Commit:54.7/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:09:15.820] [SIM_MENU    ] [T:TelemetryPoll] [RAM:97% (31.0/31.8GB) | Commit:54.9/87.8GB] MSFS 2024 in Menu/Caricamento (lat=None) — polling ridotto a 5s.
+[2026-11-19 11:09:25.981] [SIM_LIVE    ] [T:TelemetryPoll] [RAM:97% (30.9/31.8GB) | Commit:55.0/87.8GB] Ricezione coordinate valide ripresa (45.5067, 12.3452).
+[2026-11-19 11:09:38.011] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:97% (31.1/31.8GB) | Commit:55.2/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:09:57.530] [SIM_MENU    ] [T:TelemetryPoll] [RAM:97% (31.1/31.8GB) | Commit:55.2/87.8GB] MSFS 2024 in Menu/Caricamento (lat=None) — polling ridotto a 5s.
+[2026-11-19 11:10:02.561] [SIM_LIVE    ] [T:TelemetryPoll] [RAM:98% (31.2/31.8GB) | Commit:55.3/87.8GB] Ricezione coordinate valide ripresa (45.5067, 12.3452).
+[2026-11-19 11:10:08.643] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:98% (31.2/31.8GB) | Commit:55.1/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:10:39.222] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:97% (30.9/31.8GB) | Commit:54.8/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:10:54.627] [SIMCONNECT  ] [T:Thread-233 (execute)] [RAM:97% (30.9/31.8GB) | Commit:54.7/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-19 11:16:24.497] [STARTUP     ] [T:MainThread] [RAM:92% (29.3/31.8GB) | Commit:55.6/87.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-19 11:16:24.604] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:92% (29.3/31.8GB) | Commit:55.6/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 11:16:24.900] [AIRCRAFT    ] [T:TelemetryPoll] [RAM:92% (29.3/31.8GB) | Commit:55.6/87.8GB] Aeromobile rilevato: Alpi Aviation Pioneer 400: Silver and Red
+[2026-11-19 11:16:24.902] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:92% (29.3/31.8GB) | Commit:55.6/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:16:55.088] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:93% (29.8/31.8GB) | Commit:56.5/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:17:26.108] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:94% (29.9/31.8GB) | Commit:56.6/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:17:57.068] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:94% (29.9/31.8GB) | Commit:56.5/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:18:27.986] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:94% (30.0/31.8GB) | Commit:56.7/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:18:59.071] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:94% (30.0/31.8GB) | Commit:56.9/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:19:30.085] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:94% (30.2/31.8GB) | Commit:57.1/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:20:01.017] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:94% (30.2/31.8GB) | Commit:57.0/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:20:11.175] [SIMCONNECT  ] [T:Thread-259 (execute)] [RAM:95% (30.4/31.8GB) | Commit:57.4/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).

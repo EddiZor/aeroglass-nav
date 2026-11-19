@@ -127,26 +127,20 @@ class TelemetryManager:
             try:
                 aq_ref = self.aq
                 lat = self._safe_get(aq_ref, "PLANE_LATITUDE")
-                lon = self._safe_get(aq_ref, "PLANE_LONGITUDE")
 
-                # Filtra None/(0,0) e le coordinate equatoriali fittizie del Menu/Hangar di MSFS 2024 (lat ~ 0, lon 75..95E)
-                is_menu_pos = False
-                if lat is None or lon is None:
-                    is_menu_pos = True
-                else:
-                    f_lat, f_lon = float(lat), float(lon)
-                    if abs(f_lat) < 0.05 and (abs(f_lon) < 0.05 or 75.0 <= f_lon <= 95.0):
-                        is_menu_pos = True
-
-                if is_menu_pos:
+                # Se lat è None o ~0 (Menu/Hangar/Caricamento), non interroga nemmeno lon e attende 5 secondi
+                if lat is None or abs(float(lat)) < 0.05:
                     self._fail_count += 1
                     if self._fail_count == 1:
-                        log_diag("SIM_MENU", f"MSFS 2024 in Menu/Caricamento (coord={lat},{lon}) — in attesa avvio volo.")
+                        log_diag("SIM_MENU", f"MSFS 2024 in Menu/Caricamento (lat={lat}) — polling ridotto a 5s.")
                         self._set_demo_state()
-                    if lat is None and self._fail_count >= 15:
-                        self._safe_disconnect()
-                        self._set_demo_state()
-                    time.sleep(2.0)
+                    time.sleep(5.0)
+                    continue
+
+                lon = self._safe_get(aq_ref, "PLANE_LONGITUDE")
+                if lon is None:
+                    self._fail_count += 1
+                    time.sleep(5.0)
                     continue
 
                 if self._fail_count > 0:

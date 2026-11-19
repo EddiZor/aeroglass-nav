@@ -157,6 +157,10 @@ const SYNTHETIC_TOOLTIPS = {
     btnToggleMeasure: {
         it: "📏 Righello Tattico: Misura distanza (NM), prua (MAG/TRUE) e tempo ETE tra due punti (oppure usa il Clic Destro sulla mappa)",
         en: "📏 Measure Tool: Measure distance (NM), heading (MAG/TRUE) and ETE between two points (or Right-Click on map)"
+    },
+    simbriefEditIdBtn: {
+        it: "⚙️ Modifica PilotID",
+        en: "⚙️ Edit PilotID"
     }
 };
 
@@ -173,6 +177,7 @@ function resolveSyntheticTooltip(el) {
     if (onclickStr.includes('loadpln') || onclickStr.includes('importpln')) return lang === 'en' ? '📂 Import an MSFS .pln flight plan file' : '📂 Importa un file Piano di Volo (.pln) dal disco';
     if (onclickStr.includes('exportpln')) return lang === 'en' ? '💾 Export active route as .pln in Downloads' : '💾 Esporta la rotta attiva in formato .pln nella cartella Download';
     if (onclickStr.includes('clearflightplan')) return lang === 'en' ? '🗑️ Clear the entire active Flight Plan' : '🗑️ Cancella interamente il Piano di Volo attivo';
+    if (onclickStr.includes('showsimbriefbox')) return lang === 'en' ? '⚙️ Edit PilotID' : '⚙️ Modifica PilotID';
     if (onclickStr.includes('fetchsimbrief') || onclickStr.includes('simbrief')) return lang === 'en' ? '✈️ Import latest OFP flight plan from SimBrief' : '✈️ Scarica l\'ultimo piano di volo OFP generato su SimBrief';
     if (onclickStr.includes('undo')) return lang === 'en' ? '↩️ Undo last route modification (Ctrl+Z)' : '↩️ Annulla l\'ultima modifica fatta sulla rotta (Ctrl+Z)';
     if (onclickStr.includes('filter')) return lang === 'en' ? '⚙️ Filter airports, SID/STAR procedures and map layers' : '⚙️ Filtra visibilità aeroporti, procedure SID/STAR e livelli mappa';
