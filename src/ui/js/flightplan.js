@@ -467,12 +467,17 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
             coords.push([wp.lat, wp.lon]);
 
             const marker = L.circleMarker([wp.lat, wp.lon], {
-                radius: isEndpoint ? 5.5 : 4.2,
+                radius: isEndpoint ? 5.5 : 4.5,
                 color: showSidStar ? procColor : '#38bdf8',
                 fillColor: isEndpoint ? '#34d399' : (showSidStar ? procColor : '#0284c7'),
-                fillOpacity: 0.9,
-                weight: 1.5
+                fillOpacity: 0.92,
+                weight: 1.8
             }).addTo(map);
+
+            // Gestione stato Holding per il popup
+            const isHoldingActive = (typeof IFR_PROC !== 'undefined' && IFR_PROC.holdingLayers && IFR_PROC.holdingLayers.has(wp.ident));
+            const holdBtnLabel = isHoldingActive ? '❌ Rimuovi Holding' : '🔄 Attiva Holding (Attesa)';
+            const holdBtnClass = isHoldingActive ? 'btn-danger' : 'btn-cyan';
 
             let popupHtml =
                 '<div style="font-weight:700;font-size:13px;color:' + procColor + ';">' + wp.ident +
@@ -485,7 +490,79 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
                     '💨 ' + wx.wind + ' &nbsp;|&nbsp; 🌡️ ' + wx.temp + ' &nbsp;|&nbsp; 📊 ' + wx.qnh + '</div>';
             }
 
+            if (!isEndpoint) {
+                popupHtml += `
+                    <div style="margin-top:6px;padding-top:5px;border-top:1px solid rgba(148,163,184,0.25);">
+                        <button class="btn ${holdBtnClass}" style="width:100%;padding:3px 6px;font-size:10.5px;justify-content:center;" onclick="toggleWaypointHolding('${wp.ident}', ${index})">
+                            ${holdBtnLabel}
+                        </button>
+                    </div>`;
+            }
+
             marker.bindPopup(popupHtml);
+
+            // Quota di crociera calcolata in modo sicuro dal piano di volo attivo
+            const maxCruiseAlt = (flightPlan && flightPlan.length > 0)
+                ? Math.max(...flightPlan.map(w => Number(w.alt_ft) || 0))
+                : 10000;
+
+            // Mostra vincoli IFR SOLO se il punto appartiene a una procedura o ha vincoli specifici
+            const isProcWp = (wp.proc_type === 'SID' || wp.proc_type === 'STAR' || wp.proc_type === 'APPR');
+            const hasExplicitConstraint = wp.alt_restriction || wp.speed_restriction || (isProcWp && wp.alt_ft && wp.alt_ft < maxCruiseAlt);
+
+            let altStr = "", spdStr = "";
+            if (hasExplicitConstraint && typeof formatIfrConstraints === 'function') {
+                const res = formatIfrConstraints(wp.alt_restriction_type || "+", wp.alt_restriction || wp.alt_ft, wp.speed_restriction || wp.speed_limit);
+                altStr = res.altStr;
+                spdStr = res.spdStr;
+            }
+
+            if (!isEndpoint && (altStr || spdStr)) {
+                let badgeParts = [];
+                if (altStr) badgeParts.push(`<span style="color:#38bdf8;">${altStr}</span>`);
+                if (spdStr) badgeParts.push(`<span style="color:#fbbf24;">${spdStr}</span>`);
+
+                const constraintTag = L.marker([wp.lat, wp.lon], {
+                    icon: L.divIcon({
+                        className: 'ifr-constraint-badge',
+                        html: `<div style="background:rgba(15,23,42,0.92);border:1px solid #0284c7;border-radius:3px;padding:1px 4px;font-size:9px;font-family:monospace;white-space:nowrap;margin-top:12px;margin-left:8px;box-shadow:0 1px 4px rgba(0,0,0,0.5);pointer-events:none;">${badgeParts.join(' ')}</div>`,
+                        iconAnchor: [0, 0]
+                    })
+                }).addTo(map);
+                waypointMarkers.push(constraintTag);
+            }
+
+            // Riconoscimento leg vettoriali (VECTORS tra fine STAR e raccordo finale)
+            if (index > 0 && (wp.proc_name === 'VECTORS' || wp.ident === 'VECTORS' || wp.proc_type === 'Vectors')) {
+                const prevWp = flightPlan[index - 1];
+                if (prevWp.lat !== null && prevWp.lon !== null && typeof IFR_PROC !== 'undefined') {
+                    IFR_PROC.drawVectorLeg(map, [prevWp.lat, prevWp.lon], [wp.lat, wp.lon], "ATC VECTORS");
+                }
+            }
+
+            // Click destro sul waypoint: attiva/disattiva circuito di attesa (Holding Pattern)
+            marker.on('contextmenu', (ev) => {
+                if (ev) {
+                    L.DomEvent.preventDefault(ev);
+                    L.DomEvent.stopPropagation(ev);
+                }
+                if (ev.originalEvent) {
+                    ev.originalEvent.preventDefault();
+                    ev.originalEvent.stopPropagation();
+                }
+                if (typeof IFR_PROC === 'undefined') return;
+
+                if (IFR_PROC.holdingLayers.has(wp.ident)) {
+                    IFR_PROC.clearHolding(map, wp.ident);
+                } else {
+                    const prevWp = index > 0 ? flightPlan[index - 1] : wp;
+                    const inb = (index > 0 && prevWp.lat !== null)
+                        ? calculateBearing(prevWp.lat, prevWp.lon, wp.lat, wp.lon)
+                        : 0;
+                    IFR_PROC.drawHolding(map, wp.ident, wp.lat, wp.lon, inb, true, altStr, spdStr);
+                }
+            });
+
             if (!isEndpoint && typeof startRouteRubberBand === 'function') {
                 marker.on('mousedown', (ev) => {
                     if (ev.originalEvent && ev.originalEvent.button === 0) {
@@ -520,8 +597,17 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
             ? `<div class="wpt-wx-row" title="METAR: ${wx.raw}"><span class="wx-pill">💨 ${wx.wind}</span><span class="wx-pill">🌡️ ${wx.temp}</span><span class="wx-pill">📊 ${wx.qnh}</span></div>`
             : '';
 
+        const isHoldActive = (typeof IFR_PROC !== 'undefined' && IFR_PROC.holdingLayers && IFR_PROC.holdingLayers.has(wp.ident));
+        const holdBtnStyle = isHoldActive
+            ? 'background:rgba(217,70,239,0.3); border:1px solid #d946ef; color:#fdf4ff; box-shadow:0 0 6px rgba(217,70,239,0.45);'
+            : 'background:rgba(56,189,248,0.12); border:1px solid rgba(56,189,248,0.35); color:#7dd3fc;';
+
+        const holdBtnHtml = !isEndpoint
+            ? `<button id="btnHold_${index}" class="btn" style="padding:1px 6px; font-size:9px; font-weight:700; ${holdBtnStyle}" title="${isHoldActive ? 'Rimuovi circuito di attesa (Holding)' : 'Attiva circuito di attesa (Holding)'}" onclick="event.stopPropagation(); toggleWaypointHolding('${wp.ident}', ${index})">🔄 HOLD</button>`
+            : '';
+
         const deleteBtnHtml = !isEndpoint
-            ? `<button class="btn btn-danger" style="padding:1px 5px; font-size:10px; margin-top:3px; align-self:flex-end;" title="Rimuovi dalla rotta" onclick="event.stopPropagation(); removeWaypointFromRoute(${index})">✕</button>`
+            ? `<button class="btn btn-danger" style="padding:1px 5px; font-size:10px;" title="Rimuovi dalla rotta" onclick="event.stopPropagation(); removeWaypointFromRoute(${index})">✕</button>`
             : '';
 
         const rwyLabel = wp.rwy ? ('RWY ' + wp.rwy) : (apt && apt.rwy ? ('RWY ' + apt.rwy) : (wp.type || 'WPT'));
@@ -541,7 +627,10 @@ function updateFlightPlanUI(alternateData = undefined, fitMap = true) {
                 '<span class="wpt-alt" onclick="event.stopPropagation(); editWaypointAlt(' + index + ', ' + altVal + ')">' + altVal + ' ft</span>' +
                 '<span class="wpt-dist" id="wptDist_' + index + '">' + (index === 0 ? '0.0 NM' : `+${legDistNm} NM`) + '</span>' +
                 '<span style="font-size:10px;color:var(--text-muted);">' + rwyLabel + '</span>' +
-                deleteBtnHtml +
+                '<div style="display:flex; gap:4px; align-items:center; margin-top:2px;">' +
+                    holdBtnHtml +
+                    deleteBtnHtml +
+                '</div>' +
             '</div>';
         container.appendChild(div);
     });
@@ -1174,3 +1263,237 @@ function filterAirports(query) {
         map.flyTo([foundVor.lat, foundVor.lon], 11);
     }
 }
+
+// ==============================================================================
+// MODULO ANALITICO PROCEDURE IFR (HOLDING, ARCHI DME, VECTORS & VINCOLI)
+// ==============================================================================
+
+const IFR_PROC = {
+    holdingLayers: new Map(), // Mappa fixIdent -> L.FeatureGroup
+    dmeLayers: [],
+    vectorLayers: [],
+
+    // Calcola coordinate geodetiche traslate (distanza in NM, angolo in gradi)
+    offsetCoord(lat, lon, distanceNm, bearingDeg) {
+        const R = 3440.065; // Raggio terrestre medio in NM
+        const rad = (deg) => deg * (Math.PI / 180);
+        const deg = (rad) => rad * (180 / Math.PI);
+
+        const latRad = rad(lat);
+        const lonRad = rad(lon);
+        const brgRad = rad(bearingDeg);
+        const distRad = distanceNm / R;
+
+        const newLat = Math.asin(
+            Math.sin(latRad) * Math.cos(distRad) +
+            Math.cos(latRad) * Math.sin(distRad) * Math.cos(brgRad)
+        );
+        const newLon = lonRad + Math.atan2(
+            Math.sin(brgRad) * Math.sin(distRad) * Math.cos(latRad),
+            Math.cos(distRad) - Math.sin(latRad) * Math.sin(newLat)
+        );
+
+        return [deg(newLat), deg(newLon)];
+    },
+
+    // Genera il poligono dell'ippodromo di attesa (Holding Pattern)
+    generateHoldingPoints(fixLat, fixLon, inboundCourse, turnRight = true, legNm = 4.0, radiusNm = 0.85) {
+        const points = [];
+        const turnDir = turnRight ? 1 : -1;
+        const outboundCourse = (inboundCourse + 180) % 360;
+
+        // 1. Centro prima virata (subito dopo aver oltrepassato il fix)
+        const center1Bearing = (inboundCourse + turnDir * 90 + 360) % 360;
+        const center1 = this.offsetCoord(fixLat, fixLon, radiusNm, center1Bearing);
+
+        // 2. Arco di virata 180° verso l'outbound leg
+        const startAng1 = (inboundCourse - turnDir * 90 + 360) % 360;
+        const steps = 16;
+        for (let i = 0; i <= steps; i++) {
+            const curAng = (startAng1 + turnDir * (180 * (i / steps)) + 360) % 360;
+            points.push(this.offsetCoord(center1[0], center1[1], radiusNm, curAng));
+        }
+
+        // 3. Outbound leg rettilineo
+        const endArc1 = points[points.length - 1];
+        const startArc2 = this.offsetCoord(endArc1[0], endArc1[1], legNm, outboundCourse);
+        points.push(startArc2);
+
+        // 4. Centro seconda virata di rientro
+        const center2Bearing = (outboundCourse + turnDir * 90 + 360) % 360;
+        const center2 = this.offsetCoord(startArc2[0], startArc2[1], radiusNm, center2Bearing);
+
+        // 5. Arco di virata 180° verso l'inbound leg
+        const startAng2 = (outboundCourse - turnDir * 90 + 360) % 360;
+        for (let i = 1; i <= steps; i++) {
+            const curAng = (startAng2 + turnDir * (180 * (i / steps)) + 360) % 360;
+            points.push(this.offsetCoord(center2[0], center2[1], radiusNm, curAng));
+        }
+
+        // 6. Chiusura sul fix
+        points.push([fixLat, fixLon]);
+        return points;
+    },
+
+    // Genera punti per un arco DME (centro VOR, raggio NM, radiali ingresso/uscita)
+    generateDmeArcPoints(vorLat, vorLon, radiusNm, fromRadial, toRadial, clockwise = true) {
+        const pts = [];
+        let r1 = fromRadial;
+        let r2 = toRadial;
+        if (clockwise && r2 < r1) r2 += 360;
+        if (!clockwise && r2 > r1) r2 -= 360;
+
+        const delta = r2 - r1;
+        const steps = Math.max(12, Math.abs(Math.round(delta / 4)));
+
+        for (let i = 0; i <= steps; i++) {
+            const curRadial = (r1 + delta * (i / steps) + 360) % 360;
+            pts.push(this.offsetCoord(vorLat, vorLon, radiusNm, curRadial));
+        }
+        return pts;
+    },
+
+    // Disegna l'holding pattern su Leaflet con parametri raggio/gamba dinamici
+    drawHolding(mapObj, fixIdent, lat, lon, inbound = 0, turnRight = true, altConstraint = "", speedConstraint = "", legNm = 4.0, radiusNm = 0.85, speedUsed = 160) {
+        if (!mapObj) return;
+        this.clearHolding(mapObj, fixIdent);
+
+        const pts = this.generateHoldingPoints(lat, lon, inbound, turnRight, legNm, radiusNm);
+        const group = L.featureGroup();
+
+        // Tracciato ippodromo con colore magenta IFR
+        const polyline = L.polyline(pts, {
+            color: '#d946ef',
+            weight: 2.5,
+            dashArray: '6, 6',
+            opacity: 0.95
+        }).addTo(group);
+
+        // Badge informativo posizionato a metà dell'outbound
+        const midPoint = pts[Math.floor(pts.length / 2)];
+        let badgeHtml = `<strong>HOLD ${fixIdent}</strong><br>INB: ${String(Math.round(inbound)).padStart(3,'0')}° • ${turnRight ? 'R' : 'L'}`;
+        if (altConstraint) badgeHtml += `<br><span style="color:#38bdf8;">ALT: ${altConstraint}</span>`;
+        badgeHtml += `<br><span style="color:#fbbf24;">SPD: ${Math.round(speedUsed)} KT</span>`;
+        badgeHtml += `<br><span style="color:#94a3b8;font-size:8.5px;">R: ${radiusNm.toFixed(2)} NM | LEG: ${legNm.toFixed(1)} NM</span>`;
+
+        const tagMarker = L.marker(midPoint, {
+            icon: L.divIcon({
+                className: 'ifr-holding-badge',
+                html: `<div style="background:rgba(15,23,42,0.92);border:1px solid #d946ef;color:#fdf4ff;font-size:10px;font-family:monospace;padding:3px 6px;border-radius:4px;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.6);">${badgeHtml}</div>`,
+                iconAnchor: [40, 10]
+            })
+        }).addTo(group);
+
+        group.addTo(mapObj);
+        this.holdingLayers.set(fixIdent, group);
+    },
+
+    clearHolding(mapObj, fixIdent) {
+        if (this.holdingLayers.has(fixIdent)) {
+            const g = this.holdingLayers.get(fixIdent);
+            if (mapObj && g) mapObj.removeLayer(g);
+            this.holdingLayers.delete(fixIdent);
+        }
+    },
+
+    // Disegna un tratto vettoriale (Radar Vectors / Manual)
+    drawVectorLeg(mapObj, fromCoord, toCoord, label = "RADAR VECTORS") {
+        if (!mapObj) return;
+        const vec = L.polyline([fromCoord, toCoord], {
+            color: '#f59e0b',
+            weight: 2,
+            dashArray: '4, 8',
+            opacity: 0.85
+        });
+
+        const mid = [(fromCoord[0] + toCoord[0]) / 2, (fromCoord[1] + toCoord[1]) / 2];
+        const tag = L.marker(mid, {
+            icon: L.divIcon({
+                className: 'ifr-vector-badge',
+                html: `<div style="background:rgba(30,41,59,0.92);border:1px solid #f59e0b;color:#fef3c7;font-size:9.5px;font-family:monospace;padding:2px 5px;border-radius:3px;letter-spacing:0.5px;">📡 ${label}</div>`,
+                iconAnchor: [35, 8]
+            })
+        });
+
+        const grp = L.featureGroup([vec, tag]).addTo(mapObj);
+        this.vectorLayers.push(grp);
+    },
+
+    // Ripulisce tutti i layer procedurali analitici
+    clearAll(mapObj) {
+        if (!mapObj) return;
+        this.holdingLayers.forEach(g => mapObj.removeLayer(g));
+        this.holdingLayers.clear();
+        this.dmeLayers.forEach(l => mapObj.removeLayer(l));
+        this.dmeLayers = [];
+        this.vectorLayers.forEach(l => mapObj.removeLayer(l));
+        this.vectorLayers = [];
+    }
+};
+
+// Formattatore standard per vincoli quota/velocità estratti da SimBrief o PLN
+function formatIfrConstraints(altDesc, altVal, spdVal) {
+    let altStr = "";
+    let spdStr = "";
+
+    if (altVal && altVal > 0) {
+        const fl = altVal >= 10000 ? `FL${Math.round(altVal / 100)}` : `${altVal}ft`;
+        if (altDesc === "+" || altDesc === "at_or_above") altStr = `${fl}+`;
+        else if (altDesc === "-" || altDesc === "at_or_below") altStr = `${fl}-`;
+        else altStr = `AT ${fl}`;
+    }
+
+    if (spdVal && spdVal > 0) {
+        spdStr = `MAX ${spdVal}KT`;
+    }
+
+    return { altStr, spdStr };
+}
+
+// Attivazione/Disattivazione rapida Holding (1-click da Sidebar o da popup mappa)
+window.toggleWaypointHolding = function(ident, index) {
+    if (typeof IFR_PROC === 'undefined' || !flightPlan || !flightPlan[index]) return;
+    const wp = flightPlan[index];
+    const btn = document.getElementById(`btnHold_${index}`);
+
+    if (IFR_PROC.holdingLayers.has(ident)) {
+        IFR_PROC.clearHolding(map, ident);
+        if (btn) {
+            btn.style.background = 'rgba(56,189,248,0.12)';
+            btn.style.border = '1px solid rgba(56,189,248,0.35)';
+            btn.style.color = '#7dd3fc';
+            btn.style.boxShadow = 'none';
+            btn.title = 'Attiva circuito di attesa (Holding)';
+        }
+    } else {
+        const prevWp = index > 0 ? flightPlan[index - 1] : wp;
+        const inb = (index > 0 && prevWp.lat !== null)
+            ? calculateBearing(prevWp.lat, prevWp.lon, wp.lat, wp.lon)
+            : 0;
+        const altConstraint = wp.alt_ft ? `${wp.alt_ft}ft` : "";
+        const spdConstraint = wp.speed_restriction ? `MAX ${wp.speed_restriction}KT` : "";
+
+        // Velocità di riferimento: telemetria reale (GS/TAS), vincolo di rotta, o fallback 150kt
+        const tel = window.lastTelemetry || {};
+        const liveGs = (tel.connected && tel.gs_kt && Number(tel.gs_kt) >= 45) ? Number(tel.gs_kt) : null;
+        const targetSpd = wp.speed_restriction || liveGs || 150;
+
+        // Calcolo raggio virata Rate 1 standard ICAO: R = TAS / (60 * pi)
+        const calcRadius = Math.max(0.65, Math.min(2.4, targetSpd / (60 * Math.PI)));
+
+        // Durata gamba: 1.0 min sotto FL140 (14.000 ft), 1.5 min a quote superiori
+        const legMinutes = (wp.alt_ft && wp.alt_ft > 14000) ? 1.5 : 1.0;
+        const calcLeg = Math.max(2.0, (targetSpd / 60) * legMinutes);
+
+        IFR_PROC.drawHolding(map, ident, wp.lat, wp.lon, inb, true, altConstraint, spdConstraint, calcLeg, calcRadius, targetSpd);
+        if (btn) {
+            btn.style.background = 'rgba(217,70,239,0.3)';
+            btn.style.border = '1px solid #d946ef';
+            btn.style.color = '#fdf4ff';
+            btn.style.boxShadow = '0 0 6px rgba(217,70,239,0.45)';
+            btn.title = 'Rimuovi circuito di attesa (Holding)';
+        }
+    }
+
+    if (map) map.closePopup();
+};

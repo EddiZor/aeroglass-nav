@@ -191,6 +191,14 @@ function injectWeatherRadarStyles() {
     const s = document.createElement('style');
     s.id = 'weatherRadarStyles';
     s.textContent = `
+        /* Disattiva contorno rettangolare di focus Chromium sulle geometrie e percorsi SVG */
+        path.leaflet-interactive:focus,
+        svg.leaflet-zoom-animated:focus,
+        .leaflet-container:focus,
+        .leaflet-interactive:focus {
+            outline: none !important;
+        }
+
         #weatherRadarBar {
             position: fixed;
             bottom: 64px;
