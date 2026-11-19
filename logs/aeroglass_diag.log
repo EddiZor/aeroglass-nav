@@ -1642,3 +1642,23 @@
 [2026-11-19 17:18:38.506] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:62% (19.8/31.8GB) | Commit:32.2/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
 [2026-11-19 17:18:38.526] [SIM_MENU    ] [T:TelemetryPoll] [RAM:62% (19.8/31.8GB) | Commit:32.2/87.8GB] MSFS 2024 in Menu/Caricamento (lat=None) — polling ridotto a 5s.
 [2026-11-19 17:18:58.202] [SIMCONNECT  ] [T:Thread-72 (execute)] [RAM:63% (20.1/31.8GB) | Commit:32.7/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-19 18:05:05.194] [STARTUP     ] [T:MainThread] [RAM:61% (19.6/31.8GB) | Commit:34.4/87.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-19 18:05:05.684] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:62% (19.7/31.8GB) | Commit:34.6/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 18:05:05.706] [SIM_MENU    ] [T:TelemetryPoll] [RAM:62% (19.7/31.8GB) | Commit:34.6/87.8GB] MSFS 2024 in Menu/Caricamento (lat=None) — polling ridotto a 5s.
+[2026-11-19 18:09:29.499] [SIMCONNECT  ] [T:Thread-571 (execute)] [RAM:63% (20.2/31.8GB) | Commit:35.3/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-19 18:14:00.450] [STARTUP     ] [T:MainThread] [RAM:64% (20.4/31.8GB) | Commit:34.5/87.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-19 18:14:00.955] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:64% (20.4/31.8GB) | Commit:34.6/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 18:14:00.975] [SIM_MENU    ] [T:TelemetryPoll] [RAM:64% (20.4/31.8GB) | Commit:34.6/87.8GB] MSFS 2024 in Menu/Caricamento (lat=None) — polling ridotto a 5s.
+[2026-11-19 18:15:50.485] [SIMCONNECT  ] [T:Thread-197 (execute)] [RAM:65% (20.7/31.8GB) | Commit:35.4/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-19 18:19:03.188] [STARTUP     ] [T:MainThread] [RAM:63% (20.1/31.8GB) | Commit:34.5/87.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-19 18:19:03.677] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:63% (20.1/31.8GB) | Commit:34.6/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 18:19:03.701] [SIM_MENU    ] [T:TelemetryPoll] [RAM:63% (20.1/31.8GB) | Commit:34.6/87.8GB] MSFS 2024 in Menu/Caricamento (lat=None) — polling ridotto a 5s.
+[2026-11-19 18:20:14.262] [SIMCONNECT  ] [T:Thread-153 (execute)] [RAM:64% (20.5/31.8GB) | Commit:35.4/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-19 18:25:41.565] [STARTUP     ] [T:MainThread] [RAM:63% (20.3/31.8GB) | Commit:34.6/87.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-19 18:25:42.066] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:64% (20.3/31.8GB) | Commit:34.6/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 18:25:42.076] [SIM_MENU    ] [T:TelemetryPoll] [RAM:64% (20.3/31.8GB) | Commit:34.6/87.8GB] MSFS 2024 in Menu/Caricamento (lat=None) — polling ridotto a 5s.
+[2026-11-19 18:26:55.819] [SIMCONNECT  ] [T:Thread-128 (execute)] [RAM:65% (20.7/31.8GB) | Commit:35.5/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-19 18:28:59.505] [STARTUP     ] [T:MainThread] [RAM:64% (20.4/31.8GB) | Commit:34.6/87.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-19 18:29:00.010] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:64% (20.4/31.8GB) | Commit:34.6/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 18:29:00.036] [SIM_MENU    ] [T:TelemetryPoll] [RAM:64% (20.4/31.8GB) | Commit:34.6/87.8GB] MSFS 2024 in Menu/Caricamento (lat=None) — polling ridotto a 5s.
+[2026-11-19 18:31:19.260] [SIMCONNECT  ] [T:Thread-339 (execute)] [RAM:65% (21.0/31.8GB) | Commit:35.5/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).

@@ -796,6 +796,80 @@ async function editWaypointAlt(index, currentAlt) {
     }
 }
 
+// --- AIRWAY AUTO-ROUTING (SQLITE & PYTHON IPC) ---
+function onAutoRouteTypeChange(typeVal) {
+    const altInput = document.getElementById('manualCruiseAlt');
+    if (!altInput) return;
+    if (typeVal === 'IFR_HIGH') altInput.value = '28000';
+    else if (typeVal === 'IFR_LOW') altInput.value = '12000';
+    else if (typeVal === 'VFR') altInput.value = '5500';
+}
+
+async function generateAutoAirwayRoute() {
+    const depInp = document.getElementById('manualDep');
+    const destInp = document.getElementById('manualDest');
+    const wptsInp = document.getElementById('manualWpts');
+    const typeInp = document.getElementById('autoRouteType');
+    const altInp = document.getElementById('manualCruiseAlt');
+
+    const depCode = (depInp?.value || '').trim().toUpperCase();
+    const destCode = (destInp?.value || '').trim().toUpperCase();
+    const routeType = typeInp?.value || 'IFR_LOW';
+    const cruiseAlt = parseInt(altInp?.value || '12000', 10) || 12000;
+
+    if (!depCode || !destCode) {
+        alert("Inserisci prima l'aeroporto di Partenza e di Arrivo.");
+        return;
+    }
+
+    if (wptsInp) wptsInp.placeholder = "⏳ Calcolo rotta su aerovie SQLite...";
+
+    // Risoluzione coordinate direttamente dal client
+    let depLat = null, depLon = null, destLat = null, destLon = null;
+    const depRes = await resolveKnownOrOnlineCoords(depCode);
+    if (depRes && depRes.lat !== null) {
+        depLat = depRes.lat;
+        depLon = depRes.lon;
+    }
+    const destRes = await resolveKnownOrOnlineCoords(destCode);
+    if (destRes && destRes.lat !== null) {
+        destLat = destRes.lat;
+        destLon = destRes.lon;
+    }
+
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.calculate_auto_route) {
+        try {
+            const res = await window.pywebview.api.calculate_auto_route(
+                depCode, destCode, cruiseAlt, routeType,
+                depLat, depLon, destLat, destLon
+            );
+            if (res && res.success && Array.isArray(res.waypoints) && res.waypoints.length > 0) {
+                // Inserisce i fix calcolati nella casella di testo
+                const idents = res.waypoints.map(w => w.ident).join(' ');
+                if (wptsInp) {
+                    wptsInp.value = idents;
+                    wptsInp.style.borderColor = '#00d2ff';
+                    wptsInp.style.color = '#38bdf8';
+                }
+
+                const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+                showAeroNavToast(
+                    isEn
+                        ? `⚡ Auto-Route: <b>${res.waypoints.length} fixes</b> via ${routeType.replace('_', ' ')}`
+                        : `⚡ Rotta generata: <b>${res.waypoints.length} punti</b> via ${routeType.replace('_', ' ')}`,
+                    false,
+                    3000
+                );
+                return;
+            } else if (res && !res.success) {
+                alert(`Auto-Route: ${res.error || 'Nessun percorso trovato'}`);
+            }
+        } catch (err) {
+            console.error("[AutoRoute] Errore chiamata IPC:", err);
+        }
+    }
+}
+
 // --- CREAZIONE MANUALE, EXPORT ED ELIMINAZIONE PIANO DI VOLO ---
 function openCreateFplModal() { document.getElementById('createFplModal').style.display = 'flex'; }
 function closeCreateFplModal() { document.getElementById('createFplModal').style.display = 'none'; }

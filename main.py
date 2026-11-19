@@ -1,5 +1,15 @@
-﻿import os
+﻿try:
+    from router import find_airway_route
+except ImportError:
+    from src.router import find_airway_route
+import os
 import sys
+import sqlite3
+
+try:
+    from router import find_airway_route
+except ImportError:
+    from router import find_airway_route
 import time
 import threading
 import ctypes

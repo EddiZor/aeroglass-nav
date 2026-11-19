@@ -1,5 +1,6 @@
 ﻿import os
 import sys
+import sqlite3
 import json
 import time
 import socket
@@ -12,6 +13,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 import webview
 from src.core.database import init_db, get_connection
+from router import find_airway_route
 
 try:
     from src.simconnect.telemetry import TelemetryManager as SimTelemetry
@@ -1408,6 +1410,49 @@ class AeroGlassAPI:
                 return {"success": True, "xml_text": xml_text, "path": file_path}
             return {"success": False, "error": "Nessun file selezionato"}
         except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def calculate_auto_route(self, dep_icao, dest_icao, cruise_alt=12000, route_type="IFR_LOW", dep_lat=None, dep_lon=None, dest_lat=None, dest_lon=None):
+        try:
+            dep_icao = (dep_icao or "").strip().upper()
+            dest_icao = (dest_icao or "").strip().upper()
+
+            # Percorso del database SQLite
+            db_path = "src/core/aeroglass.db" if os.path.exists("src/core/aeroglass.db") else "aeroglass.db"
+
+            # Se le coordinate non sono state passate dal frontend, usa resolve_icao già presente nella classe
+            if dep_lat is None or dep_lon is None:
+                dep_info = self.resolve_icao(dep_icao)
+                if dep_info and dep_info.get("success"):
+                    dep_lat = dep_info.get("lat")
+                    dep_lon = dep_info.get("lon")
+
+            if dest_lat is None or dest_lon is None:
+                dest_info = self.resolve_icao(dest_icao)
+                if dest_info and dest_info.get("success"):
+                    dest_lat = dest_info.get("lat")
+                    dest_lon = dest_info.get("lon")
+
+            if dep_lat is None or dest_lat is None:
+                return {"success": False, "error": f"Coordinate non trovate per {dep_icao} o {dest_icao}."}
+
+            waypoints = find_airway_route(
+                db_path,
+                float(dep_lat), float(dep_lon),
+                float(dest_lat), float(dest_lon),
+                int(cruise_alt),
+                route_type
+            )
+
+            return {
+                "success": True,
+                "waypoints": waypoints,
+                "dep": dep_icao,
+                "dest": dest_icao,
+                "count": len(waypoints)
+            }
+        except Exception as e:
+            print(f"[AutoRoute] Errore calcolo: {e}")
             return {"success": False, "error": str(e)}
 
     def export_pln_file(self, flight_plan):
