@@ -161,8 +161,311 @@ const SYNTHETIC_TOOLTIPS = {
     simbriefEditIdBtn: {
         it: "⚙️ Modifica PilotID",
         en: "⚙️ Edit PilotID"
+    },
+    btnOpenCredits: {
+        it: "ℹ️ Credits, Licenza, Link Community e Disclaimer",
+        en: "ℹ️ Credits, License, Community Links & Disclaimer"
     }
 };
+
+// --- FINESTRA CREDITS (BILINGUE EN/IT CON DEFAULT INGLESE E SCROLL) ---
+const CREDITS_LINKS = {
+    flightsimTo: "https://flightsim.to/file/00000/aeroglass-nav",
+    discord: "https://discord.gg/placeholder-invite",
+    buyMeACoffee: "https://buymeacoffee.com/placeholder-user"
+};
+
+let creditsModalLang = 'en';
+
+const CREDITS_CONTENT = {
+    en: {
+        title: "About AeroGlass-Nav",
+        subtitle: "Standalone EFB & Moving Map for Microsoft Flight Simulator 2024",
+        authorLabel: "Author",
+        authorValue: "Eddi Zorzini (EddiZor) — © 2026",
+        desc: "A completely standalone flight planner, moving map and tablet EFB powered by local SQLite storage and direct MSFS 2024 SimConnect telemetry, with no external subscriptions required.",
+        linksTitle: "Community & Support",
+        linkFlightsim: "Flightsim.to Page",
+        linkDiscord: "Discord Community",
+        linkCoffee: "Buy Me a Coffee",
+        attrTitle: "Data Sources & Open Source",
+        attrList: [
+            "<strong>Map Tiles:</strong> Esri / ArcGIS (Street, Canvas, Imagery), OpenTopoMap & © OpenStreetMap contributors.",
+            "<strong>Aviation Data:</strong> OurAirports (airports & runways), SimBrief API (OFP import), MSFS 2024 SimConnect (live telemetry & native ground layouts).",
+            "<strong>Core Stack:</strong> Python, pywebview, Leaflet.js, Python-SimConnect, SQLite."
+        ],
+        licenseTitle: "License & Terms of Use",
+        licenseText: "Freeware / Open Source (MIT License) — free for personal use, not for resale.",
+        disclaimerTitle: "Aviation Disclaimer",
+        disclaimerText: "For flight simulation use only (Microsoft Flight Simulator 2024). Not for real-world navigation.",
+        closeBtn: "Close"
+    },
+    it: {
+        title: "Informazioni su AeroGlass-Nav",
+        subtitle: "EFB & Moving Map autonoma per Microsoft Flight Simulator 2024",
+        authorLabel: "Autore",
+        authorValue: "Eddi Zorzini (EddiZor) — © 2026",
+        desc: "Pianificatore di volo, moving map ed EFB per tablet completamente autonomo con database SQLite locale e telemetria diretta MSFS 2024 via SimConnect, senza abbonamenti o dipendenze esterne.",
+        linksTitle: "Community & Supporto",
+        linkFlightsim: "Pagina Flightsim.to",
+        linkDiscord: "Community Discord",
+        linkCoffee: "Buy Me a Coffee",
+        attrTitle: "Fonti Dati & Open Source",
+        attrList: [
+            "<strong>Cartografia:</strong> Esri / ArcGIS (Street, Canvas, Satellitare), OpenTopoMap & © OpenStreetMap contributors.",
+            "<strong>Dati Aeronautici:</strong> OurAirports (aeroporti e piste), SimBrief API (importazione OFP), MSFS 2024 SimConnect (telemetria live e layout di terra nativi).",
+            "<strong>Tecnologie:</strong> Python, pywebview, Leaflet.js, Python-SimConnect, SQLite."
+        ],
+        licenseTitle: "Licenza e Condizioni d'Uso",
+        licenseText: "Freeware / Open Source (MIT License) — libero per uso personale, non rivendibile.",
+        disclaimerTitle: "Disclaimer Aeronautico",
+        disclaimerText: "Solo per uso in simulazione di volo (Microsoft Flight Simulator 2024). Non utilizzare per la navigazione aerea reale.",
+        closeBtn: "Chiudi"
+    }
+};
+
+function injectCreditsStyles() {
+    if (document.getElementById('aeroglassCreditsStyles')) return;
+    const style = document.createElement('style');
+    style.id = 'aeroglassCreditsStyles';
+    style.textContent = `
+        #creditsModalOverlay {
+            position: fixed; inset: 0; z-index: 99999;
+            background: rgba(2, 6, 23, 0.72);
+            backdrop-filter: blur(4px);
+            display: none; align-items: center; justify-content: center;
+            padding: 16px;
+        }
+        #creditsModalBox {
+            width: 460px; max-width: 92vw; max-height: 72vh;
+            background: linear-gradient(180deg, #0f172a 0%, #0b1120 100%);
+            border: 1px solid rgba(56, 189, 248, 0.35);
+            border-radius: 12px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75);
+            display: flex; flex-direction: column; overflow: hidden;
+            color: #e2e8f0; font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+        .credits-header {
+            display: flex; align-items: center; justify-content: space-between; gap: 10px;
+            padding: 12px 16px;
+            background: rgba(15, 23, 42, 0.95);
+            border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+            flex-shrink: 0;
+        }
+        .credits-body {
+            padding: 14px 16px;
+            overflow-y: auto; flex: 1;
+            display: flex; flex-direction: column; gap: 12px;
+            font-size: 12.5px; line-height: 1.48;
+        }
+        .credits-body::-webkit-scrollbar { width: 6px; }
+        .credits-body::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); }
+        .credits-body::-webkit-scrollbar-thumb { background: rgba(56, 189, 248, 0.35); border-radius: 999px; }
+        .credits-card {
+            background: rgba(30, 41, 59, 0.45);
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            border-radius: 8px; padding: 10px 12px;
+        }
+        .credits-section-title {
+            font-size: 11px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.6px; color: #38bdf8; margin-bottom: 6px;
+        }
+        .credits-links-row {
+            display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px;
+        }
+        .credits-link-btn {
+            flex: 1 1 120px; text-decoration: none; text-align: center;
+            padding: 7px 10px; border-radius: 7px; font-size: 12px; font-weight: 600;
+            transition: transform 0.15s ease, filter 0.15s ease;
+            display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+        }
+        .credits-link-btn:hover { transform: translateY(-1px); filter: brightness(1.12); }
+        .credits-disclaimer {
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.42);
+            border-radius: 8px; padding: 9px 12px; color: #fde68a;
+        }
+        .credits-footer {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 10px 16px;
+            background: rgba(15, 23, 42, 0.95);
+            border-top: 1px solid rgba(148, 163, 184, 0.18);
+            flex-shrink: 0;
+        }
+        .credits-lang-switch {
+            display: inline-flex; align-items: center; gap: 4px;
+            background: rgba(30, 41, 59, 0.9);
+            border: 1px solid rgba(56, 189, 248, 0.45);
+            color: #38bdf8; border-radius: 6px; padding: 3px 9px;
+            font-size: 11px; font-weight: 700; cursor: pointer;
+        }
+        .credits-lang-switch:hover { background: rgba(56, 189, 248, 0.18); }
+        #btnOpenCredits {
+            order: 9999;
+            margin-left: auto;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            border-radius: 7px;
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            color: #e2e8f0;
+            font-size: 11.5px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            flex-shrink: 0;
+            transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+        }
+        #btnOpenCredits:hover {
+            background: rgba(56, 189, 248, 0.18);
+            border-color: rgba(56, 189, 248, 0.65);
+            color: #38bdf8;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+function renderCreditsModalContent() {
+    const bodyEl = document.getElementById('creditsModalBody');
+    const titleEl = document.getElementById('creditsModalTitle');
+    const switchBtn = document.getElementById('btnCreditsLangSwitch');
+    const closeBtn = document.getElementById('btnCreditsFooterClose');
+    if (!bodyEl || !titleEl) return;
+
+    const c = CREDITS_CONTENT[creditsModalLang] || CREDITS_CONTENT.en;
+    titleEl.textContent = `ℹ️ ${c.title}`;
+    if (switchBtn) switchBtn.innerHTML = creditsModalLang === 'en' ? '🌐 EN ➔ IT' : '🌐 IT ➔ EN';
+    if (closeBtn) closeBtn.textContent = c.closeBtn;
+
+    const attrItems = c.attrList.map(item => `<li style="margin-bottom:4px;">${item}</li>`).join('');
+
+    bodyEl.innerHTML = `
+        <div class="credits-card" style="border-color:rgba(56,189,248,0.28);">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                <span style="font-size:15px;font-weight:800;color:#f8fafc;">AeroGlass-Nav</span>
+                <span style="font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:rgba(56,189,248,0.18);color:#38bdf8;">v1.0.0 • MSFS 2024</span>
+            </div>
+            <div style="font-size:11.5px;color:#94a3b8;margin-top:2px;">${c.subtitle}</div>
+            <div style="margin-top:8px;font-size:12px;">
+                <span style="color:#94a3b8;">${c.authorLabel}:</span>
+                <strong style="color:#f8fafc;">${c.authorValue}</strong>
+            </div>
+            <div style="margin-top:6px;color:#cbd5e1;font-size:12px;">${c.desc}</div>
+        </div>
+
+        <div class="credits-card">
+            <div class="credits-section-title">${c.linksTitle}</div>
+            <div class="credits-links-row">
+                <a class="credits-link-btn" href="${CREDITS_LINKS.flightsimTo}" target="_blank" rel="noopener noreferrer"
+                   style="background:rgba(56,189,248,0.16);border:1px solid rgba(56,189,248,0.45);color:#7dd3fc;">
+                    ✈️ ${c.linkFlightsim}
+                </a>
+                <a class="credits-link-btn" href="${CREDITS_LINKS.discord}" target="_blank" rel="noopener noreferrer"
+                   style="background:rgba(99,102,241,0.2);border:1px solid rgba(129,140,248,0.5);color:#c7d2fe;">
+                    💬 ${c.linkDiscord}
+                </a>
+                <a class="credits-link-btn" href="${CREDITS_LINKS.buyMeACoffee}" target="_blank" rel="noopener noreferrer"
+                   style="background:rgba(251,191,36,0.16);border:1px solid rgba(251,191,36,0.5);color:#fde047;">
+                    ☕ ${c.linkCoffee}
+                </a>
+            </div>
+        </div>
+
+        <div class="credits-card">
+            <div class="credits-section-title">${c.attrTitle}</div>
+            <ul style="margin:0;padding-left:16px;color:#cbd5e1;font-size:11.8px;">
+                ${attrItems}
+            </ul>
+        </div>
+
+        <div class="credits-card">
+            <div class="credits-section-title">${c.licenseTitle}</div>
+            <div style="color:#cbd5e1;font-size:12px;">${c.licenseText}</div>
+        </div>
+
+        <div class="credits-disclaimer">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:#fbbf24;margin-bottom:4px;">⚠️ ${c.disclaimerTitle}</div>
+            <div style="font-size:12px;font-weight:600;">${c.disclaimerText}</div>
+        </div>
+    `;
+}
+
+function toggleCreditsModalLang() {
+    creditsModalLang = (creditsModalLang === 'en') ? 'it' : 'en';
+    renderCreditsModalContent();
+}
+
+function openCreditsModal() {
+    ensureCreditsModalExists();
+    // Si apre sempre in inglese come richiesto, con switch rapido in italiano
+    creditsModalLang = 'en';
+    renderCreditsModalContent();
+    const overlay = document.getElementById('creditsModalOverlay');
+    const bodyEl = document.getElementById('creditsModalBody');
+    if (overlay) overlay.style.display = 'flex';
+    if (bodyEl) bodyEl.scrollTop = 0;
+}
+
+function closeCreditsModal() {
+    const overlay = document.getElementById('creditsModalOverlay');
+    if (overlay) overlay.style.display = 'none';
+}
+
+function ensureCreditsModalExists() {
+    injectCreditsStyles();
+    if (document.getElementById('creditsModalOverlay')) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'creditsModalOverlay';
+    overlay.innerHTML = `
+        <div id="creditsModalBox" role="dialog" aria-modal="true">
+            <div class="credits-header">
+                <div id="creditsModalTitle" style="font-weight:700;font-size:14px;color:#f8fafc;">ℹ️ About AeroGlass-Nav</div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <button id="btnCreditsLangSwitch" class="credits-lang-switch" type="button" onclick="toggleCreditsModalLang()">🌐 EN ➔ IT</button>
+                    <button type="button" onclick="closeCreditsModal()" style="background:transparent;border:none;color:#94a3b8;font-size:16px;cursor:pointer;padding:2px 6px;" title="Close">✕</button>
+                </div>
+            </div>
+            <div id="creditsModalBody" class="credits-body"></div>
+            <div class="credits-footer">
+                <span style="font-size:11px;color:#64748b;">AeroGlass-Nav • Freeware EFB</span>
+                <button id="btnCreditsFooterClose" class="btn btn-cyan" type="button" style="padding:4px 14px;font-size:11.5px;" onclick="closeCreditsModal()">Close</button>
+            </div>
+        </div>
+    `;
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) closeCreditsModal();
+    });
+    document.body.appendChild(overlay);
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeCreditsModal();
+    });
+}
+
+function ensureCreditsTopBarButton() {
+    injectCreditsStyles();
+    if (document.getElementById('btnOpenCredits')) return;
+    const pillsGroup = document.querySelector('.top-pills-group');
+    if (!pillsGroup) return;
+
+    pillsGroup.style.flex = '1';
+
+    const btn = document.createElement('button');
+    btn.id = 'btnOpenCredits';
+    btn.type = 'button';
+    btn.innerHTML = 'ℹ️ <span>Credits</span>';
+    btn.onclick = () => openCreditsModal();
+
+    pillsGroup.appendChild(btn);
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => setTimeout(ensureCreditsTopBarButton, 250));
+} else {
+    setTimeout(ensureCreditsTopBarButton, 250);
+}
 
 function resolveSyntheticTooltip(el) {
     if (!el) return null;

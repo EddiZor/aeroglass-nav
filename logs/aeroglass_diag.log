@@ -1295,3 +1295,24 @@
 [2026-11-19 11:19:30.085] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:94% (30.2/31.8GB) | Commit:57.1/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
 [2026-11-19 11:20:01.017] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:94% (30.2/31.8GB) | Commit:57.0/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
 [2026-11-19 11:20:11.175] [SIMCONNECT  ] [T:Thread-259 (execute)] [RAM:95% (30.4/31.8GB) | Commit:57.4/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-19 11:21:45.501] [STARTUP     ] [T:MainThread] [RAM:92% (29.5/31.8GB) | Commit:57.7/87.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-19 11:21:45.602] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:92% (29.5/31.8GB) | Commit:57.7/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 11:21:46.027] [AIRCRAFT    ] [T:TelemetryPoll] [RAM:92% (29.5/31.8GB) | Commit:57.7/87.8GB] Aeromobile rilevato: Alpi Aviation Pioneer 400: Silver and Red
+[2026-11-19 11:21:46.048] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:92% (29.5/31.8GB) | Commit:57.8/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:22:16.587] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:93% (29.8/31.8GB) | Commit:58.7/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:22:46.782] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:93% (29.8/31.8GB) | Commit:58.5/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:23:17.757] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:93% (29.8/31.8GB) | Commit:58.5/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:23:47.845] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:94% (29.9/31.8GB) | Commit:58.8/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:24:02.662] [SIMCONNECT  ] [T:Thread-168 (execute)] [RAM:94% (29.9/31.8GB) | Commit:59.0/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-19 11:24:08.483] [STARTUP     ] [T:MainThread] [RAM:93% (29.8/31.8GB) | Commit:58.4/87.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-19 11:24:08.613] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:93% (29.8/31.8GB) | Commit:58.4/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 11:24:09.058] [AIRCRAFT    ] [T:TelemetryPoll] [RAM:93% (29.8/31.8GB) | Commit:58.4/87.8GB] Aeromobile rilevato: Alpi Aviation Pioneer 400: Silver and Red
+[2026-11-19 11:24:09.076] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:93% (29.8/31.8GB) | Commit:58.4/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:24:18.626] [SIMCONNECT  ] [T:Thread-40 (execute)] [RAM:94% (30.0/31.8GB) | Commit:59.1/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-19 11:26:14.408] [STARTUP     ] [T:MainThread] [RAM:89% (28.5/31.8GB) | Commit:59.3/87.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-19 11:26:14.502] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:89% (28.5/31.8GB) | Commit:59.3/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 11:26:14.990] [AIRCRAFT    ] [T:TelemetryPoll] [RAM:89% (28.5/31.8GB) | Commit:59.3/87.8GB] Aeromobile rilevato: Alpi Aviation Pioneer 400: Silver and Red
+[2026-11-19 11:26:15.141] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:89% (28.6/31.8GB) | Commit:59.3/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:26:45.908] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:92% (29.5/31.8GB) | Commit:60.9/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:27:16.336] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:92% (29.5/31.8GB) | Commit:60.6/87.8GB] ACFT=Alpi Aviation Pioneer 400: Silver and Red ALT=9ft GS=0kt POS=(45.5067,12.3452)
+[2026-11-19 11:27:18.286] [SIMCONNECT  ] [T:Thread-93 (execute)] [RAM:92% (29.4/31.8GB) | Commit:60.6/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
