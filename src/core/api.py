@@ -1397,6 +1397,181 @@ class AeroGlassAPI:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    def open_chart_file(self):
+        """Apre un file dialog per selezionare una cartina PDF o immagine (PNG/JPG)."""
+        if not self._window:
+            return {"success": False, "error": "Finestra non inizializzata"}
+        try:
+            file_types = (
+                'Aviation Charts (*.pdf;*.png;*.jpg;*.jpeg)',
+                'PDF Documents (*.pdf)',
+                'Image Files (*.png;*.jpg;*.jpeg)',
+                'All files (*.*)'
+            )
+            res = self._window.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=False, file_types=file_types)
+            if res and len(res) > 0:
+                fpath = os.path.abspath(res[0])
+                fname = os.path.basename(fpath)
+                is_pdf = 1 if fpath.lower().endswith(".pdf") else 0
+                return {
+                    "success": True,
+                    "path": fpath,
+                    "name": fname,
+                    "is_pdf": is_pdf
+                }
+            return {"success": False, "error": "Nessun file selezionato"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def get_airport_charts(self, icao):
+        """Recupera la lista delle carte registrate per un determinato aeroporto ICAO."""
+        code = str(icao or "").strip().upper()
+        try:
+            with self._db_lock:
+                with get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "SELECT id, icao, name, chart_type, file_path, is_pdf, bounds_json, opacity FROM chart_overlays WHERE icao = ? ORDER BY id DESC",
+                        (code,)
+                    )
+                    rows = cursor.fetchall()
+                    return {"success": True, "charts": [dict(r) for r in rows]}
+        except Exception as e:
+            return {"success": False, "error": str(e), "charts": []}
+
+    def save_chart_overlay(self, icao, name, chart_type, file_path, is_pdf, bounds_json, opacity=0.75):
+        """Salva o aggiorna una cartina con le relative coordinate di georeferenziazione."""
+        code = str(icao or "").strip().upper()
+        try:
+            with self._db_lock:
+                with get_connection() as conn:
+                    cur = conn.cursor()
+                    cur.execute("""
+                        INSERT INTO chart_overlays (icao, name, chart_type, file_path, is_pdf, bounds_json, opacity)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (code, name, chart_type, file_path, 1 if is_pdf else 0, bounds_json, float(opacity)))
+                    conn.commit()
+                    new_id = cur.lastrowid
+            return {"success": True, "id": new_id}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def delete_chart_overlay(self, chart_id):
+        """Elimina una cartina salvata dal database."""
+        try:
+            with self._db_lock:
+                with get_connection() as conn:
+                    conn.execute("DELETE FROM chart_overlays WHERE id = ?", (int(chart_id),))
+                    conn.commit()
+            return {"success": True}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def render_pdf_to_overlay_image(self, file_path, page_index=0, dpi=200):
+        """Converte una pagina del PDF in PNG ad alta risoluzione (300 DPI) per l'overlay su Leaflet."""
+        try:
+            import pypdfium2 as pdfium
+            import base64
+
+            if not os.path.isfile(file_path):
+                return {"success": False, "error": "File PDF non trovato"}
+
+            pdf = pdfium.PdfDocument(file_path)
+            if page_index < 0 or page_index >= len(pdf):
+                page_index = 0
+
+            page = pdf[page_index]
+            scale = dpi / 72.0
+            bitmap = page.render(scale=scale)
+            pil_image = bitmap.to_pil()
+
+            cache_dir = os.path.join(os.path.expanduser("~"), ".aeroglass_nav", "charts_cache")
+            os.makedirs(cache_dir, exist_ok=True)
+
+            base_name = os.path.splitext(os.path.basename(file_path))[0]
+            cache_filename = f"{base_name}_p{page_index}.png"
+            cache_path = os.path.join(cache_dir, cache_filename)
+            pil_image.save(cache_path, format="PNG")
+
+            with open(cache_path, "rb") as img_f:
+                b64_str = base64.b64encode(img_f.read()).decode("utf-8")
+
+            return {
+                "success": True,
+                "image_path": cache_path,
+                "data_url": f"data:image/png;base64,{b64_str}",
+                "total_pages": len(pdf),
+                "current_page": page_index
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def get_airport_auto_bounds(self, icao):
+        """Calcola il bounding box ottimale attorno alle piste reali dell'aeroporto o usa preset noti."""
+        code = str(icao or "").strip().upper()
+        
+        # Preset con bounding box calibrati al pixel per scali chiave
+        PRESETS = {
+            "LIPZ": [[45.5175, 12.3320], [45.4920, 12.3780]], # Venezia Tessera
+            "LIPD": [[46.0425, 13.1680], [46.0220, 13.2050]], # Campoformido
+            "LIKL": [[46.0120, 12.6210], [45.9960, 12.6520]], # La Comina
+            "LITY": [[37.2885, 13.5680], [37.2720, 13.5960]], # Agrigento Valle dei Templi
+            "LIRF": [[41.8280, 12.2150], [41.7720, 12.2740]], # Roma Fiumicino
+            "LIPB": [[46.4720, 11.3120], [46.4480, 11.3420]], # Bolzano
+        }
+
+        if code in PRESETS:
+            return {"success": True, "bounds": PRESETS[code], "source": "preset"}
+
+        # Calcolo dinamico da piste o coordinate aeroporto SQLite
+        try:
+            with self._db_lock:
+                with get_connection() as conn:
+                    rwys = conn.execute(
+                        "SELECT le_lat, le_lon, he_lat, he_lon FROM world_runways WHERE apt_icao = ? AND le_lat IS NOT NULL",
+                        (code,)
+                    ).fetchall()
+                    if rwys:
+                        lats = [r["le_lat"] for r in rwys] + [r["he_lat"] for r in rwys]
+                        lons = [r["le_lon"] for r in rwys] + [r["he_lon"] for r in rwys]
+                        pad_lat = max(0.008, (max(lats) - min(lats)) * 0.25)
+                        pad_lon = max(0.012, (max(lons) - min(lons)) * 0.25)
+                        bounds = [
+                            [round(max(lats) + pad_lat, 5), round(min(lons) - pad_lon, 5)],
+                            [round(min(lats) - pad_lat, 5), round(max(lons) + pad_lon, 5)]
+                        ]
+                        return {"success": True, "bounds": bounds, "source": "runways"}
+
+                    apt = conn.execute("SELECT lat, lon FROM world_airports WHERE icao = ?", (code,)).fetchone()
+                    if not apt:
+                        apt = conn.execute("SELECT lat, lon FROM cached_airports WHERE icao = ?", (code,)).fetchone()
+                    if apt:
+                        lat, lon = float(apt["lat"]), float(apt["lon"])
+                        bounds = [
+                            [round(lat + 0.018, 5), round(lon - 0.026, 5)],
+                            [round(lat - 0.018, 5), round(lon + 0.026, 5)]
+                        ]
+                        return {"success": True, "bounds": bounds, "source": "apt_coords"}
+        except Exception as e:
+            pass
+
+        return {"success": False, "error": "Impossibile calcolare i limiti dell'aeroporto"}
+
+    def get_chart_content(self, file_path):
+        """Legge il file della cartina e lo codifica in base64 per una renderizzazione sicura senza blocchi CORS."""
+        import base64
+        try:
+            if not os.path.isfile(file_path):
+                return {"success": False, "error": "File non trovato"}
+            with open(file_path, "rb") as f:
+                raw_bytes = f.read()
+            b64_data = base64.b64encode(raw_bytes).decode("utf-8")
+            ext = os.path.splitext(file_path)[1].lower()
+            mime = "application/pdf" if ext == ".pdf" else ("image/png" if ext == ".png" else "image/jpeg")
+            return {"success": True, "data_url": f"data:{mime};base64,{b64_data}", "mime": mime}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     def load_pln_file(self):
         if not self._window:
             return {"success": False, "error": "Finestra non inizializzata"}

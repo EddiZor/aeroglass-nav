@@ -41,6 +41,22 @@ def init_db():
             )
         """)
 
+        # Tabella Cartine Aeroportuali & Overlay Georeferenziati (AIP/ENAV)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS chart_overlays (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                icao TEXT NOT NULL,
+                name TEXT NOT NULL,
+                chart_type TEXT DEFAULT 'AIP',
+                file_path TEXT NOT NULL,
+                is_pdf INTEGER DEFAULT 0,
+                bounds_json TEXT,
+                opacity REAL DEFAULT 0.75,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_charts_icao ON chart_overlays(icao);")
+
         # 2. Tabella Storico Voli / Fuel Log
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS flight_history (
