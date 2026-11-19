@@ -1,12 +1,13 @@
 // ============================================================================
 // 🎓 AEROGLASS-NAV — TOUR GUIDATO INTERATTIVO BILINGUE IT / EN (demo.js)
+// Versione: v1.0.0 (MSFS 2024 Edition)
 // ============================================================================
 
 window._demoTourActive = false;
 let _demoStepIndex = 0;
 let _demoAutoTimer = null;
 let _demoAutoPlay = true;
-const DEMO_AUTO_INTERVAL_MS = 9000;
+const DEMO_AUTO_INTERVAL_MS = 9500;
 
 function isDemoEnglish() {
     if (typeof window._demoLang === 'string') return window._demoLang === 'en';
@@ -37,92 +38,121 @@ function getDemoSteps() {
         return [
             {
                 target: null,
-                badge: "WELCOME • v0.7.2",
+                badge: "WELCOME • v1.0.0",
                 title: "✈️ Welcome to AeroGlass-Nav",
                 body: `
-                    <p><b>AeroGlass-Nav</b> is your tactical Flight Planner & Moving Map in <b>Dark Cockpit</b> style for Microsoft Flight Simulator 2024.</p>
+                    <p><b>AeroGlass-Nav</b> is your standalone, ultra-responsive Flight Planner & Moving Map in <b>Dark Cockpit</b> style, optimized for Microsoft Flight Simulator 2024.</p>
                     <div class="demo-feature-grid">
-                        <div>🌍 <b>40,000+ World Airports</b> (SQLite + Ground Charts)</div>
+                        <div>🌧️ <b>Live Weather Radar</b> (RainViewer API & 60m Slider)</div>
+                        <div>🔄 <b>Analytical IFR Procedures</b> (Dynamic Holds, DME Arcs & Vectors)</div>
+                        <div>🌍 <b>40,000+ World Airports</b> (Local SQLite & Ground Layouts)</div>
                         <div>🌐 <b>Live VATSIM & IVAO</b> (Nearby Traffic & ATC Radar)</div>
-                        <div>📝 <b>EFB Scratchpad & Measure</b> (C.R.A.F.T. Pad & Ruler)</div>
-                        <div>📉 <b>Multi-Step VNAV & ToD</b> (Terrain & Cloud Scanner)</div>
+                        <div>📝 <b>EFB Scratchpad & Measure</b> (C.R.A.F.T. Pad & Tactical Ruler)</div>
+                        <div>📉 <b>VNAV Profile & Cloud Scan</b> (Terrain, ToD & METAR Clouds)</div>
                     </div>
-                    <p class="demo-tip">💡 Use <b>← / →</b> arrows to navigate, <b>Space</b> for auto-play, <b>🌐 IT/EN</b> to switch language, or <b>Esc / F1</b> to exit.</p>
+                    <p class="demo-tip">💡 Use <b>← / →</b> arrows to browse, <b>Space</b> for auto-play, <b>🌐 IT/EN</b> to switch language, or <b>Esc / F1</b> to exit at any time.</p>
                 `
             },
             {
                 target: "#sidebarPanel",
-                badge: "STEP 1 • FLIGHT PLANNING",
-                title: "🗺️ Flight Plan, SimBrief, .PLN & MSFS Sync",
+                badge: "STEP 1 • ROUTE & SIMBRIEF",
+                title: "🗺️ Route Planning, SimBrief Lock & Holding Triggers",
                 body: `
-                    <p>Manage your entire route from the collapsible side panel:</p>
+                    <p>Manage your complete navigation profile from the collapsible sidebar:</p>
                     <ul>
-                        <li><b>✈️ SimBrief OFP:</b> Download your latest flight plan with cruise altitudes, winds and METARs in one click.</li>
-                        <li><b>📂 Import / Export .PLN & Send to MSFS:</b> Load or drag-and-drop MSFS <code>.pln</code> files, or push the active route directly to the simulator.</li>
-                        <li><b>🖐️ Rubber Banding & Custom Waypoints:</b> Drag any leg on the map or save custom user waypoints in SQLite.</li>
+                        <li><b>🔑 SimBrief Pilot ID Protection:</b> Click the lock key to edit or protect your Pilot ID; import latest OFP flight plans with one click.</li>
+                        <li><b>🔄 Fast HOLD Activation:</b> Click <code>🔄 HOLD</code> on any waypoint card to generate and project an analytical holding pattern onto the chart.</li>
+                        <li><b>📊 Altitude & Speed Constraints:</b> Automatic detection of procedural limits (e.g. <code>FL100+</code>, <code>MAX 210KT</code>) shown alongside each fix.</li>
+                        <li><b>📂 Import / Export .PLN & Send to MSFS:</b> Push routes directly into the aircraft avionics or save standardized XML flight plans.</li>
                     </ul>
                 `
             },
             {
                 target: "#omniSearch",
                 badge: "STEP 2 • QUICK SEARCH",
-                title: "🔍 Instant ICAO Search & Map Centering",
+                title: "🔍 Instant ICAO Search & METAR Centering",
                 body: `
-                    <p>Type any <b>ICAO code</b> (e.g. <code>LIPZ</code>, <code>LIRQ</code>, <code>LIKL</code>), VOR or airport name and press <b>Enter</b>:</p>
+                    <p>Type any <b>ICAO code</b> (e.g. <code>LIPZ</code>, <code>LIPD</code>, <code>LITY</code>, <code>LIKL</code>), VOR or airport name and hit <b>Enter</b>:</p>
                     <ul>
-                        <li>The map smoothly flies to the airport at tactical zoom.</li>
-                        <li>Opens the live <b>METAR card</b> with <b>Recommended Runway</b> (headwind/crosswind) and clickable radio frequencies.</li>
+                        <li>Smoothly animates the map to the target airfield at tactical zoom level.</li>
+                        <li>Opens the live <b>METAR popup</b> with <b>Recommended Runway</b> (headwind/crosswind components) and clickable ATC frequencies.</li>
+                    </ul>
+                `
+            },
+            {
+                target: "#btnToggleRadar",
+                badge: "STEP 3 • LIVE WEATHER RADAR",
+                title: "🌧️ Live RainViewer Radar & Time Animation",
+                body: `
+                    <p>Toggle the <b>🌧️ Radar</b> button in the top bar to track real-time storms and precipitation:</p>
+                    <ul>
+                        <li><b>Live Doppler Composite:</b> Real-time rain and convective weather overlay refreshed every 10 minutes from open RainViewer APIs.</li>
+                        <li><b>Floating Cockpit Timeline:</b> An interactive floating timebar appears at the bottom. Use the slider to scrub through the past 60 minutes or press <b>▶ Play</b> for smooth loop playback.</li>
+                        <li><b>Native Zoom Adaptation:</b> Crisp tile rendering at all scales without server tile errors.</li>
+                    </ul>
+                `
+            },
+            {
+                target: "#sidebarPanel",
+                badge: "STEP 4 • ANALYTICAL IFR PROCEDURES",
+                title: "🔄 Dynamic Holds, DME Arcs & Radar Vectors",
+                body: `
+                    <p>Full analytical geometry for complex terminal procedures (SID, STAR, IAP):</p>
+                    <ul>
+                        <li><b>Speed-Adaptive Holding Patterns:</b> Standard Rate-1 race tracks ($3^\\circ$/s) scaled to your aircraft's actual ground speed and altitude (1.0 min or 1.5 min legs).</li>
+                        <li><b>High-Visibility Badges (+50%):</b> Clear magenta cockpit tags displaying Inbound course, turn direction, target speed, turn radius, and leg length in NM.</li>
+                        <li><b>DME Arcs & Radar Vectors:</b> Renders circular DME arc segments (<code>⌒ ARC xx DME [VOR]</code>) and dashed amber ATC disconnect segments (<code>📡 ATC VECTORS</code>).</li>
                     </ul>
                 `
             },
             {
                 target: "#btnToggleGroundMap",
-                badge: "STEP 3 • WORLD AIRPORTS & GROUND MAP",
-                title: "🛫 Progressive Declutter (LOD), Runways & Stands",
+                badge: "STEP 5 • WORLD AIRPORTS & GROUND MAP",
+                title: "🛫 Smart Declutter (LOD), Runways & Parking Stands",
                 body: `
-                    <p>The map automatically adapts airport density to your zoom level to keep the chart clean:</p>
+                    <p>The cartographic engine balances density and legibility across all zoom levels:</p>
                     <ul>
-                        <li><b>Continental Zoom (&lt; 8):</b> Shows major hubs as discrete radar dots (hover to reveal ICAO).</li>
-                        <li><b>Regional & VFR Zoom (&ge; 9.5):</b> Reveals medium airports and VFR airfields.</li>
-                        <li><b>Ground Map (&ge; 13.5):</b> Dynamically renders runway thresholds, surfaces, taxiways, and apron parking stands (including detailed layouts for <code>LIPZ</code>, <code>LIKL</code>, <code>LIPD</code>, <code>LITY</code>)!</li>
+                        <li><b>Continental Zoom (&lt; 8):</b> Major hubs shown as discrete radar blips (hover to reveal ICAO).</li>
+                        <li><b>Regional & VFR Zoom (&ge; 9.5):</b> Displays medium airports and sport airfields.</li>
+                        <li><b>Ground Map (&ge; 13.5):</b> Detailed taxiways with authentic ICAO identifiers, runway surface markings, and parking stands (including custom models for <code>LIKL</code>, <code>LIPD</code>, <code>LITY</code>, and <code>LIPZ</code>).</li>
                     </ul>
                 `
             },
             {
                 target: "#btnToggleWeather",
-                badge: "STEP 4 • LIVE WEATHER",
-                title: "💨 Route Wind Vectors & METAR Pills",
+                badge: "STEP 6 • ROUTE WINDS & METAR",
+                title: "💨 Enroute Wind Vectors & Flight Categories",
                 body: `
-                    <p>Activate <b>WX / Meteo</b> to monitor real-time atmospheric conditions along your flight plan:</p>
+                    <p>Enable <b>💨 WX</b> to monitor in-flight atmospheric dynamics:</p>
                     <ul>
-                        <li><b>Wind Badges:</b> Displays wind direction/speed and automatic <b>Headwind (HW)</b>, <b>Tailwind (TW)</b> or <b>Crosswind (XW)</b> components.</li>
-                        <li><b>Flight Categories:</b> Color-coded dots (<b style="color:#2ea043;">VFR</b>, <b style="color:#00d2ff;">MVFR</b>, <b style="color:#f85149;">IFR</b>, <b style="color:#e040fb;">LIFR</b>) on visible airports.</li>
+                        <li><b>Enroute Wind Badges:</b> Shows true wind direction/knots and auto-calculates <b>Headwind (HW)</b>, <b>Tailwind (TW)</b>, and <b>Crosswind (XW)</b>.</li>
+                        <li><b>Flight Category Pills:</b> Color-coded airport status markers (<b style="color:#2ea043;">VFR</b>, <b style="color:#00d2ff;">MVFR</b>, <b style="color:#f85149;">IFR</b>, <b style="color:#e040fb;">LIFR</b>).</li>
                     </ul>
                 `
             },
             {
                 target: "#btnToggleNetwork",
-                badge: "STEP 5 • ONLINE NETWORKS",
-                title: "🌐 VATSIM & IVAO Live Traffic + ATC",
+                badge: "STEP 7 • ONLINE NETWORKS",
+                title: "🌐 Live VATSIM & IVAO Traffic + ATC Coverage",
                 body: `
-                    <p>Click <b>🌐 Online</b> to cycle between <b>OFF</b>, <b>ON (Both)</b>, <b>IVAO</b>, and <b>VATSIM</b> (auto-refreshed every 60 seconds):</p>
+                    <p>Cycle between <b>OFF</b>, <b>ON (Both)</b>, <b>IVAO</b>, and <b>VATSIM</b> (updated asynchronously every 60 seconds):</p>
                     <ul>
-                        <li><b>Active ATC Stations:</b> Displays online <b>🗼 TWR</b>, <b>📡 APP</b>, and <b>🕸️ CTR</b> radar centers with coverage rings and radio frequencies.</li>
-                        <li><b>One-Click Tuning:</b> Click any ATC badge on the map to copy its frequency directly into your EFB Scratchpad!</li>
-                        <li><b>Nearby Aircraft:</b> Shows live pilots around your position with altitude, ground speed, and distance in NM.</li>
+                        <li><b>Online ATC Stations:</b> Tower (<b>🗼 TWR</b>), Approach (<b>📡 APP</b>), and Radar Centers (<b>🕸️ CTR</b>) with radio ranges and frequencies.</li>
+                        <li><b>Instant Tuning:</b> Click any online ATC badge to transfer its active VHF frequency directly into your EFB Scratchpad.</li>
+                        <li><b>Nearby Aircraft:</b> Displays live traffic within your proximity showing altitude, ground speed, and distance in NM.</li>
                     </ul>
                 `
             },
             {
                 target: "#btnAtcRadarCfg",
-                badge: "STEP 6 • RADAR CALIBRATION",
-                title: "🎚️ Real-Time ATC Coverage Sliders",
+                badge: "STEP 8 • RADAR CALIBRATION",
+                title: "🎚️ 60-FPS ATC Range & Opacity Controls",
                 body: `
-                    <p>Click the <b>🎚️</b> button (or right-click <b>🌐 Online</b>) to customize the radar overlay at 60 FPS:</p>
+                    <p>Click the <b>🎚️</b> slider button (or right-click <b>🌐 Online</b>) to tune the radar display:</p>
                     <ul>
-                        <li><b>⭕ ATC Circle Radius (0%–250%):</b> Scale TWR/APP/CTR rings or set to 0% to show badges only.</li>
-                        <li><b>🔆 Coverage Opacity:</b> Adjust ring transparency over the base chart.</li>
-                        <li><b>✈️ Nearby Aircraft Range (20–300 NM)</b> & individual <b>TWR / APP / CTR</b> filters.</li>
+                        <li><b>⭕ Circle Radius (0%–250%):</b> Scale sector circles or set to <code>0%</code> to keep badges only.</li>
+                        <li><b>🔆 Coverage Opacity:</b> Adjust background fill intensity over dark charts.</li>
+                        <li><b>✈️ Nearby Traffic Range (20–300 NM)</b> and individual toggles for <b>TWR</b>, <b>APP</b>, and <b>CTR</b>.</li>
                     </ul>
                 `,
                 onEnter: () => {
@@ -143,14 +173,14 @@ function getDemoSteps() {
             },
             {
                 target: "#btnToggleScratchpad",
-                badge: "STEP 7 • ELECTRONIC FLIGHT BAG",
-                title: "📝 EFB Scratchpad: ATC Pad, Draw & Freq",
+                badge: "STEP 9 • EFB SCRATCHPAD",
+                title: "📝 Cockpit Kneeboard: C.R.A.F.T., Canvas & Frequencies",
                 body: `
-                    <p>Your cockpit kneeboard for ATC clearances and notes:</p>
+                    <p>Your tactical in-flight scratchpad:</p>
                     <ul>
-                        <li><b>📋 ATC PAD:</b> Quick fields for <code>SQUAWK</code>, <code>QNH</code>, <code>ALT/FL</code>, <code>HDG</code>, <code>SPEED</code>, and <code>NEXT FREQ</code>, plus <b>🔄 SIM</b> sync.</li>
-                        <li><b>✏️ DRAW:</b> Freehand canvas with multi-color pen and eraser.</li>
-                        <li><b>📻 FREQ:</b> Automatically lists nearby online <b>VATSIM/IVAO controllers</b>, VORs, ILS, and emergency frequencies.</li>
+                        <li><b>📋 ATC PAD:</b> Dedicated fields for <code>SQUAWK</code>, <code>QNH</code>, <code>ALT/FL</code>, <code>HDG</code>, <code>SPEED</code>, and <code>NEXT FREQ</code> with one-click <b>🔄 SIM</b> telemetry sync.</li>
+                        <li><b>✏️ DRAW:</b> Freehand canvas with 4 pen colors and eraser for taxi diagrams and holding sketches.</li>
+                        <li><b>📻 FREQ:</b> Automatically aggregates nearby online ATC stations, UNICOM (<code>122.800</code>), emergency (<code>121.500</code>), VORs, and ILS localizers.</li>
                     </ul>
                 `,
                 onEnter: () => {
@@ -162,159 +192,188 @@ function getDemoSteps() {
             },
             {
                 target: "#btnToggleMeasure",
-                badge: "STEP 8 • TACTICAL RULER",
-                title: "📏 Distance, Heading & ETE Measure Tool",
+                badge: "STEP 10 • TACTICAL RULER",
+                title: "📏 In-Flight Distance, Bearing & ETE Measuring",
                 body: `
-                    <p>Measure any leg on the fly using the <b>📏 Measure</b> button or simply by <b>Right-Clicking</b> anywhere on the map:</p>
+                    <p>Measure any segment on the chart using the <b>📏 Measure</b> tool or simply by <b>Right-Clicking</b> two points:</p>
                     <ul>
-                        <li>Shows <b>Distance (NM & km)</b>, <b>Magnetic & True Bearing (°M / °T)</b>, and real-time <b>ETE</b> based on your Ground Speed.</li>
-                        <li>Click the badge or press <b>Esc</b> to clear the measurement.</li>
+                        <li>Calculates <b>Distance (NM & km)</b>, <b>Magnetic & True Bearing (°M / °T)</b>, and real-time <b>ETE</b> based on current Ground Speed.</li>
+                        <li>Click the measurement badge or press <b>Esc</b> to clear.</li>
                     </ul>
                 `
             },
             {
                 target: "#btnNavlogTop",
-                badge: "STEP 9 • LOGS & PERFORMANCE",
+                badge: "STEP 11 • LOGS & PERFORMANCE",
                 title: "📋 NavLog, Fuel Calculator & SQLite Logbook",
                 body: `
-                    <p>Complete flight preparation and post-flight tracking tools:</p>
+                    <p>Comprehensive pre-flight planning and post-flight record keeping:</p>
                     <ul>
-                        <li><b>📋 NavLog:</b> Printable route table with magnetic tracks, distances, ETE/ETA, and progressive fuel burn.</li>
-                        <li><b>⛽ Fuel & Perf:</b> Customize TAS, fuel flow, taxi, contingency, and reserve fuel.</li>
-                        <li><b>📒 Logbook:</b> Automatically records your flights upon landing in the local SQLite database.</li>
+                        <li><b>📋 NavLog:</b> Printable operational flight plan table with magnetic tracks, waypoint distances, ETE/ETA, and progressive fuel consumption.</li>
+                        <li><b>⛽ Fuel & Perf:</b> Computes Block Fuel, Trip Fuel, taxi, and regulatory reserves tailored to your aircraft TAS and burn rate.</li>
+                        <li><b>📒 Logbook:</b> Automatically records flight hours, block times, and fuel burn into the local SQLite database upon touchdown.</li>
                     </ul>
                 `
             },
             {
                 target: "#elevationDrawer",
-                badge: "STEP 10 • VNAV & CLOUDS",
-                title: "📉 Multi-Step VNAV, ToD & Cloud Scanner",
+                badge: "STEP 12 • VNAV & CLOUD SCANNER",
+                title: "📉 Vertical Navigation Profile, ToD & METAR Cloud Slices",
                 body: `
-                    <p>The bottom drawer displays your vertical profile against real terrain elevation:</p>
+                    <p>The bottom elevation drawer projects your vertical profile against high-resolution terrain:</p>
                     <ul>
-                        <li><b>Top of Descent (ToD):</b> Calculates the exact descent point and required vertical speed (fpm) for a 3° glidepath.</li>
-                        <li><b>☁️ CLOUDS Scanner:</b> Select <code>AUTO (ACFT)</code> or <code>FL050–FL300</code> to project METAR cloud layers onto the map and VNAV chart, with live <b>IMC</b> alerts.</li>
+                        <li><b>Top of Descent (ToD):</b> Dynamically determines the descent point and vertical speed (fpm) required for a clean 3° glidepath.</li>
+                        <li><b>☁️ CLOUDS Scanner:</b> Select <code>AUTO (ACFT)</code> or flight levels from <code>FL050–FL300</code> to slice METAR cloud layers in real-time, complete with cockpit <b>IMC</b> warnings.</li>
                     </ul>
                 `
             },
             {
                 target: "#aeroCompassWidget",
-                badge: "STEP 11 • ERGONOMICS & EFB WI-FI",
-                title: "🧭 Compass Rose, Orientation & Tablet Wi-Fi",
+                badge: "STEP 13 • ORIENTATION & TABLET EFB",
+                title: "🧭 Compass Rose, Map Heading & Wi-Fi Tablet Mode",
                 body: `
-                    <p>Tailor the interface to any cockpit setup or external device:</p>
+                    <p>Cockpit ergonomics and seamless secondary screen pairing:</p>
                     <ul>
-                        <li><b>🧭 Compass Rose & Map Mode:</b> Switch between <b>Free Map / North-Up / Track-Up</b>; click the compass anytime to reset <b>North-Up (360°)</b>.</li>
-                        <li><b>🌐 Language (IT / EN):</b> Switch the entire interface and guided tour language between Italian and English at any time.</li>
-                        <li><b>📱 EFB Wi-Fi:</b> Click the top EFB badge to scan the QR Code and open AeroGlass-Nav live on your iPad or Android tablet!</li>
+                        <li><b>🧭 Compass Rose:</b> Toggle between <b>Free Map</b>, <b>North Up</b>, and <b>Track Up</b>; click the dial anytime to restore North Up (360°).</li>
+                        <li><b>📱 EFB Wi-Fi:</b> Click the EFB pill in the top bar to display the local IP and QR Code. Open the app on your iPad or tablet with zero cables.</li>
                     </ul>
                 `
             },
             {
-                target: "#mapStyleSelect",
-                badge: "STEP 12 • PRO MAP LAYERS & FILTERS",
-                title: "🗺️ IFR, VFR, MAP, SAT, Day/Night, Relief & Navaids",
+                target: "#btnOpenCredits",
+                badge: "STEP 14 • CREDITS & COMMUNITY",
+                title: "ℹ️ About, Bilingual Credits & Community Links",
                 body: `
-                    <p>Multi-layer aeronautical cartographic engine:</p>
+                    <p>Access full documentation and project support from the top bar:</p>
                     <ul>
-                        <li><b>🗺️ 4 Map Models:</b> Switch instantly between <b>IFR</b>, <b>VFR</b>, <b>MAP</b>, and <b>SAT</b> views with <b>☀️ Day / 🌙 Night</b> lighting and <b>⛰️ Relief</b> hillshading.</li>
-                        <li><b>📡 VOR/ILS & ⚙️ Filters:</b> Toggle radio navaids, approach cones, and customize visible map layers on the fly.</li>
-                        <li><b>✈️ Send to MSFS:</b> Push your active route directly to the simulator avionics in one click.</li>
+                        <li><b>ℹ️ Bilingual Credits:</b> Opens the official dialog in English or Italian with release notes and MIT Open Source terms.</li>
+                        <li><b>✈️ Community Hub:</b> Direct links to the Flightsim.to addon page, Discord community server, and Buy Me a Coffee support link.</li>
+                        <li><b>⚠️ Aviation Disclaimer:</b> Dedicated notice emphasizing flight simulation use only (MSFS 2024).</li>
                     </ul>
                 `
             }
         ];
     }
 
+    // --- VERSIONE ITALIANA (DEFAULT) ---
     return [
         {
             target: null,
-            badge: "BENVENUTO • v0.7.2",
+            badge: "BENVENUTO • v1.0.0",
             title: "✈️ Benvenuto in AeroGlass-Nav",
             body: `
-                <p><b>AeroGlass-Nav</b> è il tuo Flight Planner & Moving Map tattico in stile <b>Dark Cockpit</b> progettato per Microsoft Flight Simulator 2024.</p>
+                <p><b>AeroGlass-Nav</b> è il tuo Flight Planner & Moving Map tattico in stile <b>Dark Cockpit</b>, autonomo, ultra-reattivo e sviluppato appositamente per Microsoft Flight Simulator 2024.</p>
                 <div class="demo-feature-grid">
-                    <div>🌍 <b>40.000+ Aeroporti Mondiali</b> (SQLite + Ground Map)</div>
-                    <div>🌐 <b>Traffico & ATC VATSIM/IVAO</b> (TWR, APP, CTR & Frequenze)</div>
-                    <div>📝 <b>Scratchpad EFB & Righello</b> (Note ATC, Disegno & ETE)</div>
-                    <div>📉 <b>Profilo VNAV & Cloud Scan</b> (Terreno, ToD e Nuvole)</div>
+                    <div>🌧️ <b>Radar Meteo RainViewer</b> (Tile Live & Slider Temporale 60 min)</div>
+                    <div>🔄 <b>Procedure IFR Analitiche</b> (Holding Dinamiche, Archi DME e Vettori)</div>
+                    <div>🌍 <b>40.000+ Scali Mondiali</b> (SQLite Locale e Ground Map Piste/Stand)</div>
+                    <div>🌐 <b>Traffico Live VATSIM / IVAO</b> (Controllori ATC, Coperture e Frequenze)</div>
+                    <div>📝 <b>Scratchpad EFB & Righello</b> (Clearance ATC, Disegno & Calcolo ETE)</div>
+                    <div>📉 <b>Profilo VNAV & Cloud Scan</b> (Terreno Altimetrico, ToD e Nuvole)</div>
                 </div>
-                <p class="demo-tip">💡 Usa le frecce <b>← / →</b> per scorrere i passaggi, <b>Spazio</b> per lo scorrimento automatico, <b>🌐 IT/EN</b> per cambiare lingua o <b>Esc / F1</b> per chiudere.</p>
+                <p class="demo-tip">💡 Usa le frecce <b>← / →</b> per scorrere i passaggi, <b>Spazio</b> per la riproduzione automatica, <b>🌐 IT/EN</b> per cambiare lingua o <b>Esc / F1</b> per chiudere.</p>
             `
         },
         {
             target: "#sidebarPanel",
-            badge: "PASSO 1 • PIANIFICAZIONE VOLO",
-            title: "🗺️ Piano di Volo, SimBrief, File .PLN & Sync MSFS",
+            badge: "PASSO 1 • PIANIFICAZIONE & SIMBRIEF",
+            title: "🗺️ Rotta, Protezione SimBrief & Attivazione Holding",
             body: `
-                <p>Dal pannello laterale sinistro gestisci l'intera rotta e i Waypoint:</p>
+                <p>Dal pannello laterale sinistro gestisci ogni dettaglio del piano di volo:</p>
                 <ul>
-                    <li><b>✈️ SimBrief OFP:</b> Scarica con un clic l'ultimo piano di volo generato su SimBrief completo di quote, venti e METAR.</li>
-                    <li><b>📂 Importa / Esporta .PLN & Invia a MSFS:</b> Carica o trascina (Drag & Drop) file <code>.pln</code> sulla mappa, oppure invia la rotta direttamente al simulatore.</li>
-                    <li><b>➕ Waypoints Utente:</b> Sezione dedicata per salvare punti VFR personalizzati nel database SQLite o catturarli con un clic sulla mappa.</li>
+                    <li><b>🔑 Protezione Pilot ID SimBrief:</b> Clicca sull'icona della chiave per sbloccare la modifica o proteggere il tuo ID; scarica l'ultimo OFP generato con un clic.</li>
+                    <li><b>🔄 Pulsante Rapido HOLD:</b> Su ogni waypoint della rotta trovi il pulsante <code>🔄 HOLD</code> per calcolare e disegnare all'istante l'ippodromo d'attesa su mappa.</li>
+                    <li><b>📊 Vincoli Altimetrici e Velocità:</b> Visualizzazione chiara dei vincoli di quota e velocità (es. <code>FL100+</code>, <code>MAX 210KT</code>) accanto a ciascun fix.</li>
+                    <li><b>📂 Importa / Esporta .PLN & Invia a MSFS:</b> Trasmetti la rotta attiva direttamente all'avionica del velivolo nel simulatore o salva file standard XML.</li>
                 </ul>
             `
         },
         {
             target: "#omniSearch",
             badge: "PASSO 2 • RICERCA ISTANTANEA",
-            title: "🔍 Ricerca Rapida ICAO & Centratura Mappa",
+            title: "🔍 Ricerca Rapida ICAO & Scheda METAR",
             body: `
-                <p>Digita qualsiasi codice <b>ICAO</b> (es. <code>LIPZ</code>, <code>LIRQ</code>, <code>LIKL</code>, <code>LITY</code>), un VOR o il nome di una città e premi <b>Invio</b>:</p>
+                <p>Digita qualsiasi codice <b>ICAO</b> (es. <code>LIPZ</code>, <code>LIPD</code>, <code>LITY</code>, <code>LIKL</code>), un VOR o il nome dello scalo e premi <b>Invio</b>:</p>
                 <ul>
-                    <li>La mappa si centra automaticamente sullo scalo con zoom ravvicinato.</li>
-                    <li>Si apre subito la scheda <b>METAR live</b> con il calcolo della <b>Pista Consigliata</b> in base al vento, lunghezze piste e frequenze radio cliccabili.</li>
+                    <li>La mappa si porta con animazione fluida sopra l'aeroporto a livello di zoom operativo.</li>
+                    <li>Apre subito la scheda <b>METAR live</b> con il calcolo della <b>Pista Consigliata</b> in base al vento al suolo, lunghezze piste e frequenze radio cliccabili.</li>
+                </ul>
+            `
+        },
+        {
+            target: "#btnToggleRadar",
+            badge: "PASSO 3 • RADAR METEO LIVE",
+            title: "🌧️ Radar Precipitazioni RainViewer & Timeline 60m",
+            body: `
+                <p>Attiva il pulsante <b>🌧️ Radar</b> nella barra superiore per visualizzare i fronti temporaleschi e le precipitazioni in tempo reale:</p>
+                <ul>
+                    <li><b>Radar Doppler Composito:</b> Layer pioggia e temporali globale aggiornato a cicli di 10 minuti tramite le API pubbliche di RainViewer.</li>
+                    <li><b>Barra Temporale Flottante:</b> In basso compare una comoda barra dark cockpit. Usa lo slider per analizzare l'evoluzione degli ultimi 60 minuti o premi <b>▶ Play</b> per avviare l'animazione continua.</li>
+                    <li><b>Ottimizzazione Zoom Nativo:</b> Visualizzazione sempre nitida a qualsiasi livello di ingrandimento senza errori di tessere non supportate.</li>
+                </ul>
+            `
+        },
+        {
+            target: "#sidebarPanel",
+            badge: "PASSO 4 • PROCEDURE IFR ANALITICHE",
+            title: "🔄 Holding Dinamiche, Archi DME & Vettori Radar",
+            body: `
+                <p>Motore geometrico analitico per la corretta rappresentazione delle procedure terminali (SID, STAR, IAP):</p>
+                <ul>
+                    <li><b>Holding Pattern Adattive:</b> Ippodromi standard Rate-1 ($3^\\circ$/s) calcolati dinamicamente in base alla velocità reale (TAS/GS) e alla quota (1.0 min sotto FL140, 1.5 min sopra).</li>
+                    <li><b>Badge Ingrandito (+50%):</b> Targhetta cockpit ad alto contrasto con rotta inbound, senso di virata, quota, velocità, raggio e lunghezza gamba in NM.</li>
+                    <li><b>Archi DME e Vettori Radar:</b> Tracciamento circolare geodetico degli archi (<code>⌒ ARC xx DME [VOR]</code>) e linee tratteggiate in ambra per i tratti vettoriali ATC (<code>📡 ATC VECTORS</code>).</li>
                 </ul>
             `
         },
         {
             target: "#btnToggleGroundMap",
-            badge: "PASSO 3 • AEROPORTI MONDIALI & GROUND MAP",
-            title: "🛫 Declutter Intelligente (LOD), Piste & Piazzole",
+            badge: "PASSO 5 • AEROPORTI MONDIALI & GROUND MAP",
+            title: "🛫 Declutter Dinamico (LOD), Taxiway & Stand",
             body: `
-                <p>Il motore cartografico regola automaticamente i dettagli in base al livello di zoom per mantenere la mappa sempre pulita:</p>
+                <p>La cartografia adatta automaticamente la densità di scali e dettagli al livello di zoom:</p>
                 <ul>
-                    <li><b>Zoom Continentale (&lt; 8):</b> Mostra solo i grandi scali come discreti pallini radar (passa il mouse per leggere il codice ICAO).</li>
-                    <li><b>Zoom Regionale e VFR (&ge; 9.5):</b> Rivela progressivamente gli aeroporti medi e le aviosuperfici VFR.</li>
-                    <li><b>Ground Map (&ge; 13.5):</b> Disegna in tempo reale le piste orientate con testate, vie di rullaggio (taxiway) e piazzole di parcheggio (stand) per gli aeroporti supportati (inclusi <code>LIPZ</code>, <code>LIKL</code>, <code>LIPD</code>, <code>LITY</code>).</li>
+                    <li><b>Zoom Panoramico (&lt; 8):</b> Mostra solo i grandi hub mondiali come discreti punti radar (passa il mouse per visualizzare il codice ICAO).</li>
+                    <li><b>Zoom Regionale e VFR (&ge; 9.5):</b> Rivela progressivamente scali minori, campi di volo e aviosuperfici VFR.</li>
+                    <li><b>Ground Map Aeroportuale (&ge; 13.5):</b> Disegna piste orientate con testate, raccordi taxiway con lettere ICAO ufficiali e piazzole di parcheggio (layout completi per <code>LIKL</code>, <code>LIPD</code>, <code>LITY</code>, <code>LIPZ</code>).</li>
                 </ul>
             `
         },
         {
             target: "#btnToggleWeather",
-            badge: "PASSO 4 • METEO E VENTI IN ROTTA",
-            title: "💨 Vettori Vento & Bollettini METAR",
+            badge: "PASSO 6 • VENTI IN ROTTA & METAR",
+            title: "💨 Vettori Vento & Categorie di Volo",
             body: `
-                <p>Attivando <b>💨 WX / Meteo</b> visualizzi la situazione atmosferica lungo il piano di volo:</p>
+                <p>Attiva <b>💨 WX</b> per monitorare i parametri atmosferici lungo la rotta:</p>
                 <ul>
-                    <li><b>Badge Vento in Quota:</b> Mostrano direzione/intensità del vento e calcolano la componente di <b>Vento Contrario (HW)</b>, <b>Vento in Coda (TW)</b> o <b>Traverso (XW)</b>.</li>
-                    <li><b>Categorie di Volo:</b> Indicatori luminosi (<b style="color:#2ea043;">VFR</b>, <b style="color:#00d2ff;">MVFR</b>, <b style="color:#f85149;">IFR</b>, <b style="color:#e040fb;">LIFR</b>) sugli aeroporti in vista.</li>
+                    <li><b>Vettori Vento in Quota:</b> Mostrano freccia del flusso, prua/nodi e calcolano all'istante la componente di <b>Vento Contrario (HW)</b>, <b>Vento in Coda (TW)</b> o <b>Traverso (XW)</b>.</li>
+                    <li><b>Pillole Categorie di Volo:</b> Indicatori colorati (<b style="color:#2ea043;">VFR</b>, <b style="color:#00d2ff;">MVFR</b>, <b style="color:#f85149;">IFR</b>, <b style="color:#e040fb;">LIFR</b>) sugli aeroporti visibili.</li>
                 </ul>
             `
         },
         {
             target: "#btnToggleNetwork",
-            badge: "PASSO 5 • RETI DI VOLO ONLINE",
-            title: "🌐 Traffico Live VATSIM / IVAO & Copertura ATC",
+            badge: "PASSO 7 • RETI DI VOLO ONLINE",
+            title: "🌐 Traffico Live VATSIM / IVAO & Coperture ATC",
             body: `
-                <p>Clicca sul selettore di rete per ciclare tra <b>OFF</b>, <b>ON (Entrambi)</b>, <b>IVAO</b> e <b>VATSIM</b> (aggiornamento asincrono ogni 60 secondi):</p>
+                <p>Cicla tra <b>OFF</b>, <b>ON (Entrambi)</b>, <b>IVAO</b> e <b>VATSIM</b> con aggiornamento automatico ogni 60 secondi:</p>
                 <ul>
-                    <li><b>Controllori ATC Online:</b> Visualizza sulla mappa Torri (<b>🗼 TWR</b> in verde), Avvicinamenti (<b>📡 APP</b> in ciano) e Centri Radar (<b>🕸️ CTR</b> in viola) con cerchi di copertura e frequenza radio.</li>
-                    <li><b>Sintonia Rapida:</b> Clicca su qualsiasi badge ATC per inviare la frequenza direttamente alla casella <code>NEXT FREQ</code> dello Scratchpad EFB!</li>
-                    <li><b>Aerei Vicini:</b> Mostra il traffico nelle immediate vicinanze con quota, Ground Speed e distanza in NM.</li>
+                    <li><b>Postazioni ATC Connesse:</b> Torri (<b>🗼 TWR</b>), Avvicinamenti (<b>📡 APP</b>) e Centri Radar (<b>🕸️ CTR</b>) con cerchi di copertura e frequenza operativa.</li>
+                    <li><b>Sintonia Immediata:</b> Clicca su qualsiasi badge ATC per copiare la frequenza VHF direttamente nella casella <code>NEXT FREQ</code> delle tue Note EFB.</li>
+                    <li><b>Aerei nelle Vicinanze:</b> Traffico simulato in volo nei paraggi completo di quota, Ground Speed e distanza in miglia.</li>
                 </ul>
             `
         },
         {
             target: "#btnAtcRadarCfg",
-            badge: "PASSO 6 • CALIBRAZIONE RADAR",
-            title: "🎚️ Slider Raggio, Opacità & Filtri ATC",
+            badge: "PASSO 8 • CALIBRAZIONE RADAR",
+            title: "🎚️ Regolazione Istantanea Raggio & Opacità ATC",
             body: `
-                <p>Clicca sul pulsante <b>🎚️</b> per aprire il pannello di calibrazione istantanea a 60 FPS:</p>
+                <p>Clicca sul pulsante <b>🎚️</b> (o fai clic destro su <b>🌐 Online</b>) per calibrare la vista radar a 60 FPS:</p>
                 <ul>
-                    <li><b>⭕ Raggio Cerchi ATC (0%–250%):</b> Allarga o riduci gli anelli di copertura (a <code>0%</code> nasconde i cerchi lasciando solo i badge).</li>
-                    <li><b>🔆 Opacità Copertura:</b> Regola la trasparenza dei cerchi sulla mappa.</li>
-                    <li><b>✈️ Raggio Aerei Vicini (20–300 NM)</b> e pulsanti per attivare/disattivare singolarmente <b>🗼 TWR</b>, <b>📡 APP</b> e <b>🕸️ CTR</b>.</li>
+                    <li><b>⭕ Raggio Cerchi ATC (0%–250%):</b> Modifica le dimensioni degli anelli radar o imposta <code>0%</code> per mantenere solo i badge senza cerchi.</li>
+                    <li><b>🔆 Opacità Copertura:</b> Regola la trasparenza per non appesantire la mappa scura.</li>
+                    <li><b>✈️ Raggio Aerei Vicini (20–300 NM)</b> e filtri dedicati per attivare o disattivare singolarmente <b>TWR</b>, <b>APP</b> e <b>CTR</b>.</li>
                 </ul>
             `,
             onEnter: () => {
@@ -335,14 +394,14 @@ function getDemoSteps() {
         },
         {
             target: "#btnToggleScratchpad",
-            badge: "PASSO 7 • BLOCCO NOTE DI BORDO",
-            title: "📝 Scratchpad EFB: Clearance ATC, Disegno & Freq",
+            badge: "PASSO 9 • SCRATCHPAD EFB",
+            title: "📝 Cosciale di Bordo: Clearance ATC, Disegno & Frequenze",
             body: `
-                <p>Il tuo cosciale elettronico sempre a portata di clic:</p>
+                <p>Il tuo blocco note tattico sempre disponibile durante il volo:</p>
                 <ul>
-                    <li><b>📋 ATC PAD:</b> Campi rapidi per <code>SQUAWK</code>, <code>QNH</code>, <code>ALT/FL</code>, <code>HDG</code>, <code>SPEED</code> e <code>NEXT FREQ</code>, con pulsante <b>🔄 SIM</b> per copiare QNH e quota dal simulatore.</li>
-                    <li><b>✏️ DISEGNO:</b> Lavagna grafica a mano libera con 4 colori e gomma per schizzi di rullaggio o holding.</li>
-                    <li><b>📻 FREQ:</b> Elenca automaticamente in cima i <b>controllori ATC online più vicini</b>, oltre a UNICOM, emergenza, VOR e ILS.</li>
+                    <li><b>📋 ATC PAD:</b> Campi rapidi per <code>SQUAWK</code>, <code>QNH</code>, <code>ALT/FL</code>, <code>HDG</code>, <code>SPEED</code> e <code>NEXT FREQ</code> con sincronizzazione istantanea <b>🔄 SIM</b> dei dati telemetrici.</li>
+                    <li><b>✏️ DISEGNO:</b> Lavagna grafica a mano libera con 4 colori e gomma per appuntare istruzioni di rullaggio o schemi di attesa.</li>
+                    <li><b>📻 FREQ:</b> Elenca in tempo reale le frequenze dei controllori online più vicini, UNICOM (<code>122.800</code>), emergenza (<code>121.500</code>), VOR e ILS.</li>
                 </ul>
             `,
             onEnter: () => {
@@ -354,64 +413,63 @@ function getDemoSteps() {
         },
         {
             target: "#btnToggleMeasure",
-            badge: "PASSO 8 • MISURAZIONE RAPIDA",
-            title: "📏 Righello Tattico (Distanza, Prua & ETE)",
+            badge: "PASSO 10 • RIGHELLO TATTICO",
+            title: "📏 Distanza, Prua Magnetica/Vera & Calcolo ETE",
             body: `
-                <p>Attiva il pulsante <b>📏 Righello</b> oppure usa direttamente il <b>Clic Destro del mouse</b> su due punti qualsiasi della mappa:</p>
+                <p>Misura qualsiasi segmento sulla carta con il pulsante <b>📏 Righello</b> oppure facendo <b>Clic Destro</b> su due punti della mappa:</p>
                 <ul>
-                    <li>Calcola all'istante <b>Distanza (NM e km)</b>, <b>Prua Magnetica e Vera (°M / °T)</b> e il <b>tempo di volo stimato (ETE)</b> alla tua Ground Speed attuale.</li>
-                    <li>Clicca sul badge giallo o premi <b>Esc</b> per rimuovere il righello.</li>
+                    <li>Calcola in tempo reale <b>Distanza (NM e km)</b>, <b>Prua Magnetica e Vera (°M / °T)</b> e il <b>tempo di volo stimato (ETE)</b> in base alla tua Ground Speed.</li>
+                    <li>Clicca sul badge della misura o premi <b>Esc</b> per cancellare la linea.</li>
                 </ul>
             `
         },
         {
             target: "#btnNavlogTop",
-            badge: "PASSO 9 • STRUMENTI DI VOLO",
-            title: "📋 NavLog, Calcolatore Fuel & Logbook SQLite",
+            badge: "PASSO 11 • STRUMENTI DI NAVIGAZIONE",
+            title: "📋 NavLog, Calcolo Carburante & Logbook SQLite",
             body: `
-                <p>Pianificazione pesi/carburante e archivio storico dei tuoi voli:</p>
+                <p>Pianificazione operativa e storico completo dei tuoi voli:</p>
                 <ul>
-                    <li><b>📋 NavLog:</b> Tabella di marcia completa con prue, distanze parziali/totali, tempi ETE/ETA e consumo progressivo.</li>
-                    <li><b>⛽ Fuel & Perf:</b> Calcola Block Fuel, Trip Fuel, contingenza e riserve in base a TAS e consumo orario del tuo aereo.</li>
-                    <li><b>📒 Logbook:</b> Registra automaticamente ogni volo all'atterraggio nel database SQLite locale.</li>
+                    <li><b>📋 NavLog:</b> Tabella di navigazione stampabile con prue, distanze parziali, tempi stimati e consumo progressivo per ogni tratta.</li>
+                    <li><b>⛽ Fuel & Perf:</b> Calcola Block Fuel, Trip Fuel, rullaggio, contingenza e riserve normative secondo le prestazioni del tuo aeromobile.</li>
+                    <li><b>📒 Logbook:</b> Registra automaticamente ogni volo al momento dell'atterraggio nel database SQLite locale.</li>
                 </ul>
             `
         },
         {
             target: "#elevationDrawer",
-            badge: "PASSO 10 • PROFILO VERTICALE & NUVOLE",
-            title: "📉 Profilo VNAV, Top of Descent & Cloud Scanner",
+            badge: "PASSO 12 • PROFILO VNAV & CLOUD SCANNER",
+            title: "📉 Profilo Altimetrico Verticale, ToD & Strati Nubi",
             body: `
-                <p>Il cassetto inferiore mostra la sezione verticale della rotta rispetto al profilo altimetrico del terreno:</p>
+                <p>Il cassetto altimetrico inferiore mostra la rotta rispetto all'orografia del terreno:</p>
                 <ul>
-                    <li><b>Top of Descent (ToD):</b> Calcola e posiziona sulla rotta e sul grafico il punto esatto di inizio discesa (sentiero 3°) e il rateo verticale richiesto (fpm).</li>
-                    <li><b>☁️ CLOUDS Scanner:</b> Seleziona <code>AUTO (ACFT)</code> o <code>FL050–FL300</code> per proiettare gli strati nuvolosi METAR sulla mappa e sul grafico VNAV, con avviso <b>IMC</b> quando voli dentro le nubi.</li>
+                    <li><b>Top of Descent (ToD):</b> Calcola e visualizza sulla rotta e sul grafico il punto ottimale di inizio discesa (sentiero standard a 3°) e la velocità verticale (fpm) richiesta.</li>
+                    <li><b>☁️ CLOUDS Scanner:</b> Seleziona <code>AUTO (ACFT)</code> o quote da <code>FL050–FL300</code> per sezionare gli strati nuvolosi METAR con avvisi luminosi <b>IMC</b> in cabina.</li>
                 </ul>
             `
         },
         {
             target: "#aeroCompassWidget",
-            badge: "PASSO 11 • BUSSOLA, ORIENTAMENTO & TABLET WI-FI",
+            badge: "PASSO 13 • ORIENTAMENTO & TABLET EFB",
             title: "🧭 Rosa dei Venti, Orientamento Mappa & EFB Wi-Fi",
             body: `
-                <p>Controllo totale dell'orientamento mappa e utilizzo multi-schermo:</p>
+                <p>Ergonomia di cabina e sincronizzazione su secondo schermo:</p>
                 <ul>
-                    <li><b>🧭 Rosa dei Venti & Orientamento:</b> Scegli tra <b>Mappa Libera / Nord Su / Aereo Su (Track-Up)</b>; clicca la bussola in qualsiasi momento per riallineare il <b>Nord in Alto (360°)</b>.</li>
-                    <li><b>🌐 Lingua (IT / EN):</b> Commuta istantaneamente tutta l'interfaccia e il tour guidato tra Italiano e Inglese.</li>
-                    <li><b>📱 EFB Wi-Fi:</b> Clicca sul pulsante EFB per mostrare il <b>QR Code</b> e usare AeroGlass-Nav in diretta sul tuo iPad o tablet Android!</li>
+                    <li><b>🧭 Rosa dei Venti:</b> Alterna tra <b>Mappa Libera</b>, <b>Nord Su</b> e <b>Track Up</b>; clicca sulla bussola per ripristinare all'istante il Nord in alto (360°).</li>
+                    <li><b>📱 EFB Wi-Fi:</b> Clicca sul pulsante EFB nella barra superiore per visualizzare indirizzo IP e QR Code: usa AeroGlass-Nav direttamente dal tuo tablet senza cavi né configurazioni.</li>
                 </ul>
             `
         },
         {
-            target: "#mapStyleSelect",
-            badge: "PASSO 12 • SISTEMA MAPPE PRO & FILTRI",
-            title: "🗺️ IFR, VFR, MAP, SAT, Giorno/Notte, Rilievi & VOR/ILS",
+            target: "#btnOpenCredits",
+            badge: "PASSO 14 • CREDITI & COMMUNITY",
+            title: "ℹ️ Finestra Credits Bilingue, Licenza & Link",
             body: `
-                <p>Motore cartografico aeronautico multi-layer:</p>
+                <p>Accedi alle informazioni ufficiali e al supporto del progetto:</p>
                 <ul>
-                    <li><b>🗺️ 4 Viste Dedicate:</b> Seleziona al volo tra <b>IFR</b>, <b>VFR</b>, <b>MAP</b> e <b>SAT</b> con illuminazione <b>☀️ Giorno / 🌙 Notte</b> e livello <b>⛰️ Rilievi</b> (Hillshading).</li>
-                    <li><b>📡 VOR/ILS & ⚙️ Filtri:</b> Visualizza radioassistenze, coni di avvicinamento ILS e filtra gli elementi visibili sulla carta.</li>
-                    <li><b>✈️ Invia a MSFS:</b> Trasmetti il piano di volo attivo direttamente all'avionica del simulatore con un solo clic.</li>
+                    <li><b>ℹ️ Finestra Credits Bilingue:</b> Scheda modale con visualizzazione in inglese o italiano, note di rilascio v1.0.0 e licenza Open Source MIT.</li>
+                    <li><b>✈️ Canali Community:</b> Collegamenti diretti alla pagina Flightsim.to, al server Discord dedicato e al link di supporto Buy Me a Coffee.</li>
+                    <li><b>⚠️ Disclaimer Aeronautico:</b> Avvertenza ufficiale sull'utilizzo esclusivo in simulazione di volo (MSFS 2024).</li>
                 </ul>
             `
         }
@@ -606,7 +664,7 @@ function ensureDemoTourDOM() {
         card.id = 'aeroDemoCard';
         card.innerHTML = `
             <div class="demo-header-row">
-                <span class="demo-step-badge" id="demoStepBadge">PASSO 1 / 13</span>
+                <span class="demo-step-badge" id="demoStepBadge">PASSO 1 / 14</span>
                 <div style="display:flex;gap:6px;">
                     <button class="demo-nav-btn" id="btnDemoLang" style="padding:3px 9px;font-size:11.5px;" onclick="toggleDemoLanguage()" title="Switch Language IT / EN">🌐 EN</button>
                     <button class="demo-nav-btn" id="btnDemoAutoPlay" style="padding:3px 9px;font-size:11.5px;" onclick="toggleDemoAutoPlay()">▶ Auto</button>
@@ -618,7 +676,7 @@ function ensureDemoTourDOM() {
             <div class="demo-dots-row" id="demoStepDots"></div>
             <div class="demo-footer-row">
                 <button class="demo-nav-btn" id="btnDemoPrev" onclick="prevDemoStep()">◀ Indietro</button>
-                <span id="demoStepCounter" style="font-family:Consolas,monospace;font-size:12px;color:#94a3b8;">1 / 13</span>
+                <span id="demoStepCounter" style="font-family:Consolas,monospace;font-size:12px;color:#94a3b8;">1 / 14</span>
                 <button class="demo-nav-btn primary" id="btnDemoNext" onclick="nextDemoStep()">Avanti ▶</button>
             </div>
         `;

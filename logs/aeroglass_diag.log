@@ -1594,3 +1594,6 @@
 [2026-11-19 14:42:10.900] [SIM_LIVE    ] [T:TelemetryPoll] [RAM:98% (31.2/31.8GB) | Commit:62.5/87.8GB] Ricezione coordinate valide ripresa (41.8007, 12.2621).
 [2026-11-19 14:42:30.849] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:96% (30.6/31.8GB) | Commit:61.7/87.8GB] ACFT=FenixA320 IAE SL ALT=14ft GS=0kt POS=(41.8007,12.2621)
 [2026-11-19 14:42:33.141] [SIMCONNECT  ] [T:Thread-102 (execute)] [RAM:96% (30.5/31.8GB) | Commit:61.6/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-19 14:48:01.296] [STARTUP     ] [T:MainThread] [RAM:53% (17.1/31.8GB) | Commit:30.7/87.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-19 14:48:01.773] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:54% (17.2/31.8GB) | Commit:30.7/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-19 14:48:01.794] [SIM_MENU    ] [T:TelemetryPoll] [RAM:54% (17.2/31.8GB) | Commit:30.7/87.8GB] MSFS 2024 in Menu/Caricamento (lat=None) — polling ridotto a 5s.
