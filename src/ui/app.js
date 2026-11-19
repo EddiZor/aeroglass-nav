@@ -1101,15 +1101,54 @@ function toggleThemeMode() {
     applyTheme(currentTheme, true);
 }
 
-// --- GESTIONE CARTOGRAFIA STILE NAVIGRAPH (IFR, VFR, MAP, SAT + GIORNO/NOTTE + RILIEVI) ---
-let currentMapLighting = 'day'; // 'day' o 'night'
+// --- GESTIONE CARTOGRAFIA AD ALTA DEFINIZIONE (100% FREE, ZERO API KEY) ---
+let currentMapStyleKey = 'ifr';
+let currentMapLighting = 'night'; // Default: tema Dark Cockpit ad alta leggibilità
 let reliefOverlayActive = false;
 let reliefLayer = null;
 
+function getAeroTileConfiguration(styleKey) {
+    let url = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+    let maxZ = 19;
+    let sub = 'abc';
+    let attr = '&copy; OpenStreetMap contributors';
+
+    if (styleKey === 'vfr') {
+        // OpenTopoMap VFR (gratuita e senza API key)
+        url = 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png';
+        sub = 'abc';
+        maxZ = 17;
+        attr = '&copy; OpenTopoMap';
+    } else if (styleKey === 'topo') {
+        // Esri ArcGIS World Topo Map (gratuita e senza API key)
+        url = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}';
+        sub = 'abc';
+        attr = 'Tiles &copy; Esri';
+    } else if (styleKey === 'sat') {
+        // Esri ArcGIS World Imagery Satellitare HD (gratuita e senza API key)
+        url = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+        sub = 'abc';
+        attr = 'Tiles &copy; Esri';
+    } else {
+        // IFR / Standard: OpenStreetMap Tile Server ufficiale aperto
+        url = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+        sub = 'abc';
+        maxZ = 19;
+        attr = '&copy; OpenStreetMap contributors';
+    }
+
+    return { url, maxZ, sub, attr };
+}
+
 function switchMapStyle(styleKey) {
+    if (!styleKey) styleKey = 'ifr';
+    currentMapStyleKey = styleKey;
+
     const mapEl = document.getElementById('map');
     if (!mapEl || typeof map === 'undefined' || !map) return;
 
+    // Rimuove qualsiasi filtro dal contenitore principale per preservare le linee vettoriali e i marker
+    mapEl.style.filter = '';
     mapEl.className = mapEl.className.replace(/map-(dark|light|vfr|sat|map|topo)-mode/g, '').trim();
     mapEl.classList.add(`map-${styleKey}-mode`);
 
@@ -1117,38 +1156,15 @@ function switchMapStyle(styleKey) {
         map.removeLayer(currentBaseTileLayer);
     }
 
-    let tileUrl = '';
-    let attr = '&copy; OpenStreetMap contributors';
-    let maxZ = 19;
-
-    if (styleKey === 'ifr') {
-        tileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-    } else if (styleKey === 'vfr') {
-        tileUrl = 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png';
-        maxZ = 17;
-        attr = '&copy; OpenTopoMap';
-    } else if (styleKey === 'topo') {
-        // Quinta voce dedicata: Cartografia Topografica e Aeroportuale ArcGIS Esri World Topo Map
-        tileUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}';
-        maxZ = 19;
-        attr = 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ, TomTom';
-    } else if (styleKey === 'sat') {
-        tileUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
-        maxZ = 19;
-        attr = 'Tiles &copy; Esri';
-    } else {
-        tileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-    }
-
-    currentBaseTileLayer = L.tileLayer(tileUrl, {
-        maxZoom: maxZ,
-        subdomains: 'abc',
-        attribution: attr
+    const cfg = getAeroTileConfiguration(currentMapStyleKey);
+    currentBaseTileLayer = L.tileLayer(cfg.url, {
+        maxZoom: cfg.maxZ,
+        subdomains: cfg.sub,
+        attribution: cfg.attr
     }).addTo(map);
 
     applyMapLightingState();
 }
-
 
 function toggleMapLighting() {
     currentMapLighting = (currentMapLighting === 'day') ? 'night' : 'day';
@@ -1163,20 +1179,46 @@ function applyMapLightingState() {
 
     if (!mapEl) return;
 
-    mapEl.classList.remove('map-light-mode', 'map-night-mode');
+    // Assicura che l'elemento principale #map non abbia MAI filtri distorsivi
+    mapEl.style.filter = '';
+
+    const tilePane = mapEl.querySelector('.leaflet-tile-pane');
+    if (tilePane) {
+        const vals = (typeof getActiveFilterValues === 'function')
+            ? getActiveFilterValues()
+            : { b: 1.0, c: 1.0, s: 1.0 };
+
+        let filterStr = '';
+        if (currentMapStyleKey === 'ifr' || currentMapStyleKey === 'map') {
+            if (currentMapLighting === 'night') {
+                filterStr = `invert(100%) hue-rotate(180deg) brightness(${vals.b}) contrast(${vals.c}) saturate(${vals.s})`;
+            } else {
+                filterStr = `brightness(${vals.b}) contrast(${vals.c}) saturate(${vals.s})`;
+            }
+        } else {
+            filterStr = `brightness(${vals.b}) contrast(${vals.c}) saturate(${vals.s})`;
+        }
+
+        tilePane.style.setProperty('filter', filterStr, 'important');
+    }
+
+    // Se la maschera dei cursori è aperta, aggiorna la posizione dei cursori per la nuova mappa/luce
+    const modal = document.getElementById('mapFilterCalibratorModal');
+    if (modal && modal.style.display === 'flex' && typeof syncCalibratorSlidersFromProfile === 'function') {
+        syncCalibratorSlidersFromProfile();
+    }
 
     if (currentMapLighting === 'night') {
+        mapEl.classList.remove('map-light-mode');
         mapEl.classList.add('map-night-mode');
-        mapEl.style.filter = 'brightness(0.65) contrast(1.25) saturate(0.85) invert(0.92) hue-rotate(180deg)';
         if (lbl) lbl.innerText = isEn ? 'Night' : 'Notte';
         if (btn) {
             btn.innerHTML = '🌙 <span id="lblMapLighting">' + (isEn ? 'Night' : 'Notte') + '</span>';
             btn.classList.add('active');
         }
     } else {
+        mapEl.classList.remove('map-night-mode');
         mapEl.classList.add('map-light-mode');
-        // Luminosità giorno abbassata e contrasto ottimizzato per non abbagliare in cabina
-        mapEl.style.filter = 'brightness(0.52) contrast(1.30) saturate(0.85)';
         if (lbl) lbl.innerText = isEn ? 'Day' : 'Giorno';
         if (btn) {
             btn.innerHTML = '☀️ <span id="lblMapLighting">' + (isEn ? 'Day' : 'Giorno') + '</span>';
@@ -4577,14 +4619,78 @@ async function openGeminiWeb() {
 
 window.addEventListener('pywebviewready', initAeroGlassApp);
 
-// --- 🎛️ STRUMENTO INTERATTIVO DI TARATURA FILTRI MAPPA ---
+// --- 🎛️ SISTEMA PROFILI DI TARATURA FILTRI (INDIPENDENTE PER MAPPA & GIORNO/NOTTE) ---
+const DEFAULT_MAP_FILTERS = {
+    'ifr_night':  { b: 0.88, c: 1.18, s: 0.92 },
+    'ifr_day':    { b: 1.00, c: 1.02, s: 1.00 },
+    'vfr_day':    { b: 1.00, c: 1.05, s: 1.00 },
+    'vfr_night':  { b: 0.72, c: 1.20, s: 0.85 },
+    'topo_day':   { b: 1.00, c: 1.05, s: 1.00 },
+    'topo_night': { b: 0.72, c: 1.20, s: 0.85 },
+    'sat_day':    { b: 1.00, c: 1.05, s: 1.00 },
+    'sat_night':  { b: 0.65, c: 1.15, s: 0.92 },
+    'map_day':    { b: 1.00, c: 1.02, s: 1.00 },
+    'map_night':  { b: 0.88, c: 1.18, s: 0.92 }
+};
+
+let customMapFilters = {};
+try {
+    const saved = localStorage.getItem('aeroglass_map_filters_profile');
+    if (saved) customMapFilters = JSON.parse(saved);
+} catch (e) {}
+
+function getActiveMapProfileKey() {
+    const mapSelect = document.getElementById('mapStyleSelect');
+    const style = (mapSelect && mapSelect.value) ? mapSelect.value.toLowerCase() : (currentMapStyleKey || 'ifr').toLowerCase();
+    const light = (currentMapLighting || 'night').toLowerCase();
+    return `${style}_${light}`;
+}
+
+function getActiveFilterValues() {
+    const key = getActiveMapProfileKey();
+    const def = DEFAULT_MAP_FILTERS[key] || { b: 1.00, c: 1.00, s: 1.00 };
+    const cur = customMapFilters[key] || {};
+    return {
+        b: cur.b !== undefined ? cur.b : def.b,
+        c: cur.c !== undefined ? cur.c : def.c,
+        s: cur.s !== undefined ? cur.s : def.s
+    };
+}
+
+function syncCalibratorSlidersFromProfile() {
+    const key = getActiveMapProfileKey();
+    const vals = getActiveFilterValues();
+
+    const bSlider = document.getElementById('sliderBrightness');
+    const cSlider = document.getElementById('sliderContrast');
+    const sSlider = document.getElementById('sliderSaturate');
+
+    if (bSlider) bSlider.value = vals.b;
+    if (cSlider) cSlider.value = vals.c;
+    if (sSlider) sSlider.value = vals.s;
+
+    const bTxt = document.getElementById('valCalBrightness');
+    const cTxt = document.getElementById('valCalContrast');
+    const sTxt = document.getElementById('valCalSaturate');
+
+    if (bTxt) bTxt.textContent = parseFloat(vals.b).toFixed(2);
+    if (cTxt) cTxt.textContent = parseFloat(vals.c).toFixed(2);
+    if (sTxt) sTxt.textContent = parseFloat(vals.s).toFixed(2);
+
+    // Aggiorna intestazione del modal con la mappa attiva
+    const titleEl = document.querySelector('#mapFilterCalibratorModal h3') || document.querySelector('#mapFilterCalibratorModal .modal-title');
+    if (titleEl) {
+        titleEl.innerHTML = `🎛️ TARATURA: <span style="color:#00d2ff;">${(currentMapStyleKey || 'IFR').toUpperCase()} (${(currentMapLighting || 'NOTTE').toUpperCase()})</span>`;
+    }
+}
+
 function toggleFilterCalibrator() {
     const modal = document.getElementById('mapFilterCalibratorModal');
     if (!modal) return;
     const isVisible = (modal.style.display === 'flex');
     modal.style.display = isVisible ? 'none' : 'flex';
     if (!isVisible) {
-        applyInteractiveFilters();
+        syncCalibratorSlidersFromProfile();
     }
 }
 
@@ -4592,39 +4698,47 @@ function applyInteractiveFilters() {
     const bSlider = document.getElementById('sliderBrightness');
     const cSlider = document.getElementById('sliderContrast');
     const sSlider = document.getElementById('sliderSaturate');
-    
     if (!bSlider || !cSlider || !sSlider) return;
 
-    const bVal = parseFloat(bSlider.value).toFixed(2);
-    const cVal = parseFloat(cSlider.value).toFixed(2);
-    const sVal = parseFloat(sSlider.value).toFixed(2);
+    const bVal = parseFloat(bSlider.value);
+    const cVal = parseFloat(cSlider.value);
+    const sVal = parseFloat(sSlider.value);
 
-    document.getElementById('valCalBrightness').textContent = bVal;
-    document.getElementById('valCalContrast').textContent = cVal;
-    document.getElementById('valCalSaturate').textContent = sVal;
+    const bTxt = document.getElementById('valCalBrightness');
+    const cTxt = document.getElementById('valCalContrast');
+    const sTxt = document.getElementById('valCalSaturate');
 
-    const snippet = `brightness(${bVal}) contrast(${cVal}) saturate(${sVal})`;
-    const codeBox = document.getElementById('cssOutputSnippet');
-    if (codeBox) codeBox.textContent = snippet;
+    if (bTxt) bTxt.textContent = bVal.toFixed(2);
+    if (cTxt) cTxt.textContent = cVal.toFixed(2);
+    if (sTxt) sTxt.textContent = sVal.toFixed(2);
 
+    const key = getActiveMapProfileKey();
+    customMapFilters[key] = { b: bVal, c: cVal, s: sVal };
+
+    try {
+        localStorage.setItem('aeroglass_map_filters_profile', JSON.stringify(customMapFilters));
+    } catch (e) {}
+
+    // Applica istantaneamente il filtro forzando il bypass delle regole CSS con !important
     const mapEl = document.getElementById('map');
-    if (mapEl) {
-        mapEl.classList.add('map-calibrating', 'map-light-mode');
-        const tilePane = mapEl.querySelector('.leaflet-tile-pane');
-        if (tilePane) {
-            // Usiamo setProperty con 'important' per sovrascrivere la regola CSS fissa
-            tilePane.style.setProperty('filter', `brightness(${bVal}) contrast(${cVal}) saturate(${sVal})`, 'important');
-        }
+    const tilePane = mapEl ? mapEl.querySelector('.leaflet-tile-pane') : null;
+    if (tilePane) {
+        const isIfrNight = (key === 'ifr_night' || key === 'map_night');
+        let filterStr = isIfrNight
+            ? `invert(100%) hue-rotate(180deg) brightness(${bVal}) contrast(${cVal}) saturate(${sVal})`
+            : `brightness(${bVal}) contrast(${cVal}) saturate(${sVal})`;
+
+        tilePane.style.setProperty('filter', filterStr, 'important');
     }
 }
 
-function copyFilterSnippet() {
-    const codeBox = document.getElementById('cssOutputSnippet');
-    if (!codeBox) return;
-    const textToCopy = `filter: ${codeBox.textContent} !important;`;
-    navigator.clipboard.writeText(textToCopy).then(() => {
-        alert("Codice CSS copiato negli appunti! Incollalo in style.css dentro #map.map-light-mode .leaflet-tile-pane");
-    }).catch(err => {
-        console.error("Errore copia appunti:", err);
-    });
+function resetActiveMapFilters() {
+    const key = getActiveMapProfileKey();
+    const def = DEFAULT_MAP_FILTERS[key] || { b: 1.00, c: 1.00, s: 1.00 };
+    delete customMapFilters[key];
+    try {
+        localStorage.setItem('aeroglass_map_filters_profile', JSON.stringify(customMapFilters));
+    } catch (e) {}
+    syncCalibratorSlidersFromProfile();
+    applyMapLightingState();
 }
