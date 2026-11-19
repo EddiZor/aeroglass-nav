@@ -165,8 +165,321 @@ const SYNTHETIC_TOOLTIPS = {
     btnOpenCredits: {
         it: "ℹ️ Credits, Licenza, Link Community e Disclaimer",
         en: "ℹ️ Credits, License, Community Links & Disclaimer"
+    },
+    btnToggleRadar: {
+        it: "🌧️ Radar Meteo Live: Mostra/nascondi precipitazioni e temporali in tempo reale (RainViewer)",
+        en: "🌧️ Live Weather Radar: Toggle real-time rain and storm precipitation radar (RainViewer)"
     }
 };
+
+// ==============================================================================
+// MODULO RADAR METEO PRECIPITAZIONI LIVE (RAINVIEWER API V2)
+// ==============================================================================
+let weatherRadarState = {
+    enabled: false,
+    host: "https://tilecache.rainviewer.com",
+    frames: [],
+    currentFrameIdx: -1,
+    layer: null,
+    isPlaying: false,
+    timer: null,
+    refreshInterval: null
+};
+
+function injectWeatherRadarStyles() {
+    if (document.getElementById('weatherRadarStyles')) return;
+    const s = document.createElement('style');
+    s.id = 'weatherRadarStyles';
+    s.textContent = `
+        #weatherRadarBar {
+            position: fixed;
+            bottom: 64px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            background: rgba(15, 23, 42, 0.92);
+            border: 1px solid rgba(56, 189, 248, 0.45);
+            border-radius: 999px;
+            padding: 4px 14px;
+            display: none;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 6px 24px rgba(0, 0, 0, 0.65);
+            backdrop-filter: blur(6px);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            color: #f8fafc;
+            user-select: none;
+        }
+        #btnRadarPlay {
+            background: rgba(56, 189, 248, 0.2);
+            border: 1px solid rgba(56, 189, 248, 0.6);
+            color: #38bdf8;
+            border-radius: 50%;
+            width: 26px;
+            height: 26px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            padding: 0;
+        }
+        #btnRadarPlay:hover {
+            background: rgba(56, 189, 248, 0.35);
+            transform: scale(1.08);
+        }
+        #radarTimeSlider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 140px;
+            height: 4px;
+            background: rgba(148, 163, 184, 0.35);
+            border-radius: 2px;
+            outline: none;
+            cursor: pointer;
+        }
+        #radarTimeSlider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #38bdf8;
+            box-shadow: 0 0 8px #38bdf8;
+            cursor: pointer;
+        }
+        #radarTimeLabel {
+            font-size: 11.5px;
+            font-family: 'Consolas', monospace;
+            font-weight: 700;
+            color: #38bdf8;
+            min-width: 95px;
+            text-align: right;
+        }
+        #btnToggleRadar {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            border-radius: 7px;
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            color: #e2e8f0;
+            font-size: 11.5px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.15s ease;
+        }
+        #btnToggleRadar:hover {
+            background: rgba(56, 189, 248, 0.15);
+            border-color: rgba(56, 189, 248, 0.5);
+            color: #38bdf8;
+        }
+        #btnToggleRadar.btn-radar-active {
+            background: rgba(56, 189, 248, 0.28) !important;
+            border-color: #38bdf8 !important;
+            color: #38bdf8 !important;
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.45) !important;
+        }
+    `;
+    document.head.appendChild(s);
+}
+
+function ensureWeatherRadarUI() {
+    injectWeatherRadarStyles();
+    if (document.getElementById('weatherRadarBar')) return;
+
+    const bar = document.createElement('div');
+    bar.id = 'weatherRadarBar';
+    bar.innerHTML = `
+        <span style="font-size:11px;font-weight:700;letter-spacing:0.5px;color:#94a3b8;display:flex;align-items:center;gap:4px;">
+            🌧️ <span style="color:#e2e8f0;">RADAR</span>
+        </span>
+        <button id="btnRadarPlay" type="button" title="Play / Pause Animazione" onclick="toggleRadarPlayback()">▶</button>
+        <input id="radarTimeSlider" type="range" min="0" max="0" value="0" step="1" oninput="onRadarSliderChange(this.value)">
+        <span id="radarTimeLabel">--:-- UTC</span>
+    `;
+    document.body.appendChild(bar);
+}
+
+function formatRadarTime(timestamp) {
+    if (!timestamp) return '--:-- UTC';
+    const d = new Date(timestamp * 1000);
+    const hh = String(d.getUTCHours()).padStart(2, '0');
+    const mm = String(d.getUTCMinutes()).padStart(2, '0');
+    return `${hh}:${mm} UTC`;
+}
+
+async function loadRainViewerData() {
+    try {
+        const resp = await fetch("https://api.rainviewer.com/public/weather-maps.json");
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+
+        weatherRadarState.host = data.host || "https://tilecache.rainviewer.com";
+        const past = (data.radar && Array.isArray(data.radar.past)) ? data.radar.past : [];
+        const nowcast = (data.radar && Array.isArray(data.radar.nowcast)) ? data.radar.nowcast : [];
+
+        // Considera gli ultimi 60-70 minuti di radar (ultimi 6-7 frame passati) + 1 frame nowcast se presente
+        const recentPast = past.slice(-7);
+        const combined = [...recentPast, ...nowcast.slice(0, 1)];
+
+        if (combined.length === 0) return false;
+
+        weatherRadarState.frames = combined;
+        const slider = document.getElementById('radarTimeSlider');
+        if (slider) {
+            slider.max = combined.length - 1;
+            // Di default mostra il frame più recente (LIVE)
+            slider.value = combined.length - 1;
+        }
+
+        setRadarFrame(combined.length - 1);
+        return true;
+    } catch (err) {
+        console.warn("[WeatherRadar] Errore caricamento API RainViewer:", err);
+        return false;
+    }
+}
+
+function setRadarFrame(idx) {
+    if (!weatherRadarState.frames || weatherRadarState.frames.length === 0) return;
+    idx = Math.max(0, Math.min(idx, weatherRadarState.frames.length - 1));
+    weatherRadarState.currentFrameIdx = idx;
+
+    const frame = weatherRadarState.frames[idx];
+    const tileUrl = `${weatherRadarState.host}${frame.path}/256/{z}/{x}/{y}/2/1_1.png`;
+
+    if (weatherRadarState.layer && typeof map !== 'undefined' && map) {
+        weatherRadarState.layer.setUrl(tileUrl);
+    } else if (typeof map !== 'undefined' && map) {
+        weatherRadarState.layer = L.tileLayer(tileUrl, {
+            tileSize: 256,
+            opacity: 0.68,
+            minZoom: 2,
+            maxZoom: 18,
+            maxNativeZoom: 7,
+            zIndex: 350
+        }).addTo(map);
+    }
+
+    const slider = document.getElementById('radarTimeSlider');
+    if (slider) slider.value = idx;
+
+    const label = document.getElementById('radarTimeLabel');
+    if (label) {
+        const isLatest = (idx === weatherRadarState.frames.length - 1);
+        const diffMin = Math.round((frame.time - (Date.now() / 1000)) / 60);
+        let tag = isLatest ? " (LIVE)" : (diffMin < 0 ? ` (${diffMin}m)` : ` (+${diffMin}m)`);
+        label.innerHTML = `${formatRadarTime(frame.time)}<span style="font-size:9.5px;opacity:0.8;">${tag}</span>`;
+    }
+}
+
+function onRadarSliderChange(val) {
+    stopRadarPlayback();
+    setRadarFrame(parseInt(val, 10));
+}
+
+function toggleRadarPlayback() {
+    if (weatherRadarState.isPlaying) {
+        stopRadarPlayback();
+    } else {
+        startRadarPlayback();
+    }
+}
+
+function startRadarPlayback() {
+    if (weatherRadarState.frames.length <= 1) return;
+    weatherRadarState.isPlaying = true;
+    const playBtn = document.getElementById('btnRadarPlay');
+    if (playBtn) playBtn.innerHTML = '⏸';
+
+    if (weatherRadarState.timer) clearInterval(weatherRadarState.timer);
+    weatherRadarState.timer = setInterval(() => {
+        let nextIdx = weatherRadarState.currentFrameIdx + 1;
+        if (nextIdx >= weatherRadarState.frames.length) nextIdx = 0;
+        setRadarFrame(nextIdx);
+    }, 750);
+}
+
+function stopRadarPlayback() {
+    weatherRadarState.isPlaying = false;
+    const playBtn = document.getElementById('btnRadarPlay');
+    if (playBtn) playBtn.innerHTML = '▶';
+    if (weatherRadarState.timer) {
+        clearInterval(weatherRadarState.timer);
+        weatherRadarState.timer = null;
+    }
+}
+
+async function toggleWeatherRadar() {
+    ensureWeatherRadarUI();
+    const btn = document.getElementById('btnToggleRadar');
+    const bar = document.getElementById('weatherRadarBar');
+
+    weatherRadarState.enabled = !weatherRadarState.enabled;
+
+    if (btn) btn.classList.toggle('btn-radar-active', weatherRadarState.enabled);
+    if (bar) bar.style.display = weatherRadarState.enabled ? 'flex' : 'none';
+
+    if (weatherRadarState.enabled) {
+        const ok = await loadRainViewerData();
+        if (!ok && bar) bar.style.display = 'none';
+
+        if (weatherRadarState.refreshInterval) clearInterval(weatherRadarState.refreshInterval);
+        weatherRadarState.refreshInterval = setInterval(loadRainViewerData, 10 * 60 * 1000);
+    } else {
+        stopRadarPlayback();
+        if (weatherRadarState.refreshInterval) {
+            clearInterval(weatherRadarState.refreshInterval);
+            weatherRadarState.refreshInterval = null;
+        }
+        if (weatherRadarState.layer && typeof map !== 'undefined' && map) {
+            map.removeLayer(weatherRadarState.layer);
+            weatherRadarState.layer = null;
+        }
+    }
+}
+
+function ensureWeatherRadarTopBarButton() {
+    if (document.getElementById('btnToggleRadar')) return;
+    const pillsGroup = document.querySelector('.top-pills-group');
+    if (!pillsGroup) return;
+
+    const btn = document.createElement('button');
+    btn.id = 'btnToggleRadar';
+    btn.type = 'button';
+    btn.className = 'pill-btn';
+    btn.style.display = 'inline-flex';
+    btn.style.alignItems = 'center';
+    btn.style.gap = '5px';
+    btn.innerHTML = '🌧️ <span>Radar</span>';
+    btn.onclick = () => toggleWeatherRadar();
+
+    // Inserisce il pulsante Radar prima del tasto Credits
+    const creditsBtn = document.getElementById('btnOpenCredits');
+    if (creditsBtn && creditsBtn.parentNode === pillsGroup) {
+        pillsGroup.insertBefore(btn, creditsBtn);
+    } else {
+        pillsGroup.appendChild(btn);
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        setTimeout(() => {
+            ensureWeatherRadarTopBarButton();
+            ensureWeatherRadarUI();
+        }, 260);
+    });
+} else {
+    setTimeout(() => {
+        ensureWeatherRadarTopBarButton();
+        ensureWeatherRadarUI();
+    }, 260);
+}
 
 // --- FINESTRA CREDITS (BILINGUE EN/IT CON DEFAULT INGLESE E SCROLL) ---
 const CREDITS_LINKS = {
