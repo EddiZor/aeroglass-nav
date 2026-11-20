@@ -1,7 +1,7 @@
 # 🩺 AeroGlass-Nav - Diagnostic & Health Report
-**Data e Ora Test:** 2026-11-20 10:43:49  
+**Data e Ora Test:** 2026-11-20 14:45:32  
 **Ambiente:** Python 3.14.5 (win32)  
-**Tempo di Esecuzione:** `0.64s`  
+**Tempo di Esecuzione:** `0.52s`  
 **Punteggio Salute:** `95.7%`  
 
 ---
@@ -17,7 +17,7 @@
 | **Database** | `Tabella user_waypoints` | ✅ PASS | OK (0 record) |
 | **Database** | `Tabella flight_history` | ✅ PASS | OK (0 record) |
 | **Database** | `Tabella settings` | ✅ PASS | OK (7 record) |
-| **Database** | `Tabella chart_overlays` | ✅ PASS | OK (0 record) |
+| **Database** | `Tabella chart_overlays` | ✅ PASS | OK (6 record) |
 | **Database** | `Tabella nav_fixes` | ✅ PASS | OK (20 record) |
 | **Database** | `Tabella airway_segments` | ✅ PASS | OK (11 record) |
 | **Database** | `Tabella airport_ground_cache` | ✅ PASS | OK (38 record) |
@@ -25,10 +25,10 @@
 | **Database** | `Indice idx_world_apt_coords` | ✅ PASS | Indicizzato |
 | **Database** | `Indice idx_world_rwy_apt` | ✅ PASS | Indicizzato |
 | **Routing** | `Modulo router.py` | ✅ PASS | Importazione riuscita |
-| **Routing** | `LIPZ -> LIPB (IFR_LOW)` | ✅ PASS | 5 fix in 1.7ms: CHI VIC ADOSA MEGAG BZO |
+| **Routing** | `LIPZ -> LIPB (IFR_LOW)` | ✅ PASS | 5 fix in 1.5ms: CHI VIC ADOSA MEGAG BZO |
 | **Routing** | `LIPD -> LIRF (IFR_HIGH)` | ⚠️ WARN | 0 fix (corridoio non coperto dal seed aerovie attuale) |
 | **Routing** | `LIPZ -> LITY (VFR)` | ⚠️ WARN | 0 fix (corridoio non coperto dal seed aerovie attuale) |
-| **Charts** | `Libreria pypdfium2` | ✅ PASS | Installata (vattiva) |
+| **Charts** | `Librerie Rendering (pypdfium2 + Pillow)` | ✅ PASS | pypdfium2 vattiva | Pillow v13.0.0 |
 | **Charts** | `Auto-Bounds Preset Piste` | ✅ PASS | Verificati 6 scali chiave (LIPZ, LIPD, LIKL, LITY, LIPB, LIRF) |
 | **Charts** | `Cache Directory Carte` | ✅ PASS | Percorso: C:\Users\zorzi\.aeroglass_nav\charts_cache |
 | **API Backend** | `resolve_icao('LIPZ')` | ✅ PASS | Coord: 45.505, 12.352 |

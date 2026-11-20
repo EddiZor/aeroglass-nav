@@ -201,7 +201,7 @@ function injectWeatherRadarStyles() {
 
         #weatherRadarBar {
             position: fixed;
-            bottom: 64px;
+            bottom: 140px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 9999;
@@ -217,6 +217,7 @@ function injectWeatherRadarStyles() {
             font-family: 'Segoe UI', system-ui, sans-serif;
             color: #f8fafc;
             user-select: none;
+            transition: bottom 0.25s ease;
         }
         #btnRadarPlay {
             background: rgba(56, 189, 248, 0.2);
@@ -370,7 +371,12 @@ function setRadarFrame(idx) {
             maxZoom: 18,
             maxNativeZoom: 7,
             zIndex: 350
-        }).addTo(map);
+        });
+        // Se il CDN RainViewer va in errore o rate-limit, ferma l'animazione per non intasare la rete
+        weatherRadarState.layer.on('tileerror', () => {
+            if (weatherRadarState.isPlaying) stopRadarPlayback();
+        });
+        weatherRadarState.layer.addTo(map);
     }
 
     const slider = document.getElementById('radarTimeSlider');
@@ -409,7 +415,7 @@ function startRadarPlayback() {
         let nextIdx = weatherRadarState.currentFrameIdx + 1;
         if (nextIdx >= weatherRadarState.frames.length) nextIdx = 0;
         setRadarFrame(nextIdx);
-    }, 750);
+    }, 1800);
 }
 
 function stopRadarPlayback() {
@@ -1097,8 +1103,9 @@ async function applyThemeMode(mode, persist = true) {
 }
 
 function toggleThemeMode() {
-    currentTheme = (currentTheme === 'dark') ? 'light' : 'dark';
-    applyTheme(currentTheme, true);
+    const modes = ['dark', 'night', 'day'];
+    const nextIdx = (modes.indexOf(currentThemeMode) + 1) % modes.length;
+    applyThemeMode(modes[nextIdx], true);
 }
 
 // --- GESTIONE CARTOGRAFIA AD ALTA DEFINIZIONE (100% FREE, ZERO API KEY) ---
@@ -1514,11 +1521,11 @@ function findNearestAirportAtCenter(lat, lon) {
     }
     if (typeof airportsData !== 'undefined' && Array.isArray(airportsData)) {
         let closest = null;
-        let minWeightedDist = 0.085;
+        let minWeightedDist = 0.18;
         for (const apt of airportsData) {
             if (!apt.icao || apt.lat === undefined || apt.lon === undefined) continue;
             const rawDist = Math.hypot(lat - apt.lat, lon - apt.lon);
-            if (rawDist > 0.085) continue;
+            if (rawDist > 0.18) continue;
             // Dà priorità agli scali principali/medi ed evita che piccoli eliporti con trattino (es. IT-0012) rubino il focus
             let weight = 1.0;
             if (apt.icao.includes('-')) continue;
@@ -1646,7 +1653,7 @@ async function evaluateAirportGroundMap() {
     const badge = document.getElementById('aptGroundBadge');
     const badgeName = document.getElementById('aptGroundName');
 
-    if (zoom < 12.5) {
+    if (zoom < 11.0) {
         if (lastRenderedGroundKey !== null) {
             groundLayerGroup.clearLayers();
             lastRenderedGroundKey = null;
@@ -1696,20 +1703,36 @@ async function evaluateAirportGroundMap() {
         return;
     }
 
-    if (window.pywebview && window.pywebview.api && window.pywebview.api.get_airport_ground_layout) {
+    if (window.pywebview && window.pywebview.api) {
         const targetIcao = nearApt.icao;
         _groundFetchInFlight = targetIcao;
         try {
-            const res = await window.pywebview.api.get_airport_ground_layout(targetIcao);
+            let ly = null;
+            if (window.pywebview.api.get_airport_ground_layout) {
+                const res = await window.pywebview.api.get_airport_ground_layout(targetIcao);
+                if (res && res.success && res.layout) {
+                    ly = res.layout;
+                }
+            }
+
+            // Fallback: se SQLite non ha le taxiway salvate, interroga direttamente Overpass OSM
+            if (!ly || !ly.taxiways || ly.taxiways.length === 0) {
+                if (badgeName) badgeName.innerText = `⏳ Download dati Ground OSM (${targetIcao})...`;
+                const osmLayout = await fetchOsmGroundFromBrowser(targetIcao, nearApt.lat, nearApt.lon, nearApt.name, ly ? ly.runways : []);
+                if (osmLayout) {
+                    ly = osmLayout;
+                    if (window.pywebview.api.save_airport_ground_layout) {
+                        try { window.pywebview.api.save_airport_ground_layout(targetIcao, JSON.stringify(osmLayout)); } catch(e) {}
+                    }
+                }
+            }
             _groundFetchInFlight = null;
-            if (res && res.success && res.layout) {
-                const ly = res.layout;
+
+            if (ly) {
                 lastRenderedGroundKey = targetIcao;
                 if (badgeName) badgeName.innerText = `${targetIcao} - ${nearApt.name || ly.name || 'GROUND CHART'}`;
                 renderCustomAirportLayout(ly);
 
-                // Se il layout nel DB SQLite non ha i nomi (ref) sulle taxiway (es. LIRF),
-                // recupera in background i nomi reali da OSM e li abbina geometricamente
                 const realRefsCount = (ly.taxiways || []).filter(t => t.ref && !t._autoRef && String(t.ref).trim() !== '').length;
                 if ((ly.taxiways || []).length > 0 && realRefsCount === 0) {
                     enrichLayoutTaxiwayRefsFromOsm(targetIcao, nearApt.lat, nearApt.lon, ly);
@@ -4271,9 +4294,11 @@ function toggleDrawer() {
         if (canvasBox) canvasBox.style.display = 'none';
     }
 
+    const radarBar = document.getElementById('weatherRadarBar');
     if (arrow) arrow.innerText = drawerOpen ? '▼' : '▲';
     if (infoBar) infoBar.style.bottom = drawerOpen ? '134px' : '56px';
     if (sidebar) sidebar.style.bottom = drawerOpen ? '134px' : '56px';
+    if (radarBar) radarBar.style.bottom = drawerOpen ? '140px' : '64px';
 }
 
 function applyTranslations() {

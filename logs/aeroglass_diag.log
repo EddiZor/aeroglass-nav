@@ -1756,3 +1756,57 @@
 [2026-11-20 14:23:46.948] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:64% (20.5/31.8GB) | Commit:31.4/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
 [2026-11-20 14:23:46.964] [SIM_MENU    ] [T:TelemetryPoll] [RAM:64% (20.5/31.8GB) | Commit:31.4/87.8GB] MSFS 2024 in Menu/Caricamento (lat=None) — polling ridotto a 5s.
 [2026-11-20 14:25:30.211] [SIMCONNECT  ] [T:Thread-146 (execute)] [RAM:64% (20.6/31.8GB) | Commit:32.0/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-20 14:37:24.090] [STARTUP     ] [T:MainThread] [RAM:65% (20.9/31.8GB) | Commit:31.6/87.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-20 14:37:24.577] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:65% (21.0/31.8GB) | Commit:31.6/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-20 14:37:24.594] [SIM_MENU    ] [T:TelemetryPoll] [RAM:65% (21.0/31.8GB) | Commit:31.6/87.8GB] MSFS 2024 in Menu/Caricamento (lat=None) — polling ridotto a 5s.
+[2026-11-20 14:39:03.412] [SIMCONNECT  ] [T:Thread-138 (execute)] [RAM:68% (21.7/31.8GB) | Commit:32.8/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-20 14:39:56.597] [STARTUP     ] [T:MainThread] [RAM:66% (21.0/31.8GB) | Commit:31.6/87.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-20 14:39:57.095] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:66% (21.1/31.8GB) | Commit:31.7/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-20 14:39:57.097] [SIM_MENU    ] [T:TelemetryPoll] [RAM:66% (21.1/31.8GB) | Commit:31.7/87.8GB] MSFS 2024 in Menu/Caricamento (lat=None) — polling ridotto a 5s.
+[2026-11-20 14:40:15.350] [SIMCONNECT  ] [T:Thread-52 (execute)] [RAM:67% (21.5/31.8GB) | Commit:32.4/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-20 14:40:29.896] [STARTUP     ] [T:MainThread] [RAM:66% (21.1/31.8GB) | Commit:31.7/87.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-20 14:40:30.383] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:66% (21.1/31.8GB) | Commit:31.7/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-20 14:40:30.399] [SIM_MENU    ] [T:TelemetryPoll] [RAM:66% (21.1/31.8GB) | Commit:31.7/87.8GB] MSFS 2024 in Menu/Caricamento (lat=None) — polling ridotto a 5s.
+[2026-11-20 14:41:20.055] [SIMCONNECT  ] [T:Thread-83 (execute)] [RAM:67% (21.4/31.8GB) | Commit:32.7/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-20 14:41:58.841] [STARTUP     ] [T:MainThread] [RAM:65% (20.9/31.8GB) | Commit:31.7/87.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-20 14:41:59.329] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:65% (20.9/31.8GB) | Commit:31.7/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-20 14:41:59.334] [SIM_MENU    ] [T:TelemetryPoll] [RAM:65% (20.9/31.8GB) | Commit:31.7/87.8GB] MSFS 2024 in Menu/Caricamento (lat=None) — polling ridotto a 5s.
+[2026-11-20 14:42:10.024] [SIMCONNECT  ] [T:Thread-44 (execute)] [RAM:68% (21.7/31.8GB) | Commit:33.0/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-20 14:45:32.245] [STARTUP     ] [T:MainThread] [RAM:66% (21.0/31.8GB) | Commit:31.6/87.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-20 14:46:25.715] [STARTUP     ] [T:MainThread] [RAM:67% (21.6/31.8GB) | Commit:32.4/87.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-20 15:18:36.145] [STARTUP     ] [T:MainThread] [RAM:87% (27.9/31.8GB) | Commit:63.0/87.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-20 15:18:36.237] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:87% (27.9/31.8GB) | Commit:63.0/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-20 15:18:36.835] [AIRCRAFT    ] [T:TelemetryPoll] [RAM:87% (27.9/31.8GB) | Commit:63.1/87.8GB] Aeromobile rilevato: FenixA320 IAE SL
+[2026-11-20 15:18:36.852] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:87% (27.9/31.8GB) | Commit:63.1/87.8GB] ACFT=FenixA320 IAE SL ALT=14ft GS=0kt POS=(41.8007,12.2621)
+[2026-11-20 15:18:52.486] [SIMCONNECT  ] [T:Thread-73 (execute)] [RAM:89% (28.5/31.8GB) | Commit:64.3/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-20 17:06:10.987] [STARTUP     ] [T:MainThread] [RAM:84% (26.7/31.8GB) | Commit:70.1/87.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-20 17:06:11.115] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:84% (26.7/31.8GB) | Commit:70.1/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-20 17:06:11.680] [AIRCRAFT    ] [T:TelemetryPoll] [RAM:84% (26.8/31.8GB) | Commit:70.2/87.8GB] Aeromobile rilevato: FenixA320 IAE SL
+[2026-11-20 17:06:11.682] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:84% (26.8/31.8GB) | Commit:70.2/87.8GB] ACFT=FenixA320 IAE SL ALT=242ft GS=0kt POS=(45.4042,10.9077)
+[2026-11-20 17:06:42.705] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:88% (28.1/31.8GB) | Commit:72.1/87.8GB] ACFT=FenixA320 IAE SL ALT=242ft GS=0kt POS=(45.4042,10.9077)
+[2026-11-20 17:07:00.797] [SIM_LIVE    ] [T:TelemetryPoll] [RAM:88% (28.2/31.8GB) | Commit:72.3/87.8GB] Ricezione coordinate valide ripresa (45.4042, 10.9077).
+[2026-11-20 17:07:13.267] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:88% (28.1/31.8GB) | Commit:72.1/87.8GB] ACFT=FenixA320 IAE SL ALT=242ft GS=0kt POS=(45.4042,10.9077)
+[2026-11-20 17:07:43.798] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:90% (28.9/31.8GB) | Commit:73.2/87.8GB] ACFT=FenixA320 IAE SL ALT=242ft GS=0kt POS=(45.4042,10.9077)
+[2026-11-20 17:08:14.123] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:90% (28.7/31.8GB) | Commit:72.9/87.8GB] ACFT=FenixA320 IAE SL ALT=242ft GS=0kt POS=(45.4042,10.9077)
+[2026-11-20 17:08:45.227] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:91% (29.0/31.8GB) | Commit:73.5/87.8GB] ACFT=FenixA320 IAE SL ALT=242ft GS=0kt POS=(45.4042,10.9077)
+[2026-11-20 17:09:16.297] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:91% (29.2/31.8GB) | Commit:73.6/87.8GB] ACFT=FenixA320 IAE SL ALT=242ft GS=0kt POS=(45.4042,10.9077)
+[2026-11-20 17:09:47.487] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:90% (28.8/31.8GB) | Commit:73.0/87.8GB] ACFT=FenixA320 IAE SL ALT=242ft GS=0kt POS=(45.4042,10.9077)
+[2026-11-20 17:10:17.870] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:91% (29.0/31.8GB) | Commit:73.1/87.8GB] ACFT=FenixA320 IAE SL ALT=242ft GS=0kt POS=(45.4042,10.9077)
+[2026-11-20 17:10:47.994] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:90% (28.7/31.8GB) | Commit:73.0/87.8GB] ACFT=FenixA320 IAE SL ALT=242ft GS=0kt POS=(45.4042,10.9077)
+[2026-11-20 17:11:18.379] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:89% (28.6/31.8GB) | Commit:72.8/87.8GB] ACFT=FenixA320 IAE SL ALT=242ft GS=0kt POS=(45.4042,10.9077)
+[2026-11-20 17:11:48.414] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:89% (28.6/31.8GB) | Commit:72.7/87.8GB] ACFT=FenixA320 IAE SL ALT=242ft GS=0kt POS=(45.4042,10.9077)
+[2026-11-20 17:12:19.443] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:90% (28.8/31.8GB) | Commit:73.1/87.8GB] ACFT=FenixA320 IAE SL ALT=242ft GS=0kt POS=(45.4042,10.9077)
+[2026-11-20 17:12:49.531] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:90% (28.8/31.8GB) | Commit:72.9/87.8GB] ACFT=FenixA320 IAE SL ALT=242ft GS=0kt POS=(45.4042,10.9077)
+[2026-11-20 17:13:20.397] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:90% (28.7/31.8GB) | Commit:72.9/87.8GB] ACFT=FenixA320 IAE SL ALT=242ft GS=0kt POS=(45.4042,10.9077)
+[2026-11-20 17:13:50.625] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:90% (28.6/31.8GB) | Commit:72.8/87.8GB] ACFT=FenixA320 IAE SL ALT=242ft GS=0kt POS=(45.4042,10.9077)
+[2026-11-20 17:14:20.766] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:90% (28.7/31.8GB) | Commit:72.8/87.8GB] ACFT=FenixA320 IAE SL ALT=242ft GS=0kt POS=(45.4042,10.9077)
+[2026-11-20 17:14:50.936] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:90% (28.7/31.8GB) | Commit:72.8/87.8GB] ACFT=FenixA320 IAE SL ALT=242ft GS=0kt POS=(45.4042,10.9077)
+[2026-11-20 17:15:21.121] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:90% (28.7/31.8GB) | Commit:72.8/87.8GB] ACFT=FenixA320 IAE SL ALT=242ft GS=0kt POS=(45.4042,10.9077)
+[2026-11-20 17:15:51.158] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:89% (28.6/31.8GB) | Commit:72.9/87.8GB] ACFT=FenixA320 IAE SL ALT=242ft GS=0kt POS=(45.4042,10.9077)
+[2026-11-20 17:16:22.168] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:90% (28.7/31.8GB) | Commit:73.4/87.8GB] ACFT=FenixA320 IAE SL ALT=242ft GS=0kt POS=(45.4042,10.9077)
+[2026-11-20 17:16:52.235] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:90% (28.8/31.8GB) | Commit:73.8/87.8GB] ACFT=FenixA320 IAE SL ALT=242ft GS=0kt POS=(45.4042,10.9077)
+[2026-11-20 17:17:22.498] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:90% (28.6/31.8GB) | Commit:73.1/87.8GB] ACFT=FenixA320 IAE SL ALT=242ft GS=0kt POS=(45.4042,10.9077)
+[2026-11-20 17:17:52.798] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:90% (28.6/31.8GB) | Commit:72.9/87.8GB] ACFT=FenixA320 IAE SL ALT=242ft GS=0kt POS=(45.4042,10.9077)
+[2026-11-20 17:18:23.527] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:89% (28.5/31.8GB) | Commit:72.9/87.8GB] ACFT=FenixA320 IAE SL ALT=242ft GS=0kt POS=(45.4042,10.9077)
+[2026-11-20 17:18:54.032] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:89% (28.6/31.8GB) | Commit:73.0/87.8GB] ACFT=FenixA320 IAE SL ALT=242ft GS=0kt POS=(45.4042,10.9077)
+[2026-11-20 17:19:24.985] [HEARTBEAT   ] [T:TelemetryPoll] [RAM:89% (28.5/31.8GB) | Commit:73.1/87.8GB] ACFT=FenixA320 IAE SL ALT=242ft GS=0kt POS=(45.4042,10.9077)

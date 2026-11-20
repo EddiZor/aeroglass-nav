@@ -9,24 +9,45 @@ let cornerPickingMode = null; // 'NW' oppure 'SE'
 let tempCalibBounds = { nw: null, se: null };
 let activeChartDataUrl = null;
 
-function openChartsManagerModal() {
-    const modal = document.getElementById('chartsManagerModal');
+function openChartsManagerModal(defaultIcao) {
+    const modal = document.getElementById('chartsManagerModal') || document.getElementById('chartsModal');
     if (!modal) {
-        console.error("[Charts] Elemento #chartsModal non presente nel DOM");
+        console.error("[Charts] Elemento modale non trovato nel DOM (#chartsManagerModal / #chartsModal)");
         return;
     }
     modal.style.display = 'flex';
 
-    const icaoInput = document.getElementById('chartIcaoInput');
-    if (icaoInput && !icaoInput.value) {
-        if (typeof flightPlan !== 'undefined' && Array.isArray(flightPlan) && flightPlan.length > 0) {
-            icaoInput.value = flightPlan[flightPlan.length - 1].ident || flightPlan[0].ident || 'LIPZ';
+    const icaoInput = document.getElementById('chartIcaoInput') || document.getElementById('chartsModalIcaoInput');
+    let targetIcao = defaultIcao;
+
+    if (!targetIcao) {
+        if (icaoInput && icaoInput.value && icaoInput.value.trim()) {
+            targetIcao = icaoInput.value.trim().toUpperCase();
+        } else if (typeof flightPlan !== 'undefined' && Array.isArray(flightPlan) && flightPlan.length > 0) {
+            targetIcao = flightPlan[flightPlan.length - 1].ident || flightPlan[0].ident || 'LIPZ';
+        } else if (window.activeFlightPlan && Array.isArray(window.activeFlightPlan) && window.activeFlightPlan.length > 0) {
+            targetIcao = window.activeFlightPlan[0].ident || 'LIPZ';
         } else {
-            icaoInput.value = 'LIPZ';
+            targetIcao = 'LIPZ';
         }
     }
-    loadCurrentAirportCharts();
+
+    if (icaoInput) {
+        icaoInput.value = targetIcao;
+    }
+
+    if (typeof loadCurrentAirportCharts === 'function') {
+        loadCurrentAirportCharts();
+    } else if (typeof loadAirportChartsList === 'function') {
+        loadAirportChartsList(targetIcao);
+    } else if (typeof loadAirportCharts === 'function') {
+        loadAirportCharts(targetIcao);
+    }
 }
+
+// Alias globale per garantire che risponda a qualsiasi onclick della top bar
+window.openChartsModal = openChartsManagerModal;
+window.openChartsManagerModal = openChartsManagerModal;
 
 function closeChartsModal() {
     const modal = document.getElementById('chartsModal');
@@ -439,9 +460,28 @@ async function saveCurrentChartCalibration() {
 }
 
 // Esportazione esplicita su window
+window.openChartsManagerModal = openChartsManagerModal;
+if (typeof closeChartsManagerModal === 'function') {
+    window.closeChartsManagerModal = closeChartsManagerModal;
+}
+window.openChartsManagerModal = openChartsManagerModal;
+window.openChartsModal = openChartsManagerModal;
+if (typeof closeChartsManagerModal === 'function') {
+    window.closeChartsManagerModal = closeChartsManagerModal;
+    window.closeChartsModal = closeChartsManagerModal;
+}
 window.fetchOnlineAipCharts = fetchOnlineAipCharts;
-function toggleNavigraphStyle(enabled) {
+// Rimosso residuo VATSIM authfunction toggleNavigraphStyle(enabled) {
     if (activeMapOverlayLayer && activeMapOverlayLayer._image) {
+        if (enabled) {
+            activeMapOverlayLayer._image.classList.add('navigraph-style');
+        } else {
+            activeMapOverlayLayer._image.classList.remove('navigraph-style');
+        }
+    }
+
+function toggleNavigraphStyle(enabled) {
+    if (typeof activeMapOverlayLayer !== 'undefined' && activeMapOverlayLayer && activeMapOverlayLayer._image) {
         if (enabled) {
             activeMapOverlayLayer._image.classList.add('navigraph-style');
         } else {
