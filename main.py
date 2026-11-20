@@ -1,15 +1,5 @@
-﻿try:
-    from router import find_airway_route
-except ImportError:
-    from src.router import find_airway_route
-import os
+﻿import os
 import sys
-import sqlite3
-
-try:
-    from router import find_airway_route
-except ImportError:
-    from router import find_airway_route
 import time
 import threading
 import ctypes
@@ -282,7 +272,7 @@ def main():
             pass
 
     window.events.closed += on_closed
-    webview.start(debug=True)
+    webview.start(debug=False)
 
 
 if __name__ == "__main__":

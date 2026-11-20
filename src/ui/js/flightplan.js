@@ -1285,10 +1285,7 @@ async function toggleSimbriefIdLock() {
     } else {
         setSimbriefIdLocked(true);
         if (input) {
-            const cleanId = (input.value || '').trim();
-            if (cleanId && window.pywebview && window.pywebview.api && window.pywebview.api.save_simbrief_id) {
-                try { await window.pywebview.api.save_simbrief_id(cleanId); } catch (e) {}
-            }
+            await saveSimbriefId(input.value);
         }
     }
 }
@@ -1296,6 +1293,17 @@ async function toggleSimbriefIdLock() {
 function ensureSimbriefLockUI() {
     const input = document.getElementById('simbriefIdInput');
     if (!input || !input.parentNode) return;
+
+    // Recupero di sicurezza da localStorage se il campo è ancora vuoto
+    if (!input.value) {
+        try {
+            const savedLocal = localStorage.getItem('aeroglass_simbrief_id');
+            if (savedLocal) {
+                input.value = savedLocal;
+                setSimbriefCompactMode(true);
+            }
+        } catch (e) {}
+    }
 
     if (!document.getElementById('btnLockSimbriefId')) {
         const btn = document.createElement('button');
@@ -1310,11 +1318,16 @@ function ensureSimbriefLockUI() {
         };
         input.parentNode.insertBefore(btn, input.nextSibling);
 
+        // Salvataggio automatico sia premendo Invio che uscendo dal campo
         input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !simbriefIdLocked) {
+            if (e.key === 'Enter') {
                 e.preventDefault();
                 saveSimbriefId(input.value);
             }
+        });
+        input.addEventListener('change', () => saveSimbriefId(input.value));
+        input.addEventListener('blur', () => {
+            if (!simbriefIdLocked) saveSimbriefId(input.value);
         });
     }
     setSimbriefIdLocked(simbriefIdLocked);
@@ -1347,12 +1360,17 @@ function setSimbriefCompactMode(isCompact) {
 function showSimbriefBox() {
     setSimbriefCompactMode(false);
     ensureSimbriefLockUI();
-    setSimbriefIdLocked(true);
+    setSimbriefIdLocked(false);
 }
 
 async function saveSimbriefId(val) {
     const cleanId = (val || '').trim();
     if (!cleanId) return;
+
+    // 1. Salvataggio istantaneo in localStorage
+    try { localStorage.setItem('aeroglass_simbrief_id', cleanId); } catch (e) {}
+
+    // 2. Salvataggio permanente in SQLite
     if (window.pywebview && window.pywebview.api && window.pywebview.api.save_simbrief_id) {
         try { await window.pywebview.api.save_simbrief_id(cleanId); } catch (e) {}
     }
@@ -1362,8 +1380,14 @@ async function saveSimbriefId(val) {
 
 async function fetchSimbriefPlan() {
     if (window.pywebview && window.pywebview.api) {
-        const val = document.getElementById('simbriefIdInput').value.trim();
-        if (val) await window.pywebview.api.save_simbrief_id(val);
+        const inp = document.getElementById('simbriefIdInput');
+        let val = inp ? inp.value.trim() : '';
+        if (!val) {
+            try { val = localStorage.getItem('aeroglass_simbrief_id') || ''; } catch(e) {}
+            if (val && inp) inp.value = val;
+        }
+        if (val) await saveSimbriefId(val);
+
         const res = await window.pywebview.api.fetch_simbrief_plan();
         if (res.success && res.flight_plan) {
             flightPlan = res.flight_plan;

@@ -1625,3 +1625,131 @@ body.mode-simple .top-pills-group #btnToggleWeather {
 #orwill-panel, #orwillChatWidget, .orwill-widget, .orwill-panel {
     display: none !important;
 }
+
+/* ==============================================================================
+   TARGHETTE AD ALTA LEGGIBILITÀ VOR & ILS + POPUP DARK COCKPIT
+   ============================================================================== */
+
+.navaid-div-icon {
+    background: transparent !important;
+    border: none !important;
+}
+
+.navaid-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-family: 'Consolas', 'Segoe UI Mono', monospace;
+    font-size: 11.5px;
+    font-weight: 800;
+    white-space: nowrap;
+    user-select: none;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(8px);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    cursor: pointer;
+}
+
+.navaid-badge:hover {
+    transform: translate(-50%, -50%) scale(1.12);
+    z-index: 2500 !important;
+}
+
+/* VOR: Sfondo blu-notte scuro, bordo ciano elettrico */
+.vor-badge {
+    background: rgba(10, 20, 32, 0.94);
+    border: 1.5px solid #00d2ff;
+    color: #ffffff;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.75), 0 0 10px rgba(0, 210, 255, 0.35);
+}
+
+.vor-badge .navaid-freq {
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.18);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-weight: 700;
+}
+
+/* ILS: Sfondo viola scuro, bordo magenta neon */
+.ils-badge {
+    background: rgba(26, 12, 36, 0.94);
+    border: 1.5px solid #e040fb;
+    color: #ffffff;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.75), 0 0 10px rgba(224, 64, 251, 0.35);
+}
+
+.ils-badge .navaid-freq {
+    color: #f0abfc;
+    background: rgba(224, 64, 251, 0.22);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-weight: 700;
+}
+
+/* POPUP DARK COCKPIT (Elimina completamente il fondo bianco e il testo slavato) */
+.navaid-glass-popup .leaflet-popup-content-wrapper {
+    background: rgba(13, 17, 23, 0.96) !important;
+    border: 1.5px solid rgba(0, 210, 255, 0.55) !important;
+    border-radius: 10px !important;
+    padding: 10px 14px !important;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.85) !important;
+    backdrop-filter: blur(14px) !important;
+    color: #e2e8f0 !important;
+    font-family: 'Segoe UI', system-ui, sans-serif !important;
+}
+
+.navaid-glass-popup .leaflet-popup-tip {
+    background: rgba(13, 17, 23, 0.96) !important;
+}
+
+.navaid-popup-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.navaid-popup-title {
+    font-size: 13.5px;
+    font-weight: 800;
+    font-family: 'Consolas', monospace;
+    letter-spacing: 0.5px;
+}
+
+.navaid-popup-subtitle {
+    font-size: 11px;
+    color: #94a3b8;
+    margin-bottom: 6px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+    padding-bottom: 4px;
+}
+
+.navaid-popup-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11.5px;
+    font-family: 'Consolas', monospace;
+    color: #cbd5e1;
+    gap: 12px;
+}
+
+.navaid-popup-hint {
+    margin-top: 6px;
+    padding: 3px 6px;
+    background: rgba(56, 189, 248, 0.12);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    border-radius: 4px;
+    color: #38bdf8;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-align: center;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.navaid-popup-hint:hover {
+    background: rgba(56, 189, 248, 0.25);
+}

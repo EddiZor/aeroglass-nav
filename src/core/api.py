@@ -236,6 +236,58 @@ class AeroGlassAPI:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    def get_all_vors(self):
+        """Restituisce l'archivio delle radioassistenze VOR/VORDME primarie italiane e di confine."""
+        return [
+            # Triveneto / Nord-Est
+            {"ident": "TES", "name": "Tessera (Venezia)", "freq": "115.30", "lat": 45.5083, "lon": 12.3514},
+            {"ident": "CHI", "name": "Chioggia", "freq": "114.10", "lat": 45.0683, "lon": 12.2858},
+            {"ident": "VFR", "name": "Villafranca (Verona)", "freq": "110.65", "lat": 45.3958, "lon": 10.8753},
+            {"ident": "VIC", "name": "Vicenza", "freq": "113.80", "lat": 45.5683, "lon": 11.5317},
+            {"ident": "TBN", "name": "Treviso / Istrana", "freq": "112.50", "lat": 45.6886, "lon": 12.0833},
+            {"ident": "RIV", "name": "Rivolto (Udine)", "freq": "110.05", "lat": 45.9786, "lon": 13.0531},
+            {"ident": "RON", "name": "Ronchi dei Legionari", "freq": "114.20", "lat": 45.8236, "lon": 13.4722},
+            {"ident": "BZO", "name": "Bolzano", "freq": "112.15", "lat": 46.4608, "lon": 11.3283},
+            # Lombardia / Piemonte / Liguria
+            {"ident": "SRN", "name": "Saronno", "freq": "113.70", "lat": 45.6186, "lon": 9.0278},
+            {"ident": "LIN", "name": "Milano Linate", "freq": "112.25", "lat": 45.4453, "lon": 9.2783},
+            {"ident": "MMP", "name": "Malpensa", "freq": "113.15", "lat": 45.6267, "lon": 8.7281},
+            {"ident": "BKL", "name": "Bergamo Orio", "freq": "114.45", "lat": 45.6739, "lon": 9.7042},
+            {"ident": "TRN", "name": "Torino Caselle", "freq": "114.50", "lat": 45.2008, "lon": 7.6492},
+            {"ident": "TOP", "name": "Torino Superga", "freq": "114.55", "lat": 45.0800, "lon": 7.7600},
+            {"ident": "GEN", "name": "Genova Sestri", "freq": "112.80", "lat": 44.4150, "lon": 8.8500},
+            {"ident": "ALB", "name": "Albenga", "freq": "114.70", "lat": 44.0533, "lon": 8.1283},
+            # Emilia-Romagna / Centro
+            {"ident": "BOA", "name": "Bologna Borgo Panigale", "freq": "115.20", "lat": 44.5317, "lon": 11.2953},
+            {"ident": "RMI", "name": "Rimini Miramare", "freq": "116.20", "lat": 44.0200, "lon": 12.6117},
+            {"ident": "PIS", "name": "Pisa San Giusto", "freq": "112.70", "lat": 43.6839, "lon": 10.3956},
+            {"ident": "FRZ", "name": "Firenze Peretola", "freq": "115.65", "lat": 43.8100, "lon": 11.2050},
+            {"ident": "ANC", "name": "Ancona Falconara", "freq": "112.30", "lat": 43.6167, "lon": 13.3600},
+            # Roma / Lazio
+            {"ident": "OST", "name": "Ostia", "freq": "114.90", "lat": 41.7333, "lon": 12.2667},
+            {"ident": "CMP", "name": "Campagnano", "freq": "114.30", "lat": 42.1383, "lon": 12.3683},
+            {"ident": "PRT", "name": "Pratica di Mare", "freq": "115.90", "lat": 41.6583, "lon": 12.4417},
+            {"ident": "URB", "name": "Roma Urbe", "freq": "112.90", "lat": 41.9517, "lon": 12.5017},
+            # Sud e Isole
+            {"ident": "NAP", "name": "Napoli Capodichino", "freq": "117.40", "lat": 40.8861, "lon": 14.2908},
+            {"ident": "SOR", "name": "Sorrento", "freq": "112.20", "lat": 40.6283, "lon": 14.3750},
+            {"ident": "BRI", "name": "Bari Palese", "freq": "115.70", "lat": 41.1389, "lon": 16.7650},
+            {"ident": "BRD", "name": "Brindisi Casale", "freq": "114.80", "lat": 40.6578, "lon": 17.9467},
+            {"ident": "TAR", "name": "Taranto Grottaglie", "freq": "114.50", "lat": 40.5183, "lon": 17.4033},
+            {"ident": "LMS", "name": "Lamezia Terme", "freq": "115.00", "lat": 38.9083, "lon": 16.2433},
+            {"ident": "REG", "name": "Reggio Calabria", "freq": "114.70", "lat": 38.0717, "lon": 15.6517},
+            {"ident": "PAL", "name": "Palermo Boccadifalco", "freq": "112.30", "lat": 38.1783, "lon": 13.3150},
+            {"ident": "PRS", "name": "Punta Raisi", "freq": "114.30", "lat": 38.1817, "lon": 13.0983},
+            {"ident": "CTN", "name": "Catania Fontanarossa", "freq": "113.80", "lat": 37.4667, "lon": 15.0667},
+            {"ident": "SIG", "name": "Sigonella", "freq": "112.50", "lat": 37.4017, "lon": 14.9217},
+            {"ident": "TPS", "name": "Trapani Birgi", "freq": "114.70", "lat": 37.9117, "lon": 12.4933},
+            {"ident": "PAN", "name": "Pantelleria", "freq": "112.00", "lat": 36.8167, "lon": 11.9683},
+            {"ident": "LMP", "name": "Lampedusa", "freq": "115.50", "lat": 35.4983, "lon": 12.6183},
+            {"ident": "CAG", "name": "Cagliari Elmas", "freq": "113.20", "lat": 39.2517, "lon": 9.0550},
+            {"ident": "AHO", "name": "Alghero Fertilia", "freq": "115.50", "lat": 40.6317, "lon": 8.2900},
+            {"ident": "OLB", "name": "Olbia Costa Smeralda", "freq": "113.90", "lat": 40.8983, "lon": 9.5183}
+        ]
+
     def get_initial_data(self):
         simbrief_res = self.get_setting("simbrief_id")
         simbrief_id = simbrief_res.get("value") if simbrief_res.get("success") else ""
@@ -617,6 +669,49 @@ class AeroGlassAPI:
         except Exception as e:
             return {"success": False, "error": str(e), "airports": []}
 
+    def get_navaids_in_bounds(self, min_lat, max_lat, min_lon, max_lon, zoom=8):
+        """Restituisce le radioassistenze mondiali con decluttering rigoroso per livello di zoom."""
+        try:
+            z = float(zoom)
+            # A zoom panoramico (< 6.8) non carica nessuna radioassistenza per non affollare la mappa
+            if z < 6.8:
+                return {"success": True, "navaids": []}
+            elif z < 8.5:
+                types = ("VOR", "VOR-DME", "VORTAC")
+                limit = 70
+            else:
+                types = ("VOR", "VOR-DME", "VORTAC", "TACAN", "NDB", "NDB-DME")
+                limit = 250
+
+            placeholders = ",".join("?" for _ in types)
+            query = f"""
+                SELECT ident, name, type, freq_mhz, lat, lon, elev_ft, country, associated_airport
+                FROM world_navaids
+                WHERE lat BETWEEN ? AND ?
+                  AND lon BETWEEN ? AND ?
+                  AND type IN ({placeholders})
+                ORDER BY CASE
+                    WHEN type IN ('VOR', 'VOR-DME', 'VORTAC') THEN 1
+                    WHEN type = 'TACAN' THEN 2
+                    ELSE 3
+                END
+                LIMIT ?
+            """
+            params = [float(min_lat), float(max_lat), float(min_lon), float(max_lon), *types, limit]
+            with self._db_lock:
+                with get_connection() as conn:
+                    rows = conn.execute(query, params).fetchall()
+                    return {"success": True, "navaids": [dict(r) for r in rows]}
+        except Exception as e:
+            # Fallback locale sui VOR italiani solo se zoom >= 6.8
+            if float(zoom) >= 6.8:
+                fallback = [
+                    v for v in self.get_all_vors()
+                    if float(min_lat) <= v["lat"] <= float(max_lat) and float(min_lon) <= v["lon"] <= float(max_lon)
+                ]
+                return {"success": True, "navaids": fallback}
+            return {"success": True, "navaids": []}
+
     def search_world_airports(self, query_str):
         q = str(query_str or "").strip().upper()
         if len(q) < 2:
@@ -730,6 +825,11 @@ class AeroGlassAPI:
         """Salva il layout di terra (scaricato da OSM via Chromium o backend) nella cache SQLite e su file JSON."""
         import json
         icao = str(icao or "").strip().upper()
+        if isinstance(layout, str):
+            try:
+                layout = json.loads(layout)
+            except Exception:
+                return {"success": False}
         if not icao or not isinstance(layout, dict):
             return {"success": False}
         try:
@@ -773,6 +873,20 @@ class AeroGlassAPI:
                             cached_layout.get("taxiways") or cached_layout.get("stands") or cached_layout.get("aprons")
                         ):
                             return {"success": True, "layout": cached_layout}
+        except Exception:
+            pass
+
+        # 1b. Controlla la cache su file JSON (src/core/ground_cache/{ICAO}.json) e la risincronizza in SQLite
+        try:
+            cache_json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ground_cache", f"{icao}.json")
+            if os.path.isfile(cache_json_path):
+                with open(cache_json_path, "r", encoding="utf-8") as jf:
+                    file_layout = json.load(jf)
+                if isinstance(file_layout, dict) and (
+                    file_layout.get("taxiways") or file_layout.get("stands") or file_layout.get("aprons")
+                ):
+                    self.save_airport_ground_layout(icao, file_layout)
+                    return {"success": True, "layout": file_layout}
         except Exception:
             pass
 

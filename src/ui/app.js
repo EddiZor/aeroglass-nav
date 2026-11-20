@@ -1561,7 +1561,7 @@ async function fetchOsmGroundFromBrowser(icao, lat, lon, aptName, existingRunway
     for (const url of mirrors) {
         try {
             const ctrl = new AbortController();
-            const timer = setTimeout(() => ctrl.abort(), 8000);
+            const timer = setTimeout(() => ctrl.abort(), 5000);
             const resp = await fetch(`${url}?data=${encodeURIComponent(query)}`, {
                 method: 'GET',
                 headers: { 'Accept': 'application/json' },
@@ -1715,6 +1715,11 @@ async function evaluateAirportGroundMap() {
                 }
             }
 
+            // Se SQLite ha già almeno le piste, le disegna subito senza lasciare l'aeroporto vuoto
+            if (ly && Array.isArray(ly.runways) && ly.runways.length > 0) {
+                renderCustomAirportLayout(ly);
+            }
+
             // Fallback: se SQLite non ha le taxiway salvate, interroga direttamente Overpass OSM
             if (!ly || !ly.taxiways || ly.taxiways.length === 0) {
                 if (badgeName) badgeName.innerText = `⏳ Download dati Ground OSM (${targetIcao})...`;
@@ -1722,7 +1727,7 @@ async function evaluateAirportGroundMap() {
                 if (osmLayout) {
                     ly = osmLayout;
                     if (window.pywebview.api.save_airport_ground_layout) {
-                        try { window.pywebview.api.save_airport_ground_layout(targetIcao, JSON.stringify(osmLayout)); } catch(e) {}
+                        try { window.pywebview.api.save_airport_ground_layout(targetIcao, osmLayout); } catch(e) {}
                     }
                 }
             }
@@ -1740,6 +1745,7 @@ async function evaluateAirportGroundMap() {
             } else {
                 lastRenderedGroundKey = null;
                 if (groundLayerGroup) groundLayerGroup.clearLayers();
+                if (badge) badge.style.display = 'none';
             }
         } catch (err) {
             _groundFetchInFlight = null;

@@ -114,72 +114,234 @@ function getBufferedBounds() {
     );
 }
 
-function renderNavAids(vors, ilsList) {
-    if (vorMarkers && vorMarkers.length > 0) vorMarkers.forEach(m => map.removeLayer(m));
-    vorMarkers = [];
-    if (ilsMarkers && ilsMarkers.length > 0) ilsMarkers.forEach(m => map.removeLayer(m));
-    ilsMarkers = [];
+// Database di riserva VOR per garantire la visualizzazione anche offline
+const FALLBACK_VORS = [
+    { ident: "TES", name: "Tessera (Venezia)", freq: "115.30", lat: 45.5083, lon: 12.3514 },
+    { ident: "CHI", name: "Chioggia", freq: "114.10", lat: 45.0683, lon: 12.2858 },
+    { ident: "VFR", name: "Villafranca (Verona)", freq: "110.65", lat: 45.3958, lon: 10.8753 },
+    { ident: "VIC", name: "Vicenza", freq: "113.80", lat: 45.5683, lon: 11.5317 },
+    { ident: "TBN", name: "Treviso", freq: "112.50", lat: 45.6886, lon: 12.0833 },
+    { ident: "BOA", name: "Bologna", freq: "115.20", lat: 44.5317, lon: 11.2953 },
+    { ident: "RIV", name: "Rivolto", freq: "110.05", lat: 45.9786, lon: 13.0531 },
+    { ident: "RON", name: "Ronchi", freq: "114.20", lat: 45.8236, lon: 13.4722 },
+    { ident: "BZO", name: "Bolzano", freq: "112.15", lat: 46.4608, lon: 11.3283 },
+    { ident: "SRN", name: "Saronno", freq: "113.70", lat: 45.6186, lon: 9.0278 },
+    { ident: "LIN", name: "Linate", freq: "112.25", lat: 45.4453, lon: 9.2783 },
+    { ident: "MMP", name: "Malpensa", freq: "113.15", lat: 45.6267, lon: 8.7281 },
+    { ident: "BKL", name: "Bergamo", freq: "114.45", lat: 45.6739, lon: 9.7042 },
+    { ident: "TRN", name: "Torino", freq: "114.50", lat: 45.2008, lon: 7.6492 },
+    { ident: "GEN", name: "Genova", freq: "112.80", lat: 44.4150, lon: 8.8500 },
+    { ident: "PIS", name: "Pisa", freq: "112.70", lat: 43.6839, lon: 10.3956 },
+    { ident: "FRZ", name: "Firenze", freq: "115.65", lat: 43.8100, lon: 11.2050 },
+    { ident: "RMI", name: "Rimini", freq: "116.20", lat: 44.0200, lon: 12.6117 },
+    { ident: "ANC", name: "Ancona", freq: "112.30", lat: 43.6167, lon: 13.3600 },
+    { ident: "OST", name: "Ostia", freq: "114.90", lat: 41.7333, lon: 12.2667 },
+    { ident: "CMP", name: "Campagnano", freq: "114.30", lat: 42.1383, lon: 12.3683 },
+    { ident: "NAP", name: "Napoli", freq: "117.40", lat: 40.8861, lon: 14.2908 },
+    { ident: "BRI", name: "Bari", freq: "115.70", lat: 41.1389, lon: 16.7650 },
+    { ident: "PAL", name: "Palermo", freq: "112.30", lat: 38.1783, lon: 13.3150 },
+    { ident: "CTN", name: "Catania", freq: "113.80", lat: 37.4667, lon: 15.0667 },
+    { ident: "CAG", name: "Cagliari", freq: "113.20", lat: 39.2517, lon: 9.0550 }
+];
 
-    if (!showNavaids) return;
-    const bufferedBounds = getBufferedBounds();
+let navaidsLayerGroup = null;
+let navaidsVisible = (typeof showNavaids !== 'undefined') ? Boolean(showNavaids) : true;
+let _navaidsFetchTimer = null;
 
-    (vors || DEFAULT_VORS).forEach(vor => {
-        if (vor.lat && vor.lon) {
-            const latLng = L.latLng(vor.lat, vor.lon);
-            if (bufferedBounds.contains(latLng)) {
-                const marker = L.marker(latLng, { icon: createVorIcon(vor.ident), zIndexOffset: 400 }).addTo(map);
-                marker.bindPopup(
-                    `<div style="font-weight:700;font-size:12px;color:#38bdf8;">VOR: ${vor.ident}</div>` +
-                    `<div style="font-size:11px;color:#f8fafc;">${vor.name}</div>` +
-                    `<div style="font-size:11px;font-family:monospace;color:#34d399;margin-top:2px;">FREQ: ${vor.freq} MHz</div>`
-                );
-                vorMarkers.push(marker);
+function scheduleNavaidsUpdate() {
+    if (_navaidsFetchTimer) clearTimeout(_navaidsFetchTimer);
+    _navaidsFetchTimer = setTimeout(fetchAndRenderNavaidsInView, 180);
+}
+
+async function fetchAndRenderNavaidsInView() {
+    if (typeof map === 'undefined' || !map || typeof L === 'undefined') return;
+
+    if (!navaidsLayerGroup) {
+        navaidsLayerGroup = L.layerGroup().addTo(map);
+    }
+
+    if (!navaidsVisible) {
+        navaidsLayerGroup.clearLayers();
+        return;
+    }
+
+    const zoom = map.getZoom();
+
+    // Decluttering: a zoom panoramico (< 7.0) nasconde le radioassistenze per mantenere la mappa pulita
+    if (zoom < 7.0) {
+        navaidsLayerGroup.clearLayers();
+        return;
+    }
+
+    const bounds = map.getBounds().pad(0.18);
+    let navaidsList = [];
+    let backendResponded = false;
+
+    // 1. Query asincrona SQLite Bounding Box tramite pywebview
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.get_navaids_in_bounds) {
+        try {
+            const res = await window.pywebview.api.get_navaids_in_bounds(
+                bounds.getSouth(), bounds.getNorth(),
+                bounds.getWest(), bounds.getEast(),
+                zoom
+            );
+            if (res && res.success && Array.isArray(res.navaids)) {
+                navaidsList = res.navaids;
+                backendResponded = true;
             }
+        } catch (e) {
+            console.warn("[Navaids] Errore query Bounding Box:", e);
         }
+    }
+
+    // Fallback locale solo se pywebview non ha risposto
+    if (!backendResponded && Array.isArray(FALLBACK_VORS)) {
+        navaidsList = FALLBACK_VORS.filter(v => bounds.contains([v.lat, v.lon]));
+    }
+
+    // Pulizia completa prima del ridisegno (così riducendo lo zoom spariscono subito gli NDB/dettagli)
+    navaidsLayerGroup.clearLayers();
+
+    // 2. Renderizzazione delle radioassistenze (VOR / VORTAC / TACAN / NDB)
+    navaidsList.forEach(item => {
+        const lat = Number(item.lat);
+        const lon = Number(item.lon);
+        if (isNaN(lat) || isNaN(lon)) return;
+
+        const isNdb = String(item.type || '').toUpperCase().includes('NDB');
+        const badgeClass = isNdb ? 'ndb-badge' : 'vor-badge';
+        const iconChar = isNdb ? '📻' : '🧭';
+        const typeLabel = item.type || (isNdb ? 'NDB' : 'VOR/DME');
+        const freqVal = item.freq_mhz || item.freq || '';
+        const freqText = isNdb ? `${freqVal || '---'} kHz` : `${freqVal || '---'} MHz`;
+
+        const icon = L.divIcon({
+            className: 'navaid-div-icon',
+            html: `
+                <div class="navaid-badge ${badgeClass}">
+                    <span class="navaid-icon">${iconChar}</span>
+                    <span class="navaid-id">${item.ident}</span>
+                    <span class="navaid-freq">${freqVal}</span>
+                </div>
+            `,
+            iconSize: null
+        });
+
+        const m = L.marker([lat, lon], { icon, zIndexOffset: isNdb ? 680 : 720 }).addTo(navaidsLayerGroup);
+
+        const popupContent = `
+            <div class="navaid-popup-body">
+                <div class="navaid-popup-title" style="color:${isNdb ? '#fbbf24' : '#00d2ff'};">${iconChar} ${typeLabel} ${item.ident}</div>
+                <div class="navaid-popup-subtitle">${item.name || ''} ${item.associated_airport ? '(' + item.associated_airport + ')' : ''}</div>
+                <div class="navaid-popup-row">
+                    <span>FREQUENZA:</span> <strong style="color:${isNdb ? '#fbbf24' : '#00d2ff'};">${freqText}</strong>
+                </div>
+                <div class="navaid-popup-row">
+                    <span>COORDINATE:</span> <strong>${lat.toFixed(4)}°N, ${lon.toFixed(4)}°E</strong>
+                </div>
+                <div class="navaid-popup-hint" onclick="if(typeof sendFreqToScratchpad==='function'){sendFreqToScratchpad('${freqVal}');}">
+                    📻 Clicca per inviare a Note EFB
+                </div>
+            </div>
+        `;
+
+        m.bindPopup(popupContent, { className: 'navaid-glass-popup', offset: [0, -4] });
     });
 
-    const destWp = (Array.isArray(flightPlan) && flightPlan.length >= 2) ? flightPlan[flightPlan.length - 1] : null;
-    const activeDestRwy = destWp && destWp.rwy ? String(destWp.rwy).trim().toUpperCase().replace(/^RWY\s*/i, '') : '';
+    // 3. Renderizzazione ILS (visibili solo in avvicinamento/terminale, zoom >= 8.5)
+    const ilsSource = (typeof ilsData !== 'undefined' && Array.isArray(ilsData) && ilsData.length > 0)
+        ? ilsData
+        : ((Array.isArray(window.ilsData) && window.ilsData.length > 0)
+            ? window.ilsData
+            : ((typeof DEFAULT_ILS !== 'undefined' && Array.isArray(DEFAULT_ILS)) ? DEFAULT_ILS : []));
+    const effectiveIls = (zoom >= 8.5) ? ilsSource : [];
 
-    (ilsList || DEFAULT_ILS).forEach(ils => {
-        if (ils.lat && ils.lon) {
-            const latLng = L.latLng(ils.lat, ils.lon);
-            // Se sull'aeroporto di destinazione è attiva una pista specifica (es. 30), nasconde il badge della testata opposta (es. ILS 12)
-            if (destWp && destWp.lat && destWp.lon && activeDestRwy) {
-                const distToDest = latLng.distanceTo(L.latLng(destWp.lat, destWp.lon));
-                if (distToDest < 12000 && String(ils.rwy).trim().toUpperCase() !== activeDestRwy) {
-                    return;
-                }
-            }
-            if (bufferedBounds.contains(latLng)) {
-                const marker = L.marker(latLng, { icon: createIlsIcon(ils.rwy, ils.ident), zIndexOffset: 450 }).addTo(map);
-                marker.bindPopup(
-                    `<div style="font-weight:700;font-size:12px;color:#e879f9;">ILS RWY ${ils.rwy} (${ils.ident})</div>` +
-                    `<div style="font-size:11px;color:#f8fafc;margin-bottom:4px;">${ils.name}</div>` +
-                    `<div style="font-size:11px;font-family:monospace;color:#38bdf8;">FREQ: ${ils.freq} MHz</div>` +
-                    `<div style="font-size:11px;font-family:monospace;color:#34d399;">COURSE: ${ils.course}°</div>` +
-                    `<div style="font-size:11px;font-family:monospace;color:#fbbf24;">GLIDE ALT: ${ils.gs_alt}</div>`
-                );
-                ilsMarkers.push(marker);
-            }
-        }
+    effectiveIls.forEach(ils => {
+        const lat = Number(ils.lat || ils.latitude);
+        const lon = Number(ils.lon || ils.longitude);
+        if (isNaN(lat) || isNaN(lon) || !bounds.contains([lat, lon])) return;
+
+        const freq = ils.freq || ils.freq_mhz || '---';
+        const rwy = ils.rwy || ils.runway || ils.ident || '';
+        const identOrApt = ils.ident || ils.apt_icao || ils.airport || '';
+        const ilsName = ils.name || 'Sistema di Atterraggio Strumentale';
+        const crs = ils.course || ils.crs || '---';
+        const glideAlt = ils.gs_alt || ils.glide_alt || '3,000 ft';
+
+        const ilsIcon = L.divIcon({
+            className: 'navaid-div-icon',
+            html: `
+                <div class="navaid-badge ils-badge">
+                    <span class="navaid-icon">📡</span>
+                    <span class="navaid-id">ILS ${rwy}</span>
+                    <span class="navaid-freq">${freq}</span>
+                </div>
+            `,
+            iconSize: null
+        });
+
+        const m = L.marker([lat, lon], { icon: ilsIcon, zIndexOffset: 740 }).addTo(navaidsLayerGroup);
+
+        const popupContent = `
+            <div class="navaid-popup-body">
+                <div class="navaid-popup-title" style="color:#e040fb;">📡 ILS RWY ${rwy}${identOrApt ? ' (' + identOrApt + ')' : ''}</div>
+                <div class="navaid-popup-subtitle">${ilsName}</div>
+                <div class="navaid-popup-row">
+                    <span>FREQUENZA:</span> <strong style="color:#38bdf8;">${freq} MHz</strong>
+                </div>
+                <div class="navaid-popup-row">
+                    <span>INBOUND CRS:</span> <strong style="color:#34d399;">${crs}°</strong>
+                </div>
+                <div class="navaid-popup-row">
+                    <span>GLIDE INTERCEPT:</span> <strong style="color:#fbbf24;">${glideAlt}</strong>
+                </div>
+                <div class="navaid-popup-hint" onclick="if(typeof sendFreqToScratchpad==='function'){sendFreqToScratchpad('${freq}');}">
+                    📻 Clicca per inviare a Note EFB
+                </div>
+            </div>
+        `;
+
+        m.bindPopup(popupContent, { className: 'navaid-glass-popup', offset: [0, -4] });
     });
 }
 
-map.on('moveend', function() {
-    renderNavAids(vorsData, ilsData);
-});
+function renderNavAids() {
+    scheduleNavaidsUpdate();
+}
+
+function toggleNavaids() {
+    navaidsVisible = !navaidsVisible;
+    window.showNavaids = navaidsVisible;
+    if (typeof showNavaids !== 'undefined') showNavaids = navaidsVisible;
+
+    const btn = document.getElementById('btnToggleNavaids');
+    if (btn) {
+        btn.classList.toggle('active', navaidsVisible);
+        btn.style.borderColor = navaidsVisible ? 'rgba(0, 210, 255, 0.65)' : 'rgba(148, 163, 184, 0.30)';
+        btn.style.color = navaidsVisible ? '#00d2ff' : '#8b949e';
+        btn.style.opacity = navaidsVisible ? '1' : '0.6';
+    }
+
+    if (!navaidsVisible && navaidsLayerGroup) {
+        navaidsLayerGroup.clearLayers();
+    } else {
+        scheduleNavaidsUpdate();
+    }
+}
 
 function toggleNavaidsLayer() {
-    showNavaids = !showNavaids;
-    const btn = document.getElementById('btnToggleNavaids');
-    const t = translations[currentLang];
-    if (btn) {
-        btn.classList.toggle('active', showNavaids);
-        btn.innerText = showNavaids ? t.btnNavaids : t.btnNavaidsOff;
-    }
-    renderNavAids(vorsData, ilsData);
+    toggleNavaids();
 }
+
+window.toggleNavaids = toggleNavaids;
+window.toggleNavaidsLayer = toggleNavaids;
+window.renderNavAids = renderNavAids;
+
+map.on('moveend zoomend', function() {
+    if (navaidsVisible) {
+        scheduleNavaidsUpdate();
+    }
+});
 
 // --- FILTRI E SPAZI AEREI ---
 function toggleProceduresPanel() {
