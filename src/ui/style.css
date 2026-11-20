@@ -628,6 +628,12 @@ body.sidebar-collapsed .top-controls-bar {
     background: rgba(56, 189, 248, 0.06);
 }
 
+/* Stile Proiezione Navigraph Charts (Inversione & Trasparenza Sfondo) */
+.leaflet-image-layer.navigraph-style {
+    mix-blend-mode: screen;
+    filter: invert(1) hue-rotate(180deg) contrast(1.4) brightness(0.95);
+}
+
 /* Modale generica */
 .custom-modal {
     position: absolute;

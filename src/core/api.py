@@ -46,7 +46,7 @@ class DummyTelemetry:
 class AeroGlassAPI:
     def __init__(self):
         self._window = None
-        self._db_lock = threading.Lock()
+        self._db_lock = threading.RLock()
         # Inizializza il database SQLite (~/.aeroglass_nav/aeroglass.db)
         init_db()
         self._init_ground_cache_table()
@@ -1397,6 +1397,50 @@ class AeroGlassAPI:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    def fetch_online_charts(self, icao):
+        """Scarica automaticamente le carte e le registra senza blocchi o deadlock."""
+        try:
+            from src.core.aip_fetcher import download_airport_charts
+            code = str(icao or "").strip().upper()
+            if not code:
+                return {"success": False, "error": "Inserisci un codice ICAO valido."}
+
+            res = download_airport_charts(code)
+            if not res.get("success"):
+                return res
+
+            charts = res.get("charts", [])
+            if not charts:
+                return {"success": False, "error": f"Nessuna carta trovata per {code}."}
+
+            # Pre-calcola gli auto_bounds prima del lock del database per evitare lock ricorsivi
+            prepared_records = []
+            for c in charts:
+                b_info = self.get_airport_auto_bounds(code, c.get("name", ""))
+                b_json = json.dumps(b_info["bounds"]) if b_info.get("success") else None
+                prepared_records.append((c, b_json))
+
+            with self._db_lock:
+                with get_connection() as conn:
+                    cur = conn.cursor()
+                    for c, bounds_json in prepared_records:
+                        cur.execute("SELECT id FROM chart_overlays WHERE icao = ? AND file_path = ?", (code, c["path"]))
+                        if not cur.fetchone():
+                            cur.execute("""
+                                INSERT INTO chart_overlays (icao, name, chart_type, file_path, is_pdf, bounds_json, opacity)
+                                VALUES (?, ?, ?, ?, 1, ?, 0.75)
+                            """, (code, c["name"], c["type"], c["path"], bounds_json))
+                    conn.commit()
+
+            return {
+                "success": True,
+                "icao": code,
+                "downloaded_count": len(charts),
+                "message": f"Scaricate e catalogate {len(charts)} carte ufficiali per {code}."
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     def open_chart_file(self):
         """Apre un file dialog per selezionare una cartina PDF o immagine (PNG/JPG)."""
         if not self._window:
@@ -1506,56 +1550,139 @@ class AeroGlassAPI:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def get_airport_auto_bounds(self, icao):
-        """Calcola il bounding box ottimale attorno alle piste reali dell'aeroporto o usa preset noti."""
+    def get_airport_auto_bounds(self, icao, chart_name=""):
+        """Calcola dinamicamente il bounding box ottimale (NW / SE) per qualsiasi aeroporto e procedura:
+        - GROUND / TAXI: calibra il perimetro esatto attorno alle piste e ai raccordi.
+        - IAC / APPROACH / ILS / RNAV: proietta a ritroso l'asse pista per 16 NM (FAF/IAF) con corridoio laterale di 7 NM.
+        Nessun preset hardcoded: calcolo geometrico vettoriale basato su world_runways e world_airports SQLite.
+        """
+        import math
+        import re
+
         code = str(icao or "").strip().upper()
-        
-        # Preset con bounding box calibrati al pixel per scali chiave
-        PRESETS = {
-            "LIPZ": [[45.5175, 12.3320], [45.4920, 12.3780]], # Venezia Tessera
-            "LIPD": [[46.0425, 13.1680], [46.0220, 13.2050]], # Campoformido
-            "LIKL": [[46.0120, 12.6210], [45.9960, 12.6520]], # La Comina
-            "LITY": [[37.2885, 13.5680], [37.2720, 13.5960]], # Agrigento Valle dei Templi
-            "LIRF": [[41.8280, 12.2150], [41.7720, 12.2740]], # Roma Fiumicino
-            "LIPB": [[46.4720, 11.3120], [46.4480, 11.3420]], # Bolzano
-        }
+        c_title = str(chart_name or "").upper()
+        if not code:
+            return {"success": False, "error": "Codice ICAO non valido"}
 
-        if code in PRESETS:
-            return {"success": True, "bounds": PRESETS[code], "source": "preset"}
-
-        # Calcolo dinamico da piste o coordinate aeroporto SQLite
         try:
             with self._db_lock:
                 with get_connection() as conn:
-                    rwys = conn.execute(
-                        "SELECT le_lat, le_lon, he_lat, he_lon FROM world_runways WHERE apt_icao = ? AND le_lat IS NOT NULL",
-                        (code,)
-                    ).fetchall()
-                    if rwys:
-                        lats = [r["le_lat"] for r in rwys] + [r["he_lat"] for r in rwys]
-                        lons = [r["le_lon"] for r in rwys] + [r["he_lon"] for r in rwys]
-                        pad_lat = max(0.008, (max(lats) - min(lats)) * 0.25)
-                        pad_lon = max(0.012, (max(lons) - min(lons)) * 0.25)
-                        bounds = [
-                            [round(max(lats) + pad_lat, 5), round(min(lons) - pad_lon, 5)],
-                            [round(min(lats) - pad_lat, 5), round(max(lons) + pad_lon, 5)]
-                        ]
-                        return {"success": True, "bounds": bounds, "source": "runways"}
-
+                    # 1. Recupero coordinate centro aeroporto
                     apt = conn.execute("SELECT lat, lon FROM world_airports WHERE icao = ?", (code,)).fetchone()
                     if not apt:
                         apt = conn.execute("SELECT lat, lon FROM cached_airports WHERE icao = ?", (code,)).fetchone()
-                    if apt:
-                        lat, lon = float(apt["lat"]), float(apt["lon"])
-                        bounds = [
-                            [round(lat + 0.018, 5), round(lon - 0.026, 5)],
-                            [round(lat - 0.018, 5), round(lon + 0.026, 5)]
-                        ]
-                        return {"success": True, "bounds": bounds, "source": "apt_coords"}
-        except Exception as e:
-            pass
+                    apt_lat = float(apt["lat"]) if apt else 45.0
+                    apt_lon = float(apt["lon"]) if apt else 12.0
 
-        return {"success": False, "error": "Impossibile calcolare i limiti dell'aeroporto"}
+                    # 2. Recupero piste con orientamento magnetico e soglie
+                    rwys = [dict(r) for r in conn.execute(
+                        "SELECT le_ident, he_ident, le_lat, le_lon, he_lat, he_lon, le_hdg, he_hdg, length_ft FROM world_runways WHERE apt_icao = ?",
+                        (code,)
+                    ).fetchall()]
+
+            cos_lat = max(0.15, math.cos(math.radians(apt_lat)))
+            deg_lat_per_nm = 1.0 / 60.0
+            deg_lon_per_nm = 1.0 / (60.0 * cos_lat)
+
+            # Riconoscimento modalità procedurale
+            is_approach = any(k in c_title for k in ("IAC", "APPROACH", "APPR", "ILS", "LOC", "RNP", "RNAV", "VOR", "NDB", "STAR", "ARRIVAL"))
+            is_ground = any(k in c_title for k in ("GROUND", "TAXI", "PARKING", "AD 2", "AERODROME", "LAYOUT", "APRON", "CIRCUIT", "VAC"))
+
+            # --- CASO A: PROCEDURA STRUMENTALE DI AVVICINAMENTO / ARRIVO ---
+            if is_approach and not (is_ground and "IAC" not in c_title and "ILS" not in c_title):
+                # Ricerca della pista specifica nel nome della carta (es. 'RWY 24', 'ILS 04R', '01')
+                rwy_match = re.search(r'(?:RWY|ILS|LOC|RNP|RNAV|VOR|NDB|VISUAL)?\s*(\d{2}\s*[LRC]?)', c_title)
+                matched_ident = rwy_match.group(1).replace(" ", "") if rwy_match else None
+
+                target_rwy = None
+                target_end = None
+                if matched_ident and rwys:
+                    for r in rwys:
+                        le = str(r.get("le_ident") or "").upper().replace(" ", "")
+                        he = str(r.get("he_ident") or "").upper().replace(" ", "")
+                        if le == matched_ident or (len(matched_ident) == 2 and le.startswith(matched_ident)):
+                            target_rwy, target_end = r, "LE"
+                            break
+                        elif he == matched_ident or (len(matched_ident) == 2 and he.startswith(matched_ident)):
+                            target_rwy, target_end = r, "HE"
+                            break
+
+                if target_rwy and target_end:
+                    # Soglia pista e prua magnetica reali
+                    th_lat = target_rwy.get("le_lat" if target_end == "LE" else "he_lat")
+                    th_lon = target_rwy.get("le_lon" if target_end == "LE" else "he_lon")
+                    hdg = float(target_rwy.get("le_hdg" if target_end == "LE" else "he_hdg") or 0.0)
+                    if hdg <= 0 and matched_ident[:2].isdigit():
+                        hdg = float(int(matched_ident[:2]) * 10)
+
+                    if th_lat is None or th_lon is None:
+                        th_lat, th_lon = apt_lat, apt_lon
+
+                    # L'aereo atterra con prua 'hdg', quindi il sentiero d'avvicinamento proviene dalla radiale opposta
+                    reciprocal_hdg = (hdg - 180.0) % 360.0
+                    rad_along = math.radians(reciprocal_hdg)
+                    rad_perp = math.radians((reciprocal_hdg + 90.0) % 360.0)
+
+                    # Geometria corridoio ICAO: 16 NM all'indietro (FAF/IAF), 3.5 NM in avanti (riattaccata), 7.5 NM laterali
+                    dist_back = 16.0
+                    dist_forward = 3.5
+                    lat_margin = 7.5
+
+                    pts = []
+                    for d_long in (-dist_forward, dist_back):
+                        c_lat = th_lat + (d_long * math.cos(rad_along)) * deg_lat_per_nm
+                        c_lon = th_lon + (d_long * math.sin(rad_along)) * deg_lon_per_nm
+                        for sign in (-1, 1):
+                            pts.append((
+                                c_lat + (sign * lat_margin * math.cos(rad_perp)) * deg_lat_per_nm,
+                                c_lon + (sign * lat_margin * math.sin(rad_perp)) * deg_lon_per_nm
+                            ))
+
+                    lats = [p[0] for p in pts]
+                    lons = [p[1] for p in pts]
+                    bounds = [
+                        [round(max(lats), 5), round(min(lons), 5)],
+                        [round(min(lats), 5), round(max(lons), 5)]
+                    ]
+                    return {"success": True, "bounds": bounds, "source": f"approach_rwy_{matched_ident}"}
+                else:
+                    # Carta terminale generica o STAR senza singola pista: raggio 14.5 NM attorno al campo
+                    r_nm = 14.5
+                    bounds = [
+                        [round(apt_lat + r_nm * deg_lat_per_nm, 5), round(apt_lon - r_nm * deg_lon_per_nm, 5)],
+                        [round(apt_lat - r_nm * deg_lat_per_nm, 5), round(apt_lon + r_nm * deg_lon_per_nm, 5)]
+                    ]
+                    return {"success": True, "bounds": bounds, "source": "approach_terminal_area"}
+
+            # --- CASO B: CARTINA DEL SUOLO / PISTE / MOVIMENTAZIONE TERRA ---
+            lats, lons = [], []
+            if rwys:
+                for r in rwys:
+                    for klat, klon in (("le_lat", "le_lon"), ("he_lat", "he_lon")):
+                        if r.get(klat) is not None and r.get(klon) is not None:
+                            lats.append(float(r[klat]))
+                            lons.append(float(r[klon]))
+
+            if lats and lons:
+                span_lat = max(lats) - min(lats)
+                span_lon = max(lons) - min(lons)
+                pad_lat = max(0.007, span_lat * 0.25)
+                pad_lon = max(0.010, span_lon * 0.25)
+                bounds = [
+                    [round(max(lats) + pad_lat, 5), round(min(lons) - pad_lon, 5)],
+                    [round(min(lats) - pad_lat, 5), round(max(lons) + pad_lon, 5)]
+                ]
+                return {"success": True, "bounds": bounds, "source": "runways_ground"}
+
+            # Fallback generico sul centro aeroporto
+            bounds = [
+                [round(apt_lat + 0.018, 5), round(apt_lon - 0.026, 5)],
+                [round(apt_lat - 0.018, 5), round(apt_lon + 0.026, 5)]
+            ]
+            return {"success": True, "bounds": bounds, "source": "apt_coords_ground"}
+
+        except Exception as e:
+            return {"success": False, "error": f"Errore calcolo limiti aeroporto: {e}"}
 
     def get_chart_content(self, file_path):
         """Legge il file della cartina e lo codifica in base64 per una renderizzazione sicura senza blocchi CORS."""

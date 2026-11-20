@@ -10,7 +10,7 @@ let tempCalibBounds = { nw: null, se: null };
 let activeChartDataUrl = null;
 
 function openChartsManagerModal() {
-    const modal = document.getElementById('chartsModal');
+    const modal = document.getElementById('chartsManagerModal');
     if (!modal) {
         console.error("[Charts] Elemento #chartsModal non presente nel DOM");
         return;
@@ -140,6 +140,40 @@ async function selectChartForDisplay(chart) {
     }
 }
 
+async function fetchOnlineAipCharts() {
+    const icaoInput = document.getElementById('chartIcaoInput');
+    const icao = (icaoInput?.value || '').trim().toUpperCase();
+    if (!icao) {
+        alert("Digita il codice ICAO dell'aeroporto (es. LIPZ, LIPD, LIRF) prima di scaricare le carte.");
+        return;
+    }
+
+    if (typeof showAeroNavToast === 'function') {
+        showAeroNavToast(`🌐 Ricerca e download carte AIP aperte per <b>${icao}</b> in corso...`);
+    }
+
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.fetch_online_charts) {
+        try {
+            const res = await window.pywebview.api.fetch_online_charts(icao);
+            if (res && res.success) {
+                if (typeof showAeroNavToast === 'function') {
+                    showAeroNavToast(`✅ <b>${icao}</b>: ${res.message || 'Carte scaricate con successo!'}`);
+                }
+                await loadCurrentAirportCharts();
+                // Seleziona automaticamente la prima carta scaricata
+                if (currentAirportCharts && currentAirportCharts.length > 0) {
+                    selectChartForDisplay(currentAirportCharts[0]);
+                }
+            } else {
+                alert("Download carte AIP: " + (res?.error || "Nessuna carta disponibile per questo scalo."));
+            }
+        } catch (err) {
+            console.error("[Charts] Errore chiamata fetch_online_charts:", err);
+            alert("Errore di rete o backend durante il download delle carte.");
+        }
+    }
+}
+
 async function promptImportChart() {
     const icaoInput = document.getElementById('chartIcaoInput');
     const icao = (icaoInput?.value || '').trim().toUpperCase();
@@ -214,19 +248,20 @@ async function deleteChartRecord(chartId) {
 async function applyAutoRunwayBounds() {
     if (!activeSelectedChart) return;
     const icao = activeSelectedChart.icao;
+    const chartName = activeSelectedChart.name || "";
     if (window.pywebview && window.pywebview.api && window.pywebview.api.get_airport_auto_bounds) {
         try {
-            const res = await window.pywebview.api.get_airport_auto_bounds(icao);
+            const res = await window.pywebview.api.get_airport_auto_bounds(icao, chartName);
             if (res && res.success && res.bounds) {
                 tempCalibBounds = { nw: res.bounds[0], se: res.bounds[1] };
                 if (activeMapOverlayLayer) {
                     activeMapOverlayLayer.setBounds(res.bounds);
                 }
                 if (typeof showAeroNavToast === 'function') {
-                    showAeroNavToast(`🎯 Bounding box allineato su <b>${icao}</b> (${res.source})`);
+                    showAeroNavToast(`🎯 Allineamento automatico <b>${icao}</b>: ${res.source}`);
                 }
             } else {
-                alert("Non sono state trovate piste geometriche per " + icao);
+                alert("Non sono state trovate informazioni geometriche per " + icao);
             }
         } catch (e) {
             console.error("[Charts] Errore auto-bounds:", e);
@@ -284,7 +319,7 @@ async function toggleSelectedChartMapOverlay() {
     if (!bounds || bounds.length < 2) {
         if (window.pywebview && window.pywebview.api && window.pywebview.api.get_airport_auto_bounds) {
             try {
-                const autoRes = await window.pywebview.api.get_airport_auto_bounds(activeSelectedChart.icao);
+                const autoRes = await window.pywebview.api.get_airport_auto_bounds(activeSelectedChart.icao, activeSelectedChart.name);
                 if (autoRes && autoRes.success && autoRes.bounds) {
                     bounds = autoRes.bounds;
                     tempCalibBounds = { nw: bounds[0], se: bounds[1] };
@@ -308,10 +343,13 @@ async function toggleSelectedChartMapOverlay() {
     const opacity = activeSelectedChart.opacity || 0.75;
 
     if (typeof L !== 'undefined' && typeof map !== 'undefined') {
-        activeMapOverlayLayer = L.imageOverlay(renderSrc, bounds, {
-            opacity: opacity,
-            interactive: false
-        }).addTo(map);
+    const isNavigraphStyle = document.getElementById('navigraphStyleCheck')?.checked || false;
+
+    activeMapOverlayLayer = L.imageOverlay(renderSrc, bounds, {
+        opacity: opacity,
+        interactive: false,
+        className: isNavigraphStyle ? 'navigraph-style' : ''
+    }).addTo(map);
 
         map.fitBounds(bounds);
     }
@@ -401,6 +439,17 @@ async function saveCurrentChartCalibration() {
 }
 
 // Esportazione esplicita su window
+window.fetchOnlineAipCharts = fetchOnlineAipCharts;
+function toggleNavigraphStyle(enabled) {
+    if (activeMapOverlayLayer && activeMapOverlayLayer._image) {
+        if (enabled) {
+            activeMapOverlayLayer._image.classList.add('navigraph-style');
+        } else {
+            activeMapOverlayLayer._image.classList.remove('navigraph-style');
+        }
+    }
+}
+window.toggleNavigraphStyle = toggleNavigraphStyle;
 window.openChartsManagerModal = openChartsManagerModal;
 window.closeChartsModal = closeChartsModal;
 window.loadCurrentAirportCharts = loadCurrentAirportCharts;

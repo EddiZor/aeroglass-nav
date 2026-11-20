@@ -2,7 +2,45 @@
 const map = L.map('map', { zoomControl: false }).setView([43.5, 12.0], 6);
 let currentTileLayer = L.tileLayer(tileSources.dark, { maxZoom: 19 }).addTo(map);
 
+// Layer cartografici aeronautici continui (Open Flight Maps / OpenAIP)
+const aeronauticalTileProviders = {
+    ofm_base: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+    // Tile server Mercator Open Flight Maps (Aggiornato con spazi aerei ICAO, CTR e VFR reporting points)
+    ofm_aero: "https://snapshots.openflightmaps.org/live/2405/tiles/world/mercator/{z}/{x}/{y}.png",
+    // Backup enroute layer
+    openaip_tiles: "https://api.tiles.openaip.net/api/data/openaip/{z}/{x}/{y}.png"
+};
+
+let ofmAeroOverlayLayer = null;
+
 function switchMapStyle(style) {
+    if (!map) return;
+
+    // Rimuove l'overlay aeronautico OFM se si passa a un'altra mappa
+    if (ofmAeroOverlayLayer) {
+        map.removeLayer(ofmAeroOverlayLayer);
+        ofmAeroOverlayLayer = null;
+    }
+
+    if (style === "ofm_vfr") {
+        // 1. Imposta mappa base chiara ad alto contrasto
+        if (typeof currentTileLayer !== 'undefined' && currentTileLayer) {
+            currentTileLayer.setUrl(aeronauticalTileProviders.ofm_base);
+        }
+        // 2. Sovrappone la cartografia aeronautica continua Open Flight Maps ICAO 1:500.000
+        ofmAeroOverlayLayer = L.tileLayer(aeronauticalTileProviders.ofm_aero, {
+            maxZoom: 14,
+            minZoom: 4,
+            opacity: 0.90,
+            zIndex: 10,
+            attribution: '&copy; <a href="https://www.openflightmaps.org" target="_blank">OpenFlightMaps</a> (ICAO VFR)'
+        }).addTo(map);
+
+        if (typeof showAeroNavToast === 'function') {
+            showAeroNavToast("🗺️ Mappa attiva: <b>Open Flight Maps (VFR ICAO Ufficiale)</b>");
+        }
+        return;
+    }
     const mapEl = document.getElementById('map');
     map.removeLayer(currentTileLayer);
     const url = tileSources[style] || tileSources.dark;
