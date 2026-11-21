@@ -1736,10 +1736,28 @@ async function fetchOsmGroundFromBrowser(icao, lat, lon, aptName, existingRunway
                         layout.aprons.push(coords);
                     } else if (aeroway === 'runway') {
                         const surf = String(tags.surface || 'asphalt').toLowerCase();
+                        const isGrassSurf = surf.includes('grass') || surf.includes('turf');
+                        let rwyWidthM = 0;
+                        if (tags.width) {
+                            const rawW = String(tags.width).trim().toLowerCase();
+                            const numW = parseFloat(rawW.replace(',', '.'));
+                            if (Number.isFinite(numW) && numW > 5) {
+                                rwyWidthM = rawW.includes('ft') || rawW.includes("'") ? numW * 0.3048 : numW;
+                            }
+                        }
+                        if (!rwyWidthM && Array.isArray(existingRunways) && existingRunways.length > 0) {
+                            const normRef = (ref || '').toUpperCase().replace(/\s+/g, '');
+                            const matchedDb = existingRunways.find(er =>
+                                normRef && er.ref && String(er.ref).toUpperCase().replace(/\s+/g, '') === normRef
+                            ) || existingRunways[0];
+                            if (matchedDb && Number(matchedDb.width) > 5) {
+                                rwyWidthM = Number(matchedDb.width);
+                            }
+                        }
                         osmRunways.push({
                             ref: ref || 'RWY',
-                            width: 45,
-                            surface: (surf.includes('grass') || surf.includes('turf')) ? 'grass' : 'asphalt',
+                            width: Math.round((rwyWidthM || (isGrassSurf ? 25 : 45)) * 10) / 10,
+                            surface: isGrassSurf ? 'grass' : 'asphalt',
                             coords
                         });
                     } else if (aeroway === 'parking_position') {
@@ -2241,23 +2259,91 @@ function renderCustomAirportLayout(layout) {
         }).addTo(groundLayerGroup);
     });
 
+    const buildRunwayPolygonCoords = (coords, widthMeters) => {
+        if (!Array.isArray(coords) || coords.length < 2) return null;
+        // Se OSM restituisce già l'area chiusa della pista, usala direttamente
+        const first = coords[0];
+        const last = coords[coords.length - 1];
+        if (coords.length >= 4 && Math.hypot(first[0] - last[0], first[1] - last[1]) < 1e-5) {
+            return { poly: coords, isClosedArea: true };
+        }
+
+        const halfW = Math.max(10, Number(widthMeters) || 45) / 2;
+        const leftPts = [];
+        const rightPts = [];
+        const n = coords.length;
+
+        for (let i = 0; i < n; i++) {
+            const lat = Number(coords[i][0]);
+            const lon = Number(coords[i][1]);
+            const mPerLat = 111320;
+            const mPerLon = 111320 * Math.max(0.05, Math.cos(lat * Math.PI / 180));
+
+            let dx = 0;
+            let dy = 0;
+            if (i === 0) {
+                dx = (Number(coords[1][1]) - lon) * mPerLon;
+                dy = (Number(coords[1][0]) - lat) * mPerLat;
+            } else if (i === n - 1) {
+                dx = (lon - Number(coords[n - 2][1])) * mPerLon;
+                dy = (lat - Number(coords[n - 2][0])) * mPerLat;
+            } else {
+                dx = (Number(coords[i + 1][1]) - Number(coords[i - 1][1])) * mPerLon;
+                dy = (Number(coords[i + 1][0]) - Number(coords[i - 1][0])) * mPerLat;
+            }
+
+            const segLen = Math.hypot(dx, dy);
+            if (segLen < 1e-6) continue;
+
+            const nx = -dy / segLen;
+            const ny = dx / segLen;
+            const dLat = (ny * halfW) / mPerLat;
+            const dLon = (nx * halfW) / mPerLon;
+
+            leftPts.push([lat + dLat, lon + dLon]);
+            rightPts.push([lat - dLat, lon - dLon]);
+        }
+
+        if (leftPts.length < 2) return null;
+        return { poly: leftPts.concat(rightPts.reverse()), isClosedArea: false };
+    };
+
     (layout.runways || []).forEach(rwy => {
+        if (!Array.isArray(rwy.coords) || rwy.coords.length < 2) return;
         const isGrass = rwy.surface === 'grass';
-        L.polyline(rwy.coords, {
-            color: isGrass ? '#15803d' : '#334155',
-            weight: 14,
-            opacity: 0.92,
-            lineCap: 'butt'
-        }).addTo(groundLayerGroup);
+        const rwyWidthM = Number(rwy.width) > 5 ? Number(rwy.width) : (isGrass ? 25 : 45);
+        const built = buildRunwayPolygonCoords(rwy.coords, rwyWidthM);
 
-        L.polyline(rwy.coords, {
-            color: isGrass ? '#86efac' : '#f8fafc',
-            weight: 1.5,
-            dashArray: '8, 8',
-            opacity: 0.85
-        }).addTo(groundLayerGroup);
+        if (built && built.poly) {
+            L.polygon(built.poly, {
+                color: isGrass ? '#22c55e' : '#475569',
+                weight: 1.5,
+                opacity: 0.9,
+                fillColor: isGrass ? '#15803d' : '#334155',
+                fillOpacity: 0.88,
+                interactive: false
+            }).addTo(groundLayerGroup);
+        } else {
+            L.polyline(rwy.coords, {
+                color: isGrass ? '#15803d' : '#334155',
+                weight: 14,
+                opacity: 0.92,
+                lineCap: 'butt',
+                interactive: false
+            }).addTo(groundLayerGroup);
+        }
 
-        if (rwy.ref && rwy.coords.length >= 2) {
+        if (!built || !built.isClosedArea) {
+            L.polyline(rwy.coords, {
+                color: isGrass ? '#86efac' : '#f8fafc',
+                weight: 1.5,
+                dashArray: '8, 8',
+                opacity: 0.85,
+                interactive: false
+            }).addTo(groundLayerGroup);
+        }
+
+        if (rwy.ref && rwy.coords.length >= 2 && (!built || !built.isClosedArea)) {
             const parts = rwy.ref.split('/');
             L.marker(rwy.coords[0], {
                 icon: L.divIcon({ className: 'apt-rwy-thr-label', html: parts[0] || rwy.ref, iconSize: null }),

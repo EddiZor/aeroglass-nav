@@ -1957,3 +1957,16 @@
 [2026-11-21 11:46:31.570] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:57% (18.3/31.8GB) | Commit:29.4/87.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
 [2026-11-21 11:46:31.572] [SIM_MENU    ] [T:TelemetryPoll] [RAM:57% (18.3/31.8GB) | Commit:29.4/87.8GB] MSFS 2024 in Menu/Caricamento (lat=None) — polling ridotto a 5s.
 [2026-11-21 11:50:09.216] [SIMCONNECT  ] [T:Thread-500 (execute)] [RAM:58% (18.7/31.8GB) | Commit:30.3/87.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-21 14:47:24.749] [STARTUP     ] [T:MainThread] [RAM:43% (27.7/63.8GB) | Commit:35.7/119.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-21 14:49:13.558] [STARTUP     ] [T:MainThread] [RAM:47% (30.5/63.8GB) | Commit:39.4/119.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-21 14:49:42.932] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:49% (31.8/63.8GB) | Commit:41.2/119.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-21 14:49:43.039] [SIM_MENU    ] [T:TelemetryPoll] [RAM:49% (31.8/63.8GB) | Commit:41.3/119.8GB] MSFS 2024 in Menu/Caricamento (lat=None) — polling ridotto a 5s.
+[2026-11-21 14:56:29.077] [FACILITY_REQ] [T:Thread-604 (_call)] [RAM:53% (34.0/63.8GB) | Commit:50.7/119.8GB] Inizio estrazione SimConnect Facility Data per LIPU
+[2026-11-21 14:56:29.210] [FACILITY_END] [T:Thread-604 (_call)] [RAM:53% (34.0/63.8GB) | Commit:50.7/119.8GB] Fine estrazione SimConnect Facility Data per LIPU (trovato=True)
+[2026-11-21 15:02:20.336] [SIMCONNECT  ] [T:Thread-1001 (execute)] [RAM:52% (33.4/63.8GB) | Commit:51.1/119.8GB] Connessione SimConnect chiusa (_safe_disconnect).
+[2026-11-21 15:02:25.550] [STARTUP     ] [T:MainThread] [RAM:52% (33.2/63.8GB) | Commit:50.6/119.8GB] === AVVIO SESSIONE DIAGNOSTICA AEROGLASS-NAV ===
+[2026-11-21 15:02:25.720] [SIMCONNECT  ] [T:TelemetryPoll] [RAM:52% (33.2/63.8GB) | Commit:50.6/119.8GB] Connessione SimConnect telemetria stabilita con MSFS 2024.
+[2026-11-21 15:02:25.794] [SIM_MENU    ] [T:TelemetryPoll] [RAM:52% (33.2/63.8GB) | Commit:50.6/119.8GB] MSFS 2024 in Menu/Caricamento (lat=-2.1556896488427017e-07) — polling ridotto a 5s.
+[2026-11-21 15:02:35.001] [FACILITY_REQ] [T:Thread-46 (_call)] [RAM:52% (33.5/63.8GB) | Commit:51.3/119.8GB] Inizio estrazione SimConnect Facility Data per LIPS
+[2026-11-21 15:02:35.214] [FACILITY_END] [T:Thread-46 (_call)] [RAM:52% (33.5/63.8GB) | Commit:51.3/119.8GB] Fine estrazione SimConnect Facility Data per LIPS (trovato=True)
+[2026-11-21 15:04:12.163] [SIMCONNECT  ] [T:Thread-251 (execute)] [RAM:52% (33.6/63.8GB) | Commit:51.4/119.8GB] Connessione SimConnect chiusa (_safe_disconnect).
