@@ -1,154 +1,172 @@
 # AeroGlass-Nav ✈️🗺️
 
-🌐 **[🇮🇹 Italiano](#-italiano) | [🇬🇧 English](#-english)**
+🌐 **[🇬🇧 English](#-english) | [🇮🇹 Italiano](#-italiano)**
 
----
+> ⚠️ **Aviation Disclaimer:** AeroGlass-Nav is designed exclusively for flight simulation (Microsoft Flight Simulator 2020 / MSFS 2024). It must never be used for real-world navigation or flight planning. / *Sviluppato esclusivamente per la simulazione di volo (MSFS 2020 / MSFS 2024); non utilizzare per la navigazione reale.*
 
-## 🇮🇹 Italiano
-
-**AeroGlass-Nav** è un avanzato sistema EFB (Electronic Flight Bag), Flight Planner e Moving Map open-source progettato specificamente per Microsoft Flight Simulator (MSFS 2020 / MSFS 2024). Sviluppato con un'architettura ibrida Python (`pywebview` + backend Flask/HTTP + connessione nativa SimConnect) e frontend cartografico Leaflet, offre un'esperienza di navigazione fluida, reattiva ed ergonomica sia su monitor PC che su tablet Android via Wi-Fi.
-
----
-
-### 🌟 Caratteristiche Principali
-
-#### 1. 🗺️ Moving Map Dinamica, Ground Map e Cartografia Multi-Layer
-* **Layer Mappe Multipli:** Selezione rapida tra modalità *IFR*, *VFR*, temi *Giorno/Notte (Dark Cockpit)*, *Foto Satellitari* e mappa *Rilievi (Terrain)*.
-* **Ground Map Aeroportuale Vettoriale:** Visualizzazione automatica ad alto dettaglio del layout di terra degli aeroporti con piste, raccordi (taxiway con etichette), linee di guida gialle e piazzole di parcheggio numerate.
-* **Layer VOR / ILS & Filtri:** Visualizzazione interattiva di oltre 42.000 aeroporti mondiali da database SQLite locale, radioassistenze, frequenze e coni di avvicinamento ILS configurabili tramite il pannello filtri.
-* **Telemetria SimConnect in Tempo Reale:** Tracciamento live dell'aeromobile (`ACFT`, `ALT`, `GS`, `HDG`) con modalità *Segui Aereo* o *Mappa Libera* e bussola dinamica integrata.
-
-#### 2. ✈️ Pianificazione Volo Avanzata, Procedure & NavLog
-* **Import / Export `.PLN` & Invia a MSFS:** Supporto al caricamento/salvataggio nativo dei file `.pln` (anche via drag & drop) e invio diretto del piano di volo attivo al simulatore tramite il pulsante **`Invia a MSFS`**.
-* **Procedure Strumentali (SID / STAR / APPR):** Gestione delle procedure di partenza, arrivo e avvicinamento con indicazione delle piste in uso e vincoli di quota.
-* **Integrazione SimBrief:** Sincronizzazione immediata dell'ultimo OFP generato tramite il proprio User ID SimBrief.
-* **Waypoints Utente (Custom):** Creazione, salvataggio nel database SQLite locale e posizionamento di waypoint personalizzati (con ID, quota e coordinate) tramite acquisizione diretta con un click sulla mappa.
-* **NavLog, Fuel & Logbook:** Tabella di marcia dettagliata (prua, distanze, ETE/ETA), calcolatore di carburante (*Block Fuel* e riserve regolamentari EASA/FAA) e **Logbook** di bordo integrato per registrare i voli effettuati.
-
-#### 3. 📉 Profilo VNAV Multi-Step, ToD e Scansione Nuvole
-* **Profilo Altimetrico Verticale Multi-Step:** Grafico interattivo in tempo reale dell'elevazione del terreno e della rotta con calcolo automatico delle discese a gradini e del **Top of Descent (ToD)**.
-* **Meteo Live (WX) & Scan Nuvole in Quota:** Decodifica METAR in tempo reale (vento, temperatura, QNH mostrati direttamente sulle schede aeroporto) e selettore di quota (`AUTO` basato sull'aereo o livelli fissi `FL050` – `FL300`) per visualizzare le celle nuvolose direttamente sul profilo VNAV e sulla mappa.
-
-#### 4. 🌐 Traffico Online (VATSIM / IVAO) & Radar ATC
-* **Radar Postazioni ATC:** Visualizzazione dei cerchi di copertura per torri (`TWR`), avvicinamenti (`APP`) e centri di controllo (`CTR`) con opacità e raggio configurabili.
-* **Traffico Piloti Live:** Monitoraggio in tempo reale dei piloti connessi sulle reti online con vettori di rotta, quota e Ground Speed.
-
-#### 5. 📝 Scratchpad EFB, Note & Righello Tattico
-* **ATC Clearance Pad & Note:** Blocco note rapido per annotare Squawk, QNH, altitudini, vettori radar e frequenze d'ascolto con switch rapido tra i canali radio.
-* **Canvas Disegno a Mano Libera:** Lavagna grafica ideale per appunti veloci in volo con supporto a penne colorate e gomma.
-* **Righello Tattico di Misura:** Strumento per misurare distanze in miglia nautiche (`NM`), prua magnetica/vera e tempo stimato `ETE` (attivabile dal pulsante `Righello` o con click destro sulla mappa).
-
-#### 6. 🌍 Interfaccia Multilingua (IT / EN) e Accessibilità
-* **Switch Lingua Istantaneo:** Interfaccia utente completamente localizzata in **Italiano** e **Inglese** selezionabile con un click dalla barra superiore.
-* **Ergonomia Desktop & Touch:** Testi selezionabili, orologio doppio `UTC` / `SYS`, coordinate cursore live e controlli ottimizzati sia per l'uso con mouse che su schermi touch.
-
----
-
-### 📱 Connessione Tablet EFB via Wi-Fi
-
-AeroGlass-Nav integra un server HTTP multithreaded locale. Per utilizzare un tablet o un secondo dispositivo come EFB esterno:
-1. Clicca sul pulsante **`EFB`** nella barra superiore per visualizzare il **QR Code** e l'indirizzo IP locale (es. `192.168.x.x:8339`).
-2. Inquadra il QR Code con la fotocamera del tablet (connesso alla stessa rete Wi-Fi del PC).
-3. Entrambi i dispositivi si sincronizzeranno in tempo reale su rotta, mappa di terra, meteo e telemetria dell'aereo.
-
----
-
-### 🚀 Installazione e Avvio
-
-1. **Clona il repository:**
-   ```bash
-   git clone https://github.com/tuo-username/aeroglass-nav.git
-   cd aeroglass-nav
-   ```
-2. **Installa le dipendenze Python:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. **Avvia l'applicazione:**
-   ```bash
-   python main.py
-   ```
-
----
-
-### ⌨️ Scorciatoie e Interazione
-* **`F1`**: Avvia il Tour Guidato Dimostrativo (Demo Mode).
-* **`Ctrl + Z`**: Annulla l'ultima modifica sulla rotta.
-* **`Click Destro su Mappa`**: Avvia il righello di misurazione rapida.
-* **`Ctrl + C / Ctrl + V`**: Pienamente abilitati in tutti i pannelli e nello Scratchpad.
-
----
 ---
 
 ## 🇬🇧 English
 
-**AeroGlass-Nav** is an advanced open-source EFB (Electronic Flight Bag), Flight Planner, and Moving Map system specifically designed for Microsoft Flight Simulator (MSFS 2020 / MSFS 2024). Built on a hybrid Python architecture (`pywebview` + Flask/HTTP backend + native SimConnect bridge) and a Leaflet mapping frontend, it delivers a smooth, responsive, and ergonomic navigation experience both on PC monitors and on Android/iOS tablets over Wi-Fi.
+**AeroGlass-Nav** is a standalone **Dark Cockpit** EFB (Electronic Flight Bag), Flight Planner, and Moving Map application specifically built for **Microsoft Flight Simulator 2024** (and compatible with MSFS 2020). Built on a hybrid Python architecture (`pywebview`, multithreaded EFB HTTP server, `SQLite`, and native `SimConnect` telemetry) with a `Leaflet` cartographic frontend, it provides a smooth, responsive navigation experience both on your desktop flight sim setup and on tablets over Wi-Fi.
 
 ---
 
 ### 🌟 Key Features
 
-#### 1. 🗺️ Dynamic Moving Map, Ground Map & Multi-Layer Cartography
-* **Multiple Map Layers:** Quick switching between *IFR*, *VFR*, *Day/Night (Dark Cockpit)* themes, *Satellite Imagery*, and *Relief (Terrain)* maps.
-* **Vector Airport Ground Map:** High-detail automatic rendering of airport ground layouts featuring runways, labeled taxiways, yellow taxilanes, holding points, and numbered parking stands.
-* **VOR / ILS Layers & Filters:** Interactive display of over 42,000 worldwide airports from a local SQLite database, navaids, frequencies, and customizable ILS approach cones.
-* **Real-Time SimConnect Telemetry:** Live aircraft tracking (`ACFT`, `ALT`, `GS`, `HDG`) with *Follow Aircraft* or *Free Map* modes and an integrated dynamic compass rose.
+#### 1. 🗺️ Dynamic Moving Map, Ground Map & Visual Search Centering
+* **Multiple Map Layers:** Fast switching across *Dark Cockpit*, *IFR*, *VFR*, *Open Flight Maps*, *Satellite*, and *Relief (Terrain)* views, complete with live filter calibration profiles (brightness, contrast, saturation).
+* **Quick Search with Visual Centering:** Instant search across **48,000+ world airports**, cities, and navaids in the local SQLite database (with `Enter` confirmation), centering the target airfield within the visible map area (compensating for sidebar and VNAV drawer) and opening the quick METAR popup.
+* **Real Airport Ground Map:** High-detail ground layouts (runways, labeled taxiways, taxilanes, and parking stands) sourced from cache/MSFS/OSM, paired with zoom-based decluttering (LOD).
+* **VOR / ILS & Navaids Layer:** Zoom-filtered display of VOR, VOR-DME, VORTAC, TACAN, NDB, and ILS approach cones with frequencies and associated details.
+* **Real-Time SimConnect Telemetry:** Live aircraft tracking (`ACFT`, `ALT`, `GS`, `HDG`) with *Free Map*, *North Up*, and *Track Up* modes via an integrated compass rose.
 
-#### 2. ✈️ Advanced Flight Planning, Procedures & NavLog
-* **`.PLN` Import / Export & Send to MSFS:** Native loading and saving of `.pln` flight plan files (including drag & drop) plus direct route injection into the simulator via the **`Send to MSFS`** button.
-* **Instrument Procedures (SID / STAR / APPR):** Full support for departure, arrival, and approach procedures with active runway badges and altitude constraints.
-* **SimBrief Integration:** Instant synchronization of your latest OFP using your SimBrief User ID.
-* **Custom User Waypoints:** Create, store in local SQLite, and place custom waypoints (with ID, altitude, and coordinates) by clicking directly on the map.
-* **NavLog, Fuel & Logbook:** Detailed navigation log (heading, distances, ETE/ETA), fuel calculator (*Block Fuel* and EASA/FAA regulatory reserves), and a built-in flight **Logbook** to record your flights.
+#### 2. ✈️ Flight Planning, Analytical IFR Procedures & NavLog
+* **Airway Auto-Routing & `.PLN`:** Automated airway routing (`router.py`), `.pln` import/export (including drag & drop), and direct route transfer to the aircraft avionics via **`Send to MSFS`**.
+* **Instrument Procedures & Analytical Holds:** Support for `SID`, `STAR`, and `APPR` procedures with altitude/speed constraints, DME arcs, radar vectors, and speed/altitude-adaptive **Holding patterns**.
+* **SimBrief Integration & Custom Waypoints:** One-click OFP import via SimBrief ID and SQLite-backed custom waypoints (including direct map coordinate picking).
+* **NavLog, Fuel & SQLite Logbook:** Operational leg table, fuel planner (*Block Fuel* and reserves), and a built-in SQLite **Logbook** to review or manage completed flights.
 
 #### 3. 📉 Multi-Step VNAV Profile, ToD & Cloud Scanner
-* **Multi-Step Vertical Profile:** Real-time interactive terrain and route elevation graph featuring step-descent planning and automatic **Top of Descent (ToD)** calculation.
-* **Live Weather (WX) & Altitude Cloud Scan:** Real-time METAR decoding (wind, temperature, and QNH displayed directly on airport cards) and an altitude cloud selector (`AUTO` synced to aircraft altitude or fixed flight levels `FL050` – `FL300`) rendered on both the VNAV profile and the map.
+* **Vertical Profile & Top of Descent:** Interactive terrain and flight-plan elevation chart with automatic **Top of Descent (ToD)** calculation and recommended descent rate.
+* **Live Weather (WX) & Cloud Scanner:** Real-time METAR decoding (wind, temperature, QNH, flight category, and recommended runway) plus altitude cloud slicing (`AUTO` or `FL050` – `FL300`) with `IMC` indicators.
 
-#### 4. 🌐 Online Traffic (VATSIM / IVAO) & ATC Radar
-* **ATC Station Radar:** Coverage circles for Towers (`TWR`), Approach (`APP`), and Control Centers (`CTR`) with adjustable range and opacity.
-* **Live Pilot Traffic:** Real-time monitoring of nearby connected pilots with heading vectors, altitude, and Ground Speed.
+#### 4. 🌐 Online Traffic (IVAO / VATSIM), Metadata & Airline / VA Filter
+* **Online Pilots, Aircraft Type, Operator & Route:** Asynchronous IVAO and VATSIM traffic fetch with ICAO aircraft type detection, airline/operator lookup (from SQLite `world_airlines` / `world_aircraft_types` or `OPR/` tags), `DEP ➔ ARR` routes, and **category SVG silhouettes** (`heavy`, `jet`, `turboprop`, `ga`, `mil`, `heli`).
+* **Virtual Airline (VA) Filter & Highlighting:** Radar calibration popover (`🎚️`) supporting comma-separated callsign prefixes or operator keywords, **Highlight** or **VA-Only** mode, **Global VA Range**, custom highlight color, live flight counter, and SQLite persistence.
+* **ATC Radar & Quick Tuning:** Online `TWR`, `APP`, and `CTR` coverage display with adjustable radius and opacity, plus one-click VHF frequency transfer to the Scratchpad.
 
-#### 5. 📝 EFB Scratchpad, Notes & Tactical Ruler
-* **ATC Clearance Pad & Notes:** Quick notepad to jot down Squawk codes, QNH, altitudes, radar vectors, and radio frequencies with instant frequency standby swapping.
-* **Freehand Drawing Canvas:** Built-in drawing pad for quick in-flight notes with colored pens and eraser tools.
-* **Tactical Measurement Ruler:** Measure distances in nautical miles (`NM`), magnetic/true heading, and estimated time enroute (`ETE`) via the toolbar button or by right-clicking anywhere on the map.
+#### 5. 📝 EFB Scratchpad, Tactical Ruler & Bilingual Glossary
+* **EFB Scratchpad:** Quick pad for `SQUAWK`, `QNH`, `ALT/FL`, `HDG`, `SPEED`, and `NEXT FREQ` (with telemetry sync), freehand drawing canvas, and nearby frequencies list.
+* **Tactical Ruler:** Measure distance (`NM` / `km`), bearing, and estimated `ETE` via the toolbar button or right-clicking on the map.
+* **Bilingual Glossary (`IT` / `EN`):** Alphabetical reference page opened in your system browser with instant filtering and synchronized language selection.
 
-#### 6. 🌍 Multilingual UI (IT / EN) & Accessibility
-* **Instant Language Switch:** Fully localized user interface in **Italian** and **English**, switchable on the fly from the top toolbar.
-* **Desktop & Touch Ergonomics:** Selectable text, dual `UTC` / `SYS` clocks, live cursor coordinates, and controls optimized for both mouse and touchscreen devices.
+#### 6. 🌍 First-Launch Localization & Unified SQLite Database
+* **First-Launch Language Selection:** On the very first launch, the app starts in **English (`en`)** and displays an AeroGlass-styled modal asking whether to keep English or switch to **Italian (`it`)**, saving the choice to SQLite (`app_language`) and keeping the UI, tours (`F1` / `F2`), and glossary aligned.
+* **Unified SQLite Database (`aeroglass.db`):** Single source of truth for airports, runways, frequencies, navaids, airlines, aircraft categories, ground layout cache, settings, and logbook, with non-destructive user-profile synchronization (`~/.aeroglass_nav/aeroglass.db`) in packaged builds.
 
 ---
 
 ### 📱 Tablet EFB Connection via Wi-Fi
 
-AeroGlass-Nav includes a built-in multithreaded local HTTP server. To use an external tablet as a wireless EFB:
-1. Click the **`EFB`** button in the top toolbar to display the **QR Code** and local IP address (e.g., `192.168.x.x:8339`).
-2. Scan the QR Code with your tablet's camera (connected to the same Wi-Fi network as your PC).
-3. Both devices will synchronize in real time across flight plan, ground map, weather, and aircraft telemetry.
+AeroGlass-Nav runs a local multithreaded HTTP server so you can use a tablet or second device as a wireless EFB:
+1. Click the **`EFB`** button in the top bar to display the **QR Code** and local IP/port URL (e.g., `192.168.x.x:8339`).
+2. Scan the QR Code or open the URL on a tablet connected to the same local network.
+3. Flight plan, map, weather, online traffic, and aircraft telemetry stay synchronized in real time.
 
 ---
 
-### 🚀 Installation & Launch
+### 🚀 Installation, Launch & Build
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/your-username/aeroglass-nav.git
+   git clone [https://github.com/EddiZor/aeroglass-nav.git](https://github.com/EddiZor/aeroglass-nav.git)
    cd aeroglass-nav
-   ```
-2. **Install Python dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. **Run the application:**
-   ```bash
-   python main.py
-   ```
+Install Python dependencies:
 
----
+Bash
+pip install -r requirements.txt
+Run in development mode:
 
-### ⌨️ Shortcuts & Interaction
-* **`F1`**: Launch the Interactive Guided Tour (Demo Mode).
-* **`Ctrl + Z`**: Undo the last route modification.
-* **`Right-Click on Map`**: Activate the quick measurement ruler.
-* **`Ctrl + C / Ctrl + V`**: Fully enabled across all panels and the Scratchpad.
+Bash
+python main.py
+Build executable with PyInstaller (optional):
+
+Bash
+pyinstaller --clean -y build.spec
+⌨️ Shortcuts & Interaction
+F1: Start / stop the bilingual Interactive Guided Tour (demo.js).
+
+F2: Start / stop the Automatic Demo (demo2.js) — press L while running to switch language on the fly.
+
+Esc: Stop an active demo or cancel an in-progress measurement.
+
+Ctrl + Z: Undo the last route change.
+
+Right-Click on Map: Start the quick measurement ruler.
+
+🇮🇹 Italiano
+AeroGlass-Nav è un sistema EFB (Electronic Flight Bag), Flight Planner e Moving Map standalone in stile Dark Cockpit, progettato specificamente per Microsoft Flight Simulator 2024 (e compatibile con MSFS 2020). Realizzato con un'architettura ibrida Python (pywebview, server HTTP multithread per EFB, SQLite e bridge SimConnect) e frontend cartografico Leaflet, offre un'esperienza fluida e reattiva sia sul monitor del PC di volo sia su tablet via Wi-Fi.
+
+🌟 Caratteristiche Principali
+1. 🗺️ Moving Map Dinamica, Ground Map & Ricerca Rapida
+Layer Cartografici Multipli: Passaggio rapido tra viste Dark Cockpit, IFR, VFR, Open Flight Maps, Foto Satellitari e Rilievi (Terrain), con profili di calibrazione filtri (luminosità, contrasto, saturazione) in tempo reale.
+
+Ricerca Rapida con Centraggio Visivo: Ricerca istantanea su oltre 48.000 aeroporti mondiali, città e radioassistenze nel database SQLite locale (con conferma tramite Invio), centrando lo scalo nell'area visibile della finestra (compensando sidebar e cassetto VNAV) e aprendo la scheda METAR rapida.
+
+Ground Map Aeroportuale Reale: Visualizzazione ad alto dettaglio del layout di terra (piste, taxiway con identificativi, raccordi e piazzole di parcheggio) estratta da cache/MSFS/OSM, con decluttering automatico per livello di zoom (LOD).
+
+Layer VOR / ILS & Radioassistenze: Visualizzazione filtrabile per zoom di VOR, VOR-DME, VORTAC, TACAN, NDB e coni ILS con frequenze e dati associati.
+
+Telemetria SimConnect in Tempo Reale: Tracciamento live dell'aeromobile (ACFT, ALT, GS, HDG) con modalità Mappa Libera, Nord Su e Track Up tramite rosa dei venti integrata.
+
+2. ✈️ Pianificazione Volo, Procedure IFR Analitiche & NavLog
+Airway Auto-Routing & .PLN: Calcolo automatico di rotta su aerovie (router.py), importazione/esportazione file .pln (anche con drag & drop) e invio diretto del piano di volo attivo al simulatore tramite Invia a MSFS.
+
+Procedure Strumentali & Holding Analitiche: Supporto a SID, STAR e APPR con vincoli di quota/velocità, archi DME, vettori radar e attivazione rapida di Holding pattern adattive calcolate su velocità e quota.
+
+Integrazione SimBrief & Waypoint Utente: Importazione rapida dell'ultimo OFP tramite SimBrief ID e gestione di waypoint personalizzati salvati in SQLite (anche con acquisizione coordinate direttamente dalla mappa).
+
+NavLog, Fuel & Logbook SQLite: Tabella operativa di rotta, calcolatore carburante (Block Fuel e riserve) e Logbook su SQLite per consultare o gestire lo storico dei voli.
+
+3. 📉 Profilo VNAV Multi-Step, ToD & Scansione Nuvole
+Profilo Verticale & Top of Descent: Grafico altimetrico interattivo del terreno e della rotta con calcolo del Top of Descent (ToD) e rateo di discesa consigliato.
+
+Meteo Live (WX) & Cloud Scanner: Decodifica METAR (vento, temperatura, QNH, categoria di volo e pista consigliata) e scansione strati nuvolosi in quota (AUTO o livelli FL050 – FL300) con indicatori IMC.
+
+4. 🌐 Traffico Online (IVAO / VATSIM), Metadati & Filtro Compagnia / VA
+Piloti Online, Tipo Aereo, Operatore & Tratta: Recupero asincrono del traffico IVAO e VATSIM con riconoscimento di tipo ICAO, compagnia/operatore (da tabelle SQLite world_airlines / world_aircraft_types o tag OPR/), tratta DEP ➔ ARR e sagome SVG differenziate per categoria (heavy, jet, turboprop, ga, mil, heli).
+
+Filtro & Evidenziazione Compagnie Virtuali (VA): Pannello di calibrazione radar (🎚️) con ricerca per prefissi callsign o operatore (separati da virgola), modalità Evidenzia o Solo VA, Raggio Globale VA, colore personalizzabile, contatore live e impostazioni persistenti in SQLite.
+
+Radar ATC & Sintonia Rapida: Visualizzazione stazioni TWR, APP e CTR con raggio e opacità regolabili e invio rapido della frequenza VHF allo Scratchpad.
+
+5. 📝 Scratchpad EFB, Righello Tattico & Glossario Bilingue
+Scratchpad EFB: Blocco note con campi SQUAWK, QNH, ALT/FL, HDG, SPEED e NEXT FREQ (sincronizzabili con la telemetria), canvas a mano libera e elenco frequenze vicine.
+
+Righello Tattico: Misurazione di distanza (NM / km), prua e ETE stimato tramite pulsante o click destro su mappa.
+
+Glossario Bilingue (IT / EN): Guida alfabetica interattiva apribile nel browser di sistema con ricerca istantanea e cambio lingua sincronizzato.
+
+6. 🌍 Localizzazione al Primo Avvio & Database Unificato
+Scelta Lingua al Primo Avvio: Al primo avvio assoluto l'applicazione parte in inglese (en) mostrando una finestrina modale in stile AeroGlass per scegliere se mantenere l'inglese o passare all'italiano (it), salvando la preferenza in SQLite (app_language) e allineando app, tour (F1 / F2) e glossario.
+
+Database SQLite Centralizzato (aeroglass.db): Archiviazione centralizzata di aeroporti, piste, frequenze, radioassistenze, compagnie aeree, categorie aeromobili, cache dei layout di terra, impostazioni e logbook, con copia e sincronizzazione non distruttiva nel profilo utente (~/.aeroglass_nav/aeroglass.db) per le build distribuite.
+
+📱 Connessione Tablet EFB via Wi-Fi
+AeroGlass-Nav include un server HTTP locale multithread per usare un tablet o un secondo schermo come EFB:
+
+Clicca sul pulsante EFB nella barra superiore per visualizzare QR Code e indirizzo IP/porta locale (es. 192.168.x.x:8339).
+
+Scansiona il QR Code o apri l'URL dal tablet collegato alla stessa rete locale.
+
+Rotta, mappa, meteo, traffico online e telemetria restano sincronizzati in tempo reale.
+
+🚀 Installazione, Avvio e Build
+Clona il repository:
+
+Bash
+git clone [https://github.com/EddiZor/aeroglass-nav.git](https://github.com/EddiZor/aeroglass-nav.git)
+cd aeroglass-nav
+Installa le dipendenze Python:
+
+Bash
+pip install -r requirements.txt
+Avvia in modalità sviluppo:
+
+Bash
+python main.py
+Compila l'eseguibile con PyInstaller (opzionale):
+
+Bash
+pyinstaller --clean -y build.spec
+⌨️ Scorciatoie e Interazione
+F1: Avvia / chiude il Tour Guidato Interattivo bilingue (demo.js).
+
+F2: Avvia / interrompe la Demo Automatica (demo2.js) — premi L durante la demo per cambiare lingua al volo.
+
+Esc: Chiude la demo attiva o annulla una misurazione in corso.
+
+Ctrl + Z: Annulla l'ultima modifica sulla rotta.
+
+Click Destro su Mappa: Avvia il righello di misurazione rapida.
