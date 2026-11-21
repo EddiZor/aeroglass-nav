@@ -13,7 +13,7 @@ const translations = {
         btnFilters: "Filters & SID/STAR",
         btnNavaids: "📡 VOR / ILS: ON",
         btnNavaidsOff: "📡 VOR / ILS: OFF",
-        btnFollowFree: "✋ Mappa Libera",
+        btnFollowFree: "✋ Free Map",
         btnFollowNorth: "🎯 Follow (North Up)",
         btnFollowTrack: "🧭 Follow (Track Up)",
         btnReduce: "[ Reduce / Expand ]"
@@ -105,8 +105,8 @@ const DEFAULT_ILS = [
     {"ident": "IFRR", "rwy": "34R", "name": "ILS-DME Fiumicino RWY 34R", "freq": "110.30", "course": 341, "gs_alt": "3,000 ft", "lat": 41.7780, "lon": 12.2320},
     {"ident": "IBOL", "rwy": "12", "name": "ILS Bologna RWY 12", "freq": "109.30", "course": 116, "gs_alt": "2,500 ft", "lat": 44.5408, "lon": 11.2728},
     {"ident": "IBLQ", "rwy": "30", "name": "ILS/LOC Bologna RWY 30", "freq": "108.90", "course": 296, "gs_alt": "2,500 ft", "lat": 44.5300, "lon": 11.3045},
-    {"ident": "ITES", "rwy": "04R", "name": "ILS Venezia RWY 04R", "freq": "110.30", "course": 41, "gs_alt": "3,000 ft", "lat": 45.4935, "lon": 12.3375},
-    {"ident": "IVIL", "rwy": "04", "name": "ILS Verona RWY 04", "freq": "109.50", "course": 43, "gs_alt": "3,000 ft", "lat": 45.3820, "lon": 10.8710}
+    {"ident": "VTS", "rwy": "04R", "name": "ILS Venezia RWY 04R", "freq": "109.95", "course": 41, "gs_alt": "3,000 ft", "lat": 45.4935, "lon": 12.3375},
+    {"ident": "VIL", "rwy": "04", "name": "ILS Verona RWY 04", "freq": "109.50", "course": 43, "gs_alt": "3,000 ft", "lat": 45.3820, "lon": 10.8710}
 ];
 
 const AIRSPACES_DATA = {
@@ -155,7 +155,7 @@ if (!isDesktopWebView && !window.pywebview && window.location.protocol.startsWit
 }
 
 // --- VARIABILI DI STATO GLOBALE ---
-let currentLang = 'it';
+let currentLang = 'en';
 let showNavaids = true;
 let followState = 1; // 0 = Free, 1 = North Up, 2 = Track Up
 let lastAcftHdgTrue = 0;

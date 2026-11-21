@@ -239,7 +239,12 @@ function addWpToRoute(ident, explicitLegIdx = undefined) {
     const wp = userWaypoints.find(w => w.ident === ident);
     if (!wp) return;
     if (!flightPlan || flightPlan.length === 0) {
-        alert("Crea o importa prima un piano di volo attivo.");
+        const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+        const msg = isEn
+            ? "Create or import an active flight plan first."
+            : "Crea o importa prima un piano di volo attivo.";
+        if (typeof window.showAeroAlert === 'function') window.showAeroAlert(msg);
+        else alert(msg);
         return;
     }
     pushFlightPlanUndoState();
@@ -783,8 +788,15 @@ function removeWaypointFromRoute(index) {
 }
 
 async function editWaypointAlt(index, currentAlt) {
-    const newAlt = prompt("Inserisci la quota target in piedi (ft) per questo waypoint:", currentAlt);
-    if (newAlt !== null && !isNaN(newAlt)) {
+    const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+    const msg = isEn
+        ? "Enter target altitude in feet (ft) for this waypoint:"
+        : "Inserisci la quota target in piedi (ft) per questo waypoint:";
+    const title = isEn ? "✈️ WAYPOINT ALTITUDE" : "✈️ QUOTA WAYPOINT";
+    const newAlt = (typeof window.showAeroPrompt === 'function')
+        ? await window.showAeroPrompt(msg, currentAlt, title)
+        : prompt(msg, currentAlt);
+    if (newAlt !== null && String(newAlt).trim() !== '' && !isNaN(newAlt)) {
         pushFlightPlanUndoState();
         flightPlan[index].alt_ft = parseInt(newAlt, 10);
         updateFlightPlanUI(undefined, false);
@@ -817,12 +829,21 @@ async function generateAutoAirwayRoute() {
     const routeType = typeInp?.value || 'IFR_LOW';
     const cruiseAlt = parseInt(altInp?.value || '12000', 10) || 12000;
 
+    const isEnRoute = (typeof currentLang !== 'undefined' && currentLang === 'en');
     if (!depCode || !destCode) {
-        alert("Inserisci prima l'aeroporto di Partenza e di Arrivo.");
+        const msg = isEnRoute
+            ? "Please enter both Departure and Destination airports first."
+            : "Inserisci prima l'aeroporto di Partenza e di Arrivo.";
+        if (typeof window.showAeroAlert === 'function') window.showAeroAlert(msg);
+        else alert(msg);
         return;
     }
 
-    if (wptsInp) wptsInp.placeholder = "⏳ Calcolo rotta su aerovie SQLite...";
+    if (wptsInp) {
+        wptsInp.placeholder = isEnRoute
+            ? "⏳ Calculating airway route on SQLite..."
+            : "⏳ Calcolo rotta su aerovie SQLite...";
+    }
 
     // Risoluzione coordinate direttamente dal client
     let depLat = null, depLon = null, destLat = null, destLon = null;
@@ -862,7 +883,9 @@ async function generateAutoAirwayRoute() {
                 );
                 return;
             } else if (res && !res.success) {
-                alert(`Auto-Route: ${res.error || 'Nessun percorso trovato'}`);
+                const msg = `Auto-Route: ${res.error || (isEnRoute ? 'No route found' : 'Nessun percorso trovato')}`;
+                if (typeof window.showAeroAlert === 'function') window.showAeroAlert(msg);
+                else alert(msg);
             }
         } catch (err) {
             console.error("[AutoRoute] Errore chiamata IPC:", err);
@@ -875,14 +898,29 @@ function openCreateFplModal() { document.getElementById('createFplModal').style.
 function closeCreateFplModal() { document.getElementById('createFplModal').style.display = 'none'; }
 
 async function exportCurrentFlightPlan() {
+    const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
     if (!flightPlan || flightPlan.length < 2) {
-        alert("Nessun piano di volo attivo da esportare.");
+        const msg = isEn
+            ? "No active flight plan to export."
+            : "Nessun piano di volo attivo da esportare.";
+        if (typeof window.showAeroAlert === 'function') window.showAeroAlert(msg);
+        else alert(msg);
         return;
     }
     if (window.pywebview && window.pywebview.api && window.pywebview.api.export_pln_file) {
         const res = await window.pywebview.api.export_pln_file(flightPlan);
-        if (res && res.success) alert(`Piano di volo salvato in Download:\n${res.path}`);
-        else alert("Errore export PLN: " + (res.error || "Sconosciuto"));
+        if (res && res.success) {
+            const msg = isEn
+                ? `Flight plan saved to Downloads:\n${res.path}`
+                : `Piano di volo salvato in Download:\n${res.path}`;
+            const title = isEn ? "💾 EXPORT .PLN" : "💾 ESPORTAZIONE .PLN";
+            if (typeof window.showAeroAlert === 'function') window.showAeroAlert(msg, title);
+            else alert(msg);
+        } else {
+            const msg = (isEn ? "PLN export error: " : "Errore export PLN: ") + (res?.error || (isEn ? "Unknown" : "Sconosciuto"));
+            if (typeof window.showAeroAlert === 'function') window.showAeroAlert(msg);
+            else alert(msg);
+        }
     }
 }
 
@@ -918,8 +956,13 @@ async function buildAndExportManualFlightPlan(doExport = true) {
     const destInput = document.getElementById('manualDest').value.trim().toUpperCase();
     const cruiseAlt = parseInt(document.getElementById('manualCruiseAlt').value, 10) || 12000;
 
+    const isEnManual = (typeof currentLang !== 'undefined' && currentLang === 'en');
     if (!depInput || !destInput) {
-        alert("Inserisci almeno l'aeroporto di partenza e di arrivo.");
+        const msg = isEnManual
+            ? "Enter at least Departure and Destination airports."
+            : "Inserisci almeno l'aeroporto di partenza e di arrivo.";
+        if (typeof window.showAeroAlert === 'function') window.showAeroAlert(msg);
+        else alert(msg);
         return;
     }
 
@@ -965,7 +1008,11 @@ async function buildAndExportManualFlightPlan(doExport = true) {
     });
 
     if (generatedPlan[0].lat === null || generatedPlan[generatedPlan.length - 1].lat === null) {
-        alert("Coordinate non trovate per l'aeroporto di partenza o di arrivo inserito.");
+        const msg = isEnManual
+            ? "Coordinates not found for the entered Departure or Destination airport."
+            : "Coordinate non trovate per l'aeroporto di partenza o di arrivo inserito.";
+        if (typeof window.showAeroAlert === 'function') window.showAeroAlert(msg);
+        else alert(msg);
         return;
     }
 
@@ -978,7 +1025,15 @@ async function buildAndExportManualFlightPlan(doExport = true) {
 }
 
 async function clearFlightPlanUI() {
-    if (confirm("Sei sicuro di voler eliminare il piano di volo corrente e ripulire la mappa?")) {
+    const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+    const msg = isEn
+        ? "Are you sure you want to delete the current flight plan and clear the map?"
+        : "Sei sicuro di voler eliminare il piano di volo corrente e ripulire la mappa?";
+    const title = isEn ? "🗑️ CLEAR FLIGHT PLAN" : "🗑️ ELIMINA PIANO DI VOLO";
+    const confirmed = (typeof window.showAeroConfirm === 'function')
+        ? await window.showAeroConfirm(msg, title, true)
+        : confirm(msg);
+    if (confirmed) {
         flightPlan = [];
         currentAlternate = null;
         clearMapRoutes();
@@ -1219,7 +1274,12 @@ function parsePlnXmlString(xmlText) {
 async function processAndRenderPlnXml(xmlText) {
     let parsed = parsePlnXmlString(xmlText);
     if (!parsed || parsed.length === 0) {
-        alert("Nessun waypoint trovato nel file .pln selezionato.");
+        const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+        const msg = isEn
+            ? "No waypoints found in the selected .pln file."
+            : "Nessun waypoint trovato nel file .pln selezionato.";
+        if (typeof window.showAeroAlert === 'function') window.showAeroAlert(msg);
+        else alert(msg);
         return;
     }
     parsed = applyClimbDescentProfile(parsed, null);
@@ -1396,7 +1456,10 @@ async function fetchSimbriefPlan() {
             setSimbriefCompactMode(true);
         } else {
             setSimbriefCompactMode(false);
-            alert("Errore SimBrief: " + (res.error || "ID non valido"));
+            const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+            const msg = (isEn ? "SimBrief Error: " : "Errore SimBrief: ") + (res.error || (isEn ? "Invalid ID" : "ID non valido"));
+            if (typeof window.showAeroAlert === 'function') window.showAeroAlert(msg);
+            else alert(msg);
         }
     }
 }

@@ -1596,6 +1596,206 @@ function showAeroNavToast(message, isWarning = true, durationMs = 3000) {
     }, durationMs);
 }
 
+function _translateAeroDialogMsg(rawMsg) {
+    const msg = String(rawMsg ?? '');
+    const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+    if (!isEn) return msg;
+
+    const rules = [
+        [/^Piano di volo salvato in Download:\s*/i, 'Flight plan saved to Downloads:\n'],
+        [/^Sei sicuro di voler eliminare il piano di volo corrente e ripulire la mappa\?/i, 'Are you sure you want to delete the current flight plan and clear the map?'],
+        [/^Errore SimBrief:\s*/i, 'SimBrief Error: '],
+        [/^Nessun piano di volo attivo/i, 'No active flight plan'],
+        [/^Errore durante l'esportazione/i, 'Export error']
+    ];
+    let out = msg;
+    for (const [rx, rep] of rules) {
+        out = out.replace(rx, rep);
+    }
+    return out;
+}
+
+function _openAeroDialog({ message, title = '', isConfirm = false, isDanger = false }) {
+    return new Promise((resolve) => {
+        const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+        const safeText = _translateAeroDialogMsg(message);
+        const headerTitle = title || (isConfirm
+            ? (isEn ? '⚠️ CONFIRMATION' : '⚠️ CONFERMA')
+            : (isEn ? '✈️ AEROGLASS-NAV' : '✈️ AEROGLASS-NAV'));
+
+        const old = document.getElementById('aeroCustomDialogOverlay');
+        if (old) old.remove();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'aeroCustomDialogOverlay';
+        overlay.style.cssText = `
+            position: fixed;
+            inset: 0;
+            z-index: 100020;
+            background: rgba(2, 6, 23, 0.72);
+            backdrop-filter: blur(6px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        `;
+
+        const escHtml = (s) => s
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\n/g, '<br>');
+
+        const accentColor = isDanger ? '#f87171' : '#38bdf8';
+        const okLabel = isConfirm
+            ? (isEn ? 'Confirm' : 'Conferma')
+            : 'OK';
+        const cancelLabel = isEn ? 'Cancel' : 'Annulla';
+
+        overlay.innerHTML = `
+            <div role="dialog" aria-modal="true" style="
+                width: 430px;
+                max-width: 92vw;
+                background: linear-gradient(180deg, rgba(15, 23, 42, 0.98) 0%, rgba(9, 13, 22, 0.98) 100%);
+                border: 1.5px solid ${isDanger ? 'rgba(248, 113, 113, 0.6)' : 'rgba(56, 189, 248, 0.55)'};
+                border-radius: 12px;
+                padding: 18px 20px;
+                box-shadow: 0 20px 50px rgba(0, 0, 0, 0.85), 0 0 24px ${isDanger ? 'rgba(248, 113, 113, 0.18)' : 'rgba(56, 189, 248, 0.2)'};
+                color: #f8fafc;
+                font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+                display: flex;
+                flex-direction: column;
+                gap: 14px;
+            ">
+                <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(148,163,184,0.2);padding-bottom:8px;">
+                    <span style="font-family:Consolas,monospace;font-size:12px;font-weight:800;color:${accentColor};letter-spacing:0.6px;">${escHtml(headerTitle)}</span>
+                    <button id="aeroDlgBtnX" type="button" style="background:none;border:none;color:#94a3b8;font-size:14px;cursor:pointer;line-height:1;">✕</button>
+                </div>
+                <div style="font-size:13px;line-height:1.55;color:#e2e8f0;word-break:break-word;">${escHtml(safeText)}</div>
+                <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:4px;">
+                    ${isConfirm ? `
+                        <button id="aeroDlgBtnCancel" type="button" style="
+                            padding: 7px 14px;
+                            border-radius: 8px;
+                            border: 1px solid rgba(148, 163, 184, 0.4);
+                            background: rgba(30, 41, 59, 0.85);
+                            color: #cbd5e1;
+                            font-family: Consolas, monospace;
+                            font-size: 12px;
+                            font-weight: 700;
+                            cursor: pointer;
+                        ">${cancelLabel}</button>
+                    ` : ''}
+                    <button id="aeroDlgBtnOk" type="button" style="
+                        padding: 7px 18px;
+                        border-radius: 8px;
+                        border: 1px solid ${accentColor};
+                        background: ${isDanger ? 'rgba(248, 113, 113, 0.22)' : 'rgba(56, 189, 248, 0.22)'};
+                        color: ${accentColor};
+                        font-family: Consolas, monospace;
+                        font-size: 12px;
+                        font-weight: 800;
+                        cursor: pointer;
+                    ">${okLabel}</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        const close = (val) => {
+            document.removeEventListener('keydown', onKey);
+            overlay.remove();
+            resolve(val);
+        };
+
+        const onKey = (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                close(false);
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                close(true);
+            }
+        };
+
+        document.addEventListener('keydown', onKey);
+        document.getElementById('aeroDlgBtnOk').onclick = () => close(true);
+        document.getElementById('aeroDlgBtnX').onclick = () => close(false);
+        const cancelBtn = document.getElementById('aeroDlgBtnCancel');
+        if (cancelBtn) cancelBtn.onclick = () => close(false);
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) close(false);
+        });
+        document.getElementById('aeroDlgBtnOk').focus();
+    });
+}
+
+window.showAeroAlert = function(message, title = '') {
+    return _openAeroDialog({ message, title, isConfirm: false, isDanger: false });
+};
+
+window.showAeroConfirm = function(message, title = '', isDanger = false) {
+    return _openAeroDialog({ message, title, isConfirm: true, isDanger });
+};
+
+window.showAeroPrompt = function(message, defaultValue = '', title = '') {
+    return new Promise((resolve) => {
+        const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+        const old = document.getElementById('aeroCustomDialogOverlay');
+        if (old) old.remove();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'aeroCustomDialogOverlay';
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:100020;background:rgba(2,6,23,0.72);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:16px;';
+
+        const headerTitle = title || '✈️ AEROGLASS-NAV';
+        overlay.innerHTML = `
+            <div role="dialog" aria-modal="true" style="width:410px;max-width:92vw;background:linear-gradient(180deg,rgba(15,23,42,0.98) 0%,rgba(9,13,22,0.98) 100%);border:1.5px solid rgba(56,189,248,0.55);border-radius:12px;padding:18px 20px;box-shadow:0 20px 50px rgba(0,0,0,0.85),0 0 24px rgba(56,189,248,0.2);color:#f8fafc;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;display:flex;flex-direction:column;gap:12px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(148,163,184,0.2);padding-bottom:8px;">
+                    <span style="font-family:Consolas,monospace;font-size:12px;font-weight:800;color:#38bdf8;letter-spacing:0.6px;">${headerTitle}</span>
+                    <button id="aeroDlgBtnX" type="button" style="background:none;border:none;color:#94a3b8;font-size:14px;cursor:pointer;line-height:1;">✕</button>
+                </div>
+                <div style="font-size:13px;line-height:1.5;color:#e2e8f0;">${message}</div>
+                <input id="aeroDlgPromptInput" type="number" step="100" value="${defaultValue ?? ''}" style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #38bdf8;color:#f8fafc;border-radius:8px;padding:8px 10px;font-family:Consolas,monospace;font-size:13px;outline:none;">
+                <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:2px;">
+                    <button id="aeroDlgBtnCancel" type="button" style="padding:7px 14px;border-radius:8px;border:1px solid rgba(148,163,184,0.4);background:rgba(30,41,59,0.85);color:#cbd5e1;font-family:Consolas,monospace;font-size:12px;font-weight:700;cursor:pointer;">${isEn ? 'Cancel' : 'Annulla'}</button>
+                    <button id="aeroDlgBtnOk" type="button" style="padding:7px 18px;border-radius:8px;border:1px solid #38bdf8;background:rgba(56,189,248,0.22);color:#38bdf8;font-family:Consolas,monospace;font-size:12px;font-weight:800;cursor:pointer;">OK</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+        const inp = document.getElementById('aeroDlgPromptInput');
+
+        const close = (val) => {
+            document.removeEventListener('keydown', onKey);
+            overlay.remove();
+            resolve(val);
+        };
+        const onKey = (e) => {
+            if (e.key === 'Escape') { e.preventDefault(); close(null); }
+            else if (e.key === 'Enter') { e.preventDefault(); close(inp.value); }
+        };
+
+        document.addEventListener('keydown', onKey);
+        document.getElementById('aeroDlgBtnOk').onclick = () => close(inp.value);
+        document.getElementById('aeroDlgBtnX').onclick = () => close(null);
+        document.getElementById('aeroDlgBtnCancel').onclick = () => close(null);
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) close(null); });
+        inp.focus();
+        inp.select();
+    });
+};
+
+// Sostituisce il popup nativo bianco window.alert() con la modale Dark Cockpit
+if (!window._nativeAlert) {
+    window._nativeAlert = window.alert.bind(window);
+    window.alert = function(msg) {
+        window.showAeroAlert(msg);
+    };
+}
+
 async function sendFlightPlanToAircraftNav() {
     const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
 
@@ -1640,10 +1840,18 @@ async function sendFlightPlanToAircraftNav() {
                 3000
             );
         } else {
-            showAeroNavToast(`⚠️ ${res.message || 'Impossibile inviare il piano di volo.'}`, true, 3000);
+            showAeroNavToast(
+                `⚠️ ${res.message || (isEn ? 'Unable to send flight plan.' : 'Impossibile inviare il piano di volo.')}`,
+                true,
+                3000
+            );
         }
     } catch (err) {
-        showAeroNavToast('⚠️ Errore di comunicazione con il simulatore.', true, 3000);
+        showAeroNavToast(
+            isEn ? '⚠️ Communication error with the simulator.' : '⚠️ Errore di comunicazione con il simulatore.',
+            true,
+            3000
+        );
     }
 }
 
@@ -2739,19 +2947,160 @@ function renderWeatherOverlay() {
     }
 }
 
-async function openQuickMetarPopup(icao, lat, lon, fallbackName, cachedMetar, allowAutoPan = true) {
-    if (typeof map === 'undefined' || !map || typeof L === 'undefined') return;
+let _quickMetarSeq = 0;
+window._lastAirportPanelData = null;
 
-    const popup = L.popup({
-        className: 'wx-metar-glass-popup',
-        closeButton: true,
-        maxWidth: 290,
-        offset: [0, -6],
-        autoPan: allowAutoPan
-    })
-    .setLatLng([lat, lon])
-    .setContent(`<div style="color:#38bdf8;font-weight:700;">⏳ ${icao} - Caricamento METAR live...</div>`)
-    .openOn(map);
+function ensureAirportInfoPanelDOM() {
+    let panel = document.getElementById('aeroAirportInfoPanel');
+    if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'aeroAirportInfoPanel';
+        panel.className = 'glass-panel';
+        panel.style.cssText = [
+            'position:fixed',
+            'top:62px',
+            'right:16px',
+            'width:416px',
+            'max-width:calc(100vw - 32px)',
+            'max-height:calc(100vh - 170px)',
+            'overflow-y:auto',
+            'z-index:2200',
+            'background:rgba(13, 17, 23, 0.94)',
+            'border:1.5px solid rgba(56, 189, 248, 0.48)',
+            'border-radius:12px',
+            'padding:15px 17px',
+            'box-shadow:0 14px 36px rgba(0, 0, 0, 0.75)',
+            'backdrop-filter:blur(14px)',
+            'font-family:Consolas, monospace',
+            'color:#e2e8f0',
+            'display:none',
+            'user-select:text'
+        ].join(';');
+        document.body.appendChild(panel);
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeAirportInfoPanel();
+        });
+    }
+
+    let topOffset = 62;
+    const topBar = document.querySelector('.top-pills-group');
+    if (topBar) {
+        const tbRect = topBar.getBoundingClientRect();
+        if (tbRect.bottom > 0 && tbRect.bottom < 160) {
+            topOffset = Math.max(62, Math.round(tbRect.bottom + 10));
+        }
+    }
+
+    let rightOffset = 16;
+    const compass = document.getElementById('aeroCompassWidget');
+    if (compass) {
+        const cStyle = window.getComputedStyle(compass);
+        const cRect = compass.getBoundingClientRect();
+        if (cStyle.display !== 'none' && cStyle.visibility !== 'hidden' && cRect.width > 10 && cRect.height > 10) {
+            rightOffset = Math.max(16, Math.round(window.innerWidth - cRect.left + 12));
+        }
+    }
+
+    panel.style.top = `${topOffset}px`;
+    panel.style.right = `${rightOffset}px`;
+    return panel;
+}
+
+function closeAirportInfoPanel() {
+    const panel = document.getElementById('aeroAirportInfoPanel');
+    if (panel) panel.style.display = 'none';
+    window._lastAirportPanelData = null;
+}
+
+function renderAirportInfoPanelContent(data) {
+    const panel = document.getElementById('aeroAirportInfoPanel');
+    if (!panel || !data || panel.style.display === 'none') return;
+
+    const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+    const { icao, aptName, elevFt, metarRaw, det } = data;
+
+    const catInfo = getFlightCategoryFromMetar(metarRaw);
+    const parsed = (typeof parseMetarInfo === 'function' && metarRaw) ? parseMetarInfo(metarRaw) : null;
+
+    const windTxt = parsed ? parsed.wind : '---';
+    const tempTxt = parsed ? parsed.temp : '---';
+    const qnhTxt = parsed ? parsed.qnh : '---';
+    const finalElevTxt = elevFt !== null && elevFt !== undefined ? ` | ELEV: ${elevFt} ft` : '';
+
+    let extraHtml = '';
+    if (det && det.success) {
+        if (det.recommended_runway) {
+            const br = det.recommended_runway;
+            const recLabel = isEn ? 'Recommended Runway:' : 'Pista Consigliata:';
+            extraHtml += `<div style="margin-top:8px;background:rgba(46,160,67,0.15);border:1px solid rgba(46,160,67,0.5);border-radius:6px;padding:6px 9px;font-size:13px;color:#34d399;font-weight:700;line-height:1.35;">
+                🛬 ${recLabel} <b>RWY ${br.ident}</b> (HW ${br.headwind_kt}kt | XW ${br.crosswind_kt}kt)
+            </div>`;
+        }
+        if (Array.isArray(det.runways) && det.runways.length > 0) {
+            const rwyBadges = det.runways.slice(0, 4).map(r => {
+                const lenM = Math.round((r.length_ft || 0) * 0.3048);
+                return `<span class="wx-pill" style="font-size:12.5px;padding:3px 8px;">🛣️ ${r.le_ident}/${r.he_ident} (${lenM}m ${r.surface || ''})</span>`;
+            }).join(' ');
+            extraHtml += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px;">${rwyBadges}</div>`;
+        }
+        if (Array.isArray(det.frequencies) && det.frequencies.length > 0) {
+            const freqTip = isEn ? 'Click to send to Scratchpad NEXT FREQ' : 'Clicca per inviare a Scratchpad NEXT FREQ';
+            const freqBadges = det.frequencies.slice(0, 5).map(f => {
+                const fStr = Number(f.freq_mhz).toFixed(3);
+                return `<span class="wx-pill" style="font-size:12.5px;padding:3px 8px;cursor:pointer;border-color:rgba(0,210,255,0.4);color:#38bdf8;" onclick="sendFreqToScratchpad('${fStr}'); toggleScratchpad(true);" title="${freqTip}">📻 ${f.type}: <b>${fStr}</b></span>`;
+            }).join(' ');
+            extraHtml += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px;">${freqBadges}</div>`;
+        }
+    }
+
+    const noMetarTxt = isEn
+        ? 'No active METAR bulletin for this airport.'
+        : 'Nessun bollettino METAR attivo per questo scalo.';
+    const closeTip = isEn ? 'Close' : 'Chiudi';
+
+    panel.innerHTML = `
+        <div>
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;border-bottom:1px solid rgba(148,163,184,0.2);padding-bottom:8px;margin-bottom:9px;">
+                <div style="min-width:0;">
+                    <strong style="color:#00d2ff;font-size:17px;">✈️ ${icao}</strong>
+                    <div style="color:#94a3b8;font-size:13px;line-height:1.38;margin-top:2px;">${aptName}${finalElevTxt}</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+                    <span style="background:${catInfo.color}22;border:1px solid ${catInfo.color};color:${catInfo.color};padding:2px 8px;border-radius:5px;font-size:13px;font-weight:800;">
+                        ${catInfo.cat}
+                    </span>
+                    <button type="button" onclick="closeAirportInfoPanel()" title="${closeTip}" style="background:none;border:none;color:#94a3b8;font-size:17px;cursor:pointer;padding:0 3px;line-height:1;">✕</button>
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;margin-bottom:9px;flex-wrap:wrap;">
+                <span class="wx-pill" style="font-size:13px;padding:3px 8px;">💨 ${windTxt}</span>
+                <span class="wx-pill" style="font-size:13px;padding:3px 8px;">🌡️ ${tempTxt}</span>
+                <span class="wx-pill" style="font-size:13px;padding:3px 8px;">⏲️ ${qnhTxt}</span>
+            </div>
+            <div style="background:rgba(9,13,19,0.85);border:1px solid rgba(148,163,184,0.2);border-radius:6px;padding:8px 10px;color:#e2e8f0;font-size:13.5px;line-height:1.45;word-break:break-word;">
+                ${metarRaw || noMetarTxt}
+            </div>
+            ${extraHtml}
+        </div>
+    `;
+}
+
+async function openQuickMetarPopup(icao, lat, lon, fallbackName, cachedMetar, allowAutoPan = true) {
+    if (typeof map !== 'undefined' && map && typeof map.closePopup === 'function') {
+        map.closePopup();
+    }
+
+    const mySeq = ++_quickMetarSeq;
+    const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+    const panel = ensureAirportInfoPanelDOM();
+    panel.style.display = 'block';
+    panel.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+            <span style="color:#38bdf8;font-weight:700;font-size:14.5px;">⏳ ${icao} - ${isEn ? 'Loading live METAR...' : 'Caricamento METAR live...'}</span>
+            <button type="button" onclick="closeAirportInfoPanel()" style="background:none;border:none;color:#94a3b8;font-size:17px;cursor:pointer;padding:0 3px;line-height:1;">✕</button>
+        </div>
+    `;
 
     let metarRaw = cachedMetar || '';
     let aptName = fallbackName || icao;
@@ -2760,6 +3109,7 @@ async function openQuickMetarPopup(icao, lat, lon, fallbackName, cachedMetar, al
     if (window.pywebview && window.pywebview.api && window.pywebview.api.resolve_icao) {
         try {
             const res = await window.pywebview.api.resolve_icao(icao);
+            if (mySeq !== _quickMetarSeq) return;
             if (res && res.success) {
                 if (res.metar) metarRaw = res.metar;
                 if (res.name) aptName = res.name;
@@ -2770,71 +3120,22 @@ async function openQuickMetarPopup(icao, lat, lon, fallbackName, cachedMetar, al
         } catch (e) {}
     }
 
-    const catInfo = getFlightCategoryFromMetar(metarRaw);
-    const parsed = (typeof parseMetarInfo === 'function' && metarRaw) ? parseMetarInfo(metarRaw) : null;
-
-    const windTxt = parsed ? parsed.wind : '---';
-    const tempTxt = parsed ? parsed.temp : '---';
-    const qnhTxt = parsed ? parsed.qnh : '---';
-    const elevTxt = elevFt !== null ? ` | ELEV: ${elevFt} ft` : '';
-
-    let extraHtml = '';
+    let det = null;
     if (window.pywebview && window.pywebview.api && window.pywebview.api.get_airport_details) {
         try {
             const wNum = parseMetarWindNumbers(metarRaw);
-            const det = await window.pywebview.api.get_airport_details(icao, wNum ? wNum.dir : null, wNum ? wNum.spd : null);
-            if (det && det.success) {
-                if (det.airport && elevFt === null && det.airport.elev_ft !== undefined) {
-                    elevFt = det.airport.elev_ft;
-                }
-                if (det.recommended_runway) {
-                    const br = det.recommended_runway;
-                    extraHtml += `<div style="margin-top:6px;background:rgba(46,160,67,0.15);border:1px solid rgba(46,160,67,0.5);border-radius:5px;padding:4px 6px;font-size:10px;color:#34d399;font-weight:700;">
-                        🛬 Pista Consigliata: <b>RWY ${br.ident}</b> (HW ${br.headwind_kt}kt | XW ${br.crosswind_kt}kt)
-                    </div>`;
-                }
-                if (Array.isArray(det.runways) && det.runways.length > 0) {
-                    const rwyBadges = det.runways.slice(0, 4).map(r => {
-                        const lenM = Math.round((r.length_ft || 0) * 0.3048);
-                        return `<span class="wx-pill" style="font-size:9.5px;">🛣️ ${r.le_ident}/${r.he_ident} (${lenM}m ${r.surface || ''})</span>`;
-                    }).join(' ');
-                    extraHtml += `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;">${rwyBadges}</div>`;
-                }
-                if (Array.isArray(det.frequencies) && det.frequencies.length > 0) {
-                    const freqBadges = det.frequencies.slice(0, 5).map(f => {
-                        const fStr = Number(f.freq_mhz).toFixed(3);
-                        return `<span class="wx-pill" style="cursor:pointer;border-color:rgba(0,210,255,0.4);color:#38bdf8;" onclick="sendFreqToScratchpad('${fStr}'); toggleScratchpad(true);" title="Clicca per inviare a Scratchpad NEXT FREQ">📻 ${f.type}: <b>${fStr}</b></span>`;
-                    }).join(' ');
-                    extraHtml += `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;">${freqBadges}</div>`;
-                }
+            det = await window.pywebview.api.get_airport_details(icao, wNum ? wNum.dir : null, wNum ? wNum.spd : null);
+            if (mySeq !== _quickMetarSeq) return;
+            if (det && det.success && det.airport && elevFt === null && det.airport.elev_ft !== undefined) {
+                elevFt = det.airport.elev_ft;
             }
         } catch (e) {}
     }
 
-    const finalElevTxt = elevFt !== null ? ` | ELEV: ${elevFt} ft` : '';
+    if (mySeq !== _quickMetarSeq || panel.style.display === 'none') return;
 
-    popup.setContent(`
-        <div>
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid rgba(148,163,184,0.2);padding-bottom:5px;margin-bottom:6px;">
-                <div>
-                    <strong style="color:#00d2ff;font-size:12.5px;">✈️ ${icao}</strong>
-                    <div style="color:#94a3b8;font-size:10px;">${aptName}${finalElevTxt}</div>
-                </div>
-                <span style="background:${catInfo.color}22;border:1px solid ${catInfo.color};color:${catInfo.color};padding:1px 6px;border-radius:4px;font-size:10px;font-weight:800;">
-                    ${catInfo.cat}
-                </span>
-            </div>
-            <div style="display:flex;gap:6px;margin-bottom:7px;flex-wrap:wrap;">
-                <span class="wx-pill">💨 ${windTxt}</span>
-                <span class="wx-pill">🌡️ ${tempTxt}</span>
-                <span class="wx-pill">⏲️ ${qnhTxt}</span>
-            </div>
-            <div style="background:rgba(9,13,19,0.85);border:1px solid rgba(148,163,184,0.2);border-radius:5px;padding:6px;color:#e2e8f0;font-size:10.5px;word-break:break-word;">
-                ${metarRaw || 'Nessun bollettino METAR attivo per questo scalo.'}
-            </div>
-            ${extraHtml}
-        </div>
-    `);
+    window._lastAirportPanelData = { icao, aptName, elevFt, metarRaw, det };
+    renderAirportInfoPanelContent(window._lastAirportPanelData);
 }
 
 // --- ☁️ LAYER COPERTURA NUVOLOSA ALLA QUOTA AEREO & SELETTORE VNAV ---
@@ -3685,7 +3986,9 @@ function organizeTopBarButtons() {
         const efbLbl = document.getElementById('lblEfbNet');
         if (efbLbl && efbLbl.innerText !== 'EFB') {
             if (efbBtn && efbLbl.innerText.includes(':')) {
-                efbBtn.title = `Tablet Wi-Fi (${efbLbl.innerText}) — Clicca per QR Code`;
+                efbBtn.title = isEn
+                    ? `Tablet Wi-Fi (${efbLbl.innerText}) — Click for QR Code`
+                    : `Tablet Wi-Fi (${efbLbl.innerText}) — Clicca per QR Code`;
             }
             efbLbl.innerText = 'EFB';
         }
@@ -3700,6 +4003,29 @@ function organizeTopBarButtons() {
 
         const spBtn = document.querySelector('#btnToggleScratchpad span');
         if (spBtn) spBtn.innerText = isEn ? 'Notes' : 'Note';
+
+        const msfsBtn = document.getElementById('btnToggleGroundMap');
+        if (msfsBtn) {
+            const targetHtml = isEn ? '📲 <span>Send to MSFS</span>' : '📲 <span>Invia a MSFS</span>';
+            if (msfsBtn.innerHTML !== targetHtml) msfsBtn.innerHTML = targetHtml;
+        }
+
+        const measureSpan = document.querySelector('#btnToggleMeasure span');
+        if (measureSpan) measureSpan.innerText = isEn ? 'Measure' : 'Righello';
+
+        const followBtn = document.getElementById('btnFollowAcft');
+        if (followBtn && typeof followState !== 'undefined') {
+            const fTxt = followState === 1
+                ? (isEn ? '🧭 North Up' : '🧭 Nord Su')
+                : followState === 2
+                    ? '✈️ Track Up'
+                    : (isEn ? '✋ Free Map' : '✋ Mappa Libera');
+            if (followBtn.innerText !== fTxt) followBtn.innerText = fTxt;
+        }
+
+        if (typeof applyAtcRadarPopoverTranslations === 'function') {
+            applyAtcRadarPopoverTranslations();
+        }
     };
 
     enforceCompactLabels();
@@ -4770,10 +5096,75 @@ function toggleDrawer() {
     if (radarBar) radarBar.style.bottom = drawerOpen ? '140px' : '64px';
 }
 
+function applyAtcRadarPopoverTranslations() {
+    const pop = document.getElementById('aeroAtcRadarPopover');
+    if (!pop) return;
+
+    const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+    const pairs = [
+        ['RADAR ATC & TRAFFICO', 'ATC RADAR & TRAFFIC'],
+        ['Raggio Cerchi ATC', 'ATC Circle Radius'],
+        ['OFF (Solo Badge)', 'OFF (Badges Only)'],
+        ['Opacità Copertura ATC', 'ATC Coverage Opacity'],
+        ['Raggio Aerei Vicini', 'Nearby Aircraft Range'],
+        ['FILTRO COMPAGNIA / VA', 'AIRLINE / VA FILTER'],
+        ['Nessun filtro', 'No filter'],
+        ['Raggio Globale VA', 'Global VA Range'],
+        ['Evidenzia', 'Highlight'],
+        ['Solo VA', 'VA Only']
+    ];
+
+    const walker = document.createTreeWalker(pop, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+        let txt = node.nodeValue;
+        if (!txt || !txt.trim()) continue;
+        let updated = txt;
+        for (const [itStr, enStr] of pairs) {
+            const from = isEn ? itStr : enStr;
+            const to = isEn ? enStr : itStr;
+            if (updated.includes(from)) {
+                updated = updated.replace(from, to);
+            }
+        }
+        if (isEn) {
+            updated = updated
+                .replace(/\b(\d+)\s+voli\b/gi, '$1 flights')
+                .replace(/\b(\d+)\s+attivi\b/gi, '$1 active');
+        } else {
+            updated = updated
+                .replace(/\b(\d+)\s+flights\b/gi, '$1 voli')
+                .replace(/\b(\d+)\s+active\b/gi, '$1 attivi');
+        }
+        if (updated !== txt) {
+            node.nodeValue = updated;
+        }
+    }
+
+    pop.querySelectorAll('input[placeholder]').forEach(inp => {
+        const ph = inp.getAttribute('placeholder') || '';
+        if (isEn && ph.toUpperCase().includes('PREFISSI')) {
+            inp.setAttribute('placeholder', 'PREFIXES OR OPR (E.G. ITY, RYR, IVV)');
+        } else if (!isEn && ph.toUpperCase().includes('PREFIXES')) {
+            inp.setAttribute('placeholder', 'PREFISSI O OPR (ES. ITY, RYR, IVV)');
+        }
+    });
+
+    if (!pop._i18nHooked) {
+        pop._i18nHooked = true;
+        const reSync = () => setTimeout(applyAtcRadarPopoverTranslations, 0);
+        pop.addEventListener('input', reSync);
+        pop.addEventListener('change', reSync);
+        pop.addEventListener('click', reSync);
+    }
+}
+
 function applyTranslations() {
     if (typeof translations === 'undefined') return;
     const t = translations[currentLang];
     if (!t) return;
+
+    const isEn = (currentLang === 'en');
 
     const langLabel = document.getElementById('langLabel');
     if (langLabel) langLabel.innerText = currentLang.toUpperCase();
@@ -4785,20 +5176,43 @@ function applyTranslations() {
     if (fplTitle) fplTitle.innerText = (t.activeFpl || '').toUpperCase();
 
     const lblFilters = document.getElementById('lblFilters');
-    if (lblFilters) lblFilters.innerText = t.btnFilters || '';
+    if (lblFilters) lblFilters.innerText = isEn ? 'Filters' : 'Filtri';
 
     const lblReduce = document.getElementById('lblReduceExpand');
     if (lblReduce) lblReduce.innerText = t.btnReduce || '';
 
     const btnNavaids = document.getElementById('btnToggleNavaids');
-    if (btnNavaids) btnNavaids.innerText = (typeof showNavaids !== 'undefined' && showNavaids) ? (t.btnNavaids || '') : (t.btnNavaidsOff || '');
+    if (btnNavaids) btnNavaids.innerHTML = '📡 <span>VOR/ILS</span>';
+
+    const spBtn = document.querySelector('#btnToggleScratchpad span');
+    if (spBtn) spBtn.innerText = isEn ? 'Notes' : 'Note';
+
+    const msfsBtn = document.getElementById('btnToggleGroundMap');
+    if (msfsBtn) msfsBtn.innerHTML = isEn ? '📲 <span>Send to MSFS</span>' : '📲 <span>Invia a MSFS</span>';
+
+    if (typeof updateMeasureButtonUI === 'function') {
+        updateMeasureButtonUI();
+    }
 
     if (typeof setFollowState === 'function' && typeof followState !== 'undefined') {
         setFollowState(followState);
     }
+    const followBtn = document.getElementById('btnFollowAcft');
+    if (followBtn && typeof followState !== 'undefined') {
+        followBtn.innerText = followState === 1
+            ? (isEn ? '🧭 North Up' : '🧭 Nord Su')
+            : followState === 2
+                ? '✈️ Track Up'
+                : (isEn ? '✋ Free Map' : '✋ Mappa Libera');
+    }
+
     updateThemeButtonUI();
     updateTooltipButtonUI();
     if (typeof updateGlossaryButtonUI === 'function') updateGlossaryButtonUI();
+    applyAtcRadarPopoverTranslations();
+    if (typeof renderAirportInfoPanelContent === 'function' && window._lastAirportPanelData) {
+        renderAirportInfoPanelContent(window._lastAirportPanelData);
+    }
 
     const vnavText = document.getElementById('vnavText');
     if (vnavText && (!window.flightPlan || window.flightPlan.length === 0)) {
