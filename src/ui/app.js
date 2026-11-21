@@ -501,9 +501,9 @@ if (document.readyState === 'loading') {
 
 // --- FINESTRA CREDITS (BILINGUE EN/IT CON DEFAULT INGLESE E SCROLL) ---
 const CREDITS_LINKS = {
-    flightsimTo: "https://flightsim.to/file/00000/aeroglass-nav",
-    discord: "https://discord.gg/placeholder-invite",
-    buyMeACoffee: "https://buymeacoffee.com/placeholder-user"
+    flightsimTo: "https://flightsim.to/profile/EddiZ",
+    discord: "https://discord.gg/fnANxCeSHZ",
+    buyMeACoffee: "https://buymeacoffee.com/6lmotmgzxn"
 };
 
 let creditsModalLang = 'en';
