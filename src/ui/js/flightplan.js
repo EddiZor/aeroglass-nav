@@ -1401,19 +1401,43 @@ async function fetchSimbriefPlan() {
     }
 }
 
-function filterAirports(query) {
-    const q = query.toUpperCase().trim();
-    if (q.length < 2) return;
-    const found = airportsData.find(a => a.icao.includes(q) || a.name.toUpperCase().includes(q));
-    if (found) {
-        setFollowState(false);
-        map.flyTo([found.lat, found.lon], 11);
-        return;
+let _omniSearchDebounce = null;
+
+function filterAirports(query, immediate = false) {
+    if (_omniSearchDebounce) {
+        clearTimeout(_omniSearchDebounce);
+        _omniSearchDebounce = null;
     }
-    const foundVor = vorsData.find(v => v.ident.includes(q) || v.name.toUpperCase().includes(q));
-    if (foundVor) {
-        setFollowState(false);
-        map.flyTo([foundVor.lat, foundVor.lon], 11);
+
+    const q = String(query || '').toUpperCase().trim();
+    if (q.length < 2) return;
+
+    // Durante la digitazione non salta su prefissi parziali (es. "LI" o "LIC" -> LICJ):
+    // attende almeno 4 caratteri (ICAO completo o nome) oppure la pressione di Invio
+    if (!immediate && q.length < 4) return;
+
+    const runSearch = () => {
+        if (typeof searchAndCenterAirport === 'function') {
+            searchAndCenterAirport(q);
+            return;
+        }
+        const exactApt = airportsData.find(a => a.icao && a.icao.toUpperCase() === q);
+        if (exactApt) {
+            setFollowState(0);
+            map.flyTo([exactApt.lat, exactApt.lon], 13);
+            return;
+        }
+        const exactVor = vorsData.find(v => v.ident && v.ident.toUpperCase() === q);
+        if (exactVor) {
+            setFollowState(0);
+            map.flyTo([exactVor.lat, exactVor.lon], 11);
+        }
+    };
+
+    if (immediate) {
+        runSearch();
+    } else {
+        _omniSearchDebounce = setTimeout(runSearch, 450);
     }
 }
 

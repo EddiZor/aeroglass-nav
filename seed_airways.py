@@ -40,16 +40,10 @@ airways = [
     ("M738", "FRZ", "ELB", 43.8189, 11.2047, 42.7481, 10.2394, 5000, 60000, 'B', 0)
 ]
 
-# Individua tutti i database presenti (root e src/core)
-target_dbs = []
-if os.path.exists("src/core/aeroglass.db"):
-    target_dbs.append("src/core/aeroglass.db")
-if os.path.exists("aeroglass.db"):
-    target_dbs.append("aeroglass.db")
+from src.core.database import DB_PATH
 
-# Fallback: se nessuno esiste ancora, crea quello principale in src/core (o in root)
-if not target_dbs:
-    target_dbs.append("src/core/aeroglass.db" if os.path.isdir("src/core") else "aeroglass.db")
+# Usa esclusivamente l'unico database ufficiale (src/core/aeroglass.db)
+target_dbs = [os.path.abspath(DB_PATH)]
 
 for db_path in target_dbs:
     conn = sqlite3.connect(db_path)

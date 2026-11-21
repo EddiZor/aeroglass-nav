@@ -19,6 +19,7 @@ def run_audit():
         "src/core/database.py",
         "src/core/aip_fetcher.py",
         "src/ui/index.html",
+        "src/ui/glossary.html",
         "src/ui/style.css",
         "src/ui/js/charts.js",
         "src/ui/js/flightplan.js",
@@ -40,22 +41,23 @@ def run_audit():
 
     # 2. Verifica Database SQLite
     print("\n[2/5] Verifica Database SQLite locale...")
-    db_path = os.path.join("src", "core", "aeroglass.db")
+    from src.core.database import DB_PATH
+    db_path = os.path.abspath(DB_PATH)
+
     if not os.path.isfile(db_path):
-        db_path = "aeroglass.db"
-    
-    if not os.path.isfile(db_path):
-        print("  ❌ Database aeroglass.db non trovato!")
+        print(f"  ❌ Database aeroglass.db non trovato in: {db_path}")
     else:
         print(f"  - Percorso database: {db_path}")
         try:
             conn = sqlite3.connect(db_path)
             cur = conn.cursor()
-            
+
             # Verifica conteggio tabelle chiave
             tables = [
-                "world_airports", "world_runways", "world_frequencies", 
-                "airway_segments", "cached_airports", "chart_overlays", "settings"
+                "world_airports", "world_runways", "world_frequencies",
+                "world_navaids", "world_airlines", "world_aircraft_types",
+                "airport_ground_cache", "airway_segments",
+                "cached_airports", "chart_overlays", "settings"
             ]
             for t in tables:
                 try:

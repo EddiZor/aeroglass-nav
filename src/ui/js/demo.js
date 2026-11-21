@@ -45,10 +45,10 @@ function getDemoSteps() {
                     <div class="demo-feature-grid">
                         <div>🌧️ <b>Live Weather Radar</b> (RainViewer API & 60m Slider)</div>
                         <div>🔄 <b>Analytical IFR Procedures</b> (Dynamic Holds, DME Arcs & Vectors)</div>
-                        <div>🌍 <b>40,000+ World Airports</b> (Local SQLite & Ground Layouts)</div>
-                        <div>🌐 <b>Live VATSIM & IVAO</b> (Nearby Traffic & ATC Radar)</div>
+                        <div>🌍 <b>48,000+ World Airports</b> (Local SQLite & Real Ground Layouts)</div>
+                        <div>🌐 <b>VATSIM & IVAO + VA Filter</b> (Aircraft Types, Operators & Silhouettes)</div>
                         <div>📝 <b>EFB Scratchpad & Measure</b> (C.R.A.F.T. Pad & Tactical Ruler)</div>
-                        <div>📉 <b>VNAV Profile & Cloud Scan</b> (Terrain, ToD & METAR Clouds)</div>
+                        <div>📖 <b>VNAV, Cloud Scan & Glossary</b> (ToD, METAR Clouds & IT/EN Reference)</div>
                     </div>
                     <p class="demo-tip">💡 Use <b>← / →</b> arrows to browse, <b>Space</b> for auto-play, <b>🌐 IT/EN</b> to switch language, or <b>Esc / F1</b> to exit at any time.</p>
                 `
@@ -70,11 +70,11 @@ function getDemoSteps() {
             {
                 target: "#omniSearch",
                 badge: "STEP 2 • QUICK SEARCH",
-                title: "🔍 Instant ICAO Search & METAR Centering",
+                title: "🔍 Instant ICAO Search & Visual Centering",
                 body: `
-                    <p>Type any <b>ICAO code</b> (e.g. <code>LIPZ</code>, <code>LIPD</code>, <code>LITY</code>, <code>LIKL</code>), VOR or airport name and hit <b>Enter</b>:</p>
+                    <p>Type any <b>ICAO code</b> (e.g. <code>LIPZ</code>, <code>LICB</code>, <code>LITY</code>, <code>LIKL</code>), VOR or city name and hit <b>Enter</b>:</p>
                     <ul>
-                        <li>Smoothly animates the map to the target airfield at tactical zoom level.</li>
+                        <li>Searches <b>48,000+ SQLite airports</b> instantaneously and centers the airfield in the exact visible map area (compensating sidebar and VNAV drawer).</li>
                         <li>Opens the live <b>METAR popup</b> with <b>Recommended Runway</b> (headwind/crosswind components) and clickable ATC frequencies.</li>
                     </ul>
                 `
@@ -133,26 +133,26 @@ function getDemoSteps() {
             {
                 target: "#btnToggleNetwork",
                 badge: "STEP 7 • ONLINE NETWORKS",
-                title: "🌐 Live VATSIM & IVAO Traffic + ATC Coverage",
+                title: "🌐 Live VATSIM & IVAO: Aircraft Types, Operators & ATC",
                 body: `
                     <p>Cycle between <b>OFF</b>, <b>ON (Both)</b>, <b>IVAO</b>, and <b>VATSIM</b> (updated asynchronously every 60 seconds):</p>
                     <ul>
-                        <li><b>Online ATC Stations:</b> Tower (<b>🗼 TWR</b>), Approach (<b>📡 APP</b>), and Radar Centers (<b>🕸️ CTR</b>) with radio ranges and frequencies.</li>
-                        <li><b>Instant Tuning:</b> Click any online ATC badge to transfer its active VHF frequency directly into your EFB Scratchpad.</li>
-                        <li><b>Nearby Aircraft:</b> Displays live traffic within your proximity showing altitude, ground speed, and distance in NM.</li>
+                        <li><b>Aircraft Type, Operator & Route:</b> Hover any pilot to see ICAO type, airline/operator (from SQLite DB or <code>OPR/</code>), and <code>DEP ➔ ARR</code> route.</li>
+                        <li><b>Category SVG Silhouettes:</b> Distinct icons for Heavy, Jet, Turboprop, General Aviation, Military, and Helicopters.</li>
+                        <li><b>Online ATC Stations:</b> Tower (<b>🗼 TWR</b>), Approach (<b>📡 APP</b>), and Radar Centers (<b>🕸️ CTR</b>) with one-click VHF tuning to Scratchpad.</li>
                     </ul>
                 `
             },
             {
                 target: "#btnAtcRadarCfg",
-                badge: "STEP 8 • RADAR CALIBRATION",
-                title: "🎚️ 60-FPS ATC Range & Opacity Controls",
+                badge: "STEP 8 • RADAR & VA FILTER",
+                title: "🎚️ ATC Calibration & Virtual Airline (VA) Filter",
                 body: `
-                    <p>Click the <b>🎚️</b> slider button (or right-click <b>🌐 Online</b>) to tune the radar display:</p>
+                    <p>Click the <b>🎚️</b> slider button (or right-click <b>🌐 Online</b>) to tune ATC sectors and track your Virtual Airline:</p>
                     <ul>
-                        <li><b>⭕ Circle Radius (0%–250%):</b> Scale sector circles or set to <code>0%</code> to keep badges only.</li>
-                        <li><b>🔆 Coverage Opacity:</b> Adjust background fill intensity over dark charts.</li>
-                        <li><b>✈️ Nearby Traffic Range (20–300 NM)</b> and individual toggles for <b>TWR</b>, <b>APP</b>, and <b>CTR</b>.</li>
+                        <li><b>🏢 Airline / VA Filter:</b> Enter callsign prefixes or <code>OPR/</code> keywords (e.g. <code>ITY, RYR, IVV</code>) with <b>Highlight</b> or <b>VA-Only</b> mode, custom color, and live counter.</li>
+                        <li><b>🌍 Global VA Range:</b> Track company flights across the entire visible map beyond the local traffic radius.</li>
+                        <li><b>⭕ ATC Radius & Opacity:</b> Scale sector circles (<code>0%–250%</code>), adjust opacity, and toggle <b>TWR</b>, <b>APP</b>, and <b>CTR</b>.</li>
                     </ul>
                 `,
                 onEnter: () => {
@@ -240,8 +240,20 @@ function getDemoSteps() {
                 `
             },
             {
+                target: "#btnOpenGlossary",
+                badge: "STEP 14 • FEATURE GLOSSARY",
+                title: "📖 Alphabetical Bilingual Glossary (IT / EN)",
+                body: `
+                    <p>Click <b>📖 Glossary</b> in the top-right bar to open the standalone reference page in your system browser:</p>
+                    <ul>
+                        <li><b>A–Z Quick Index & Live Search:</b> Instantly filter every feature available in AeroGlass-Nav.</li>
+                        <li><b>Bilingual IT / EN Switch:</b> Automatically opens in your active app language with one-click switching.</li>
+                    </ul>
+                `
+            },
+            {
                 target: "#btnOpenCredits",
-                badge: "STEP 14 • CREDITS & COMMUNITY",
+                badge: "STEP 15 • CREDITS & COMMUNITY",
                 title: "ℹ️ About, Bilingual Credits & Community Links",
                 body: `
                     <p>Access full documentation and project support from the top bar:</p>
@@ -266,10 +278,10 @@ function getDemoSteps() {
                 <div class="demo-feature-grid">
                     <div>🌧️ <b>Radar Meteo RainViewer</b> (Tile Live & Slider Temporale 60 min)</div>
                     <div>🔄 <b>Procedure IFR Analitiche</b> (Holding Dinamiche, Archi DME e Vettori)</div>
-                    <div>🌍 <b>40.000+ Scali Mondiali</b> (SQLite Locale e Ground Map Piste/Stand)</div>
-                    <div>🌐 <b>Traffico Live VATSIM / IVAO</b> (Controllori ATC, Coperture e Frequenze)</div>
+                    <div>🌍 <b>48.000+ Scali Mondiali</b> (SQLite Locale e Ground Map Reali)</div>
+                    <div>🌐 <b>VATSIM / IVAO & Filtro VA</b> (Tipo Aereo, Operatore e Sagome SVG)</div>
                     <div>📝 <b>Scratchpad EFB & Righello</b> (Clearance ATC, Disegno & Calcolo ETE)</div>
-                    <div>📉 <b>Profilo VNAV & Cloud Scan</b> (Terreno Altimetrico, ToD e Nuvole)</div>
+                    <div>📖 <b>VNAV, Cloud Scan & Glossario</b> (ToD, Nuvole METAR e Guida IT/EN)</div>
                 </div>
                 <p class="demo-tip">💡 Usa le frecce <b>← / →</b> per scorrere i passaggi, <b>Spazio</b> per la riproduzione automatica, <b>🌐 IT/EN</b> per cambiare lingua o <b>Esc / F1</b> per chiudere.</p>
             `
@@ -291,12 +303,12 @@ function getDemoSteps() {
         {
             target: "#omniSearch",
             badge: "PASSO 2 • RICERCA ISTANTANEA",
-            title: "🔍 Ricerca Rapida ICAO & Scheda METAR",
+            title: "🔍 Ricerca Rapida ICAO & Centraggio Visivo",
             body: `
-                <p>Digita qualsiasi codice <b>ICAO</b> (es. <code>LIPZ</code>, <code>LIPD</code>, <code>LITY</code>, <code>LIKL</code>), un VOR o il nome dello scalo e premi <b>Invio</b>:</p>
+                <p>Digita qualsiasi codice <b>ICAO</b> (es. <code>LIPZ</code>, <code>LICB</code>, <code>LITY</code>, <code>LIKL</code>), un VOR o una città e premi <b>Invio</b>:</p>
                 <ul>
-                    <li>La mappa si porta con animazione fluida sopra l'aeroporto a livello di zoom operativo.</li>
-                    <li>Apre subito la scheda <b>METAR live</b> con il calcolo della <b>Pista Consigliata</b> in base al vento al suolo, lunghezze piste e frequenze radio cliccabili.</li>
+                    <li>Cerca istantaneamente tra oltre <b>48.000 aeroporti SQLite</b> e posiziona lo scalo esattamente al centro visivo della finestra (compensando sidebar e cassetto VNAV).</li>
+                    <li>Apre subito la scheda <b>METAR live</b> con il calcolo della <b>Pista Consigliata</b> in base al vento, piste e frequenze radio cliccabili.</li>
                 </ul>
             `
         },
@@ -354,26 +366,26 @@ function getDemoSteps() {
         {
             target: "#btnToggleNetwork",
             badge: "PASSO 7 • RETI DI VOLO ONLINE",
-            title: "🌐 Traffico Live VATSIM / IVAO & Coperture ATC",
+            title: "🌐 Traffico VATSIM / IVAO: Tipo Aereo, Operatore & ATC",
             body: `
                 <p>Cicla tra <b>OFF</b>, <b>ON (Entrambi)</b>, <b>IVAO</b> e <b>VATSIM</b> con aggiornamento automatico ogni 60 secondi:</p>
                 <ul>
-                    <li><b>Postazioni ATC Connesse:</b> Torri (<b>🗼 TWR</b>), Avvicinamenti (<b>📡 APP</b>) e Centri Radar (<b>🕸️ CTR</b>) con cerchi di copertura e frequenza operativa.</li>
-                    <li><b>Sintonia Immediata:</b> Clicca su qualsiasi badge ATC per copiare la frequenza VHF direttamente nella casella <code>NEXT FREQ</code> delle tue Note EFB.</li>
-                    <li><b>Aerei nelle Vicinanze:</b> Traffico simulato in volo nei paraggi completo di quota, Ground Speed e distanza in miglia.</li>
+                    <li><b>Tipo Aereo, Operatore & Tratta:</b> Passa il mouse su qualsiasi pilota per vedere codice ICAO, compagnia (da DB SQLite o <code>OPR/</code>) e rotta <code>DEP ➔ ARR</code>.</li>
+                    <li><b>Sagome SVG per Categoria:</b> Icone differenziate per Heavy, Jet, Turboprop, Aviazione Generale, Militari ed Elicotteri.</li>
+                    <li><b>Postazioni ATC Connesse:</b> Torri (<b>🗼 TWR</b>), Avvicinamenti (<b>📡 APP</b>) e Centri Radar (<b>🕸️ CTR</b>) con invio rapido della frequenza VHF allo Scratchpad.</li>
                 </ul>
             `
         },
         {
             target: "#btnAtcRadarCfg",
-            badge: "PASSO 8 • CALIBRAZIONE RADAR",
-            title: "🎚️ Regolazione Istantanea Raggio & Opacità ATC",
+            badge: "PASSO 8 • RADAR & FILTRO VA",
+            title: "🎚️ Calibrazione ATC & Filtro Compagnia Virtuale (VA)",
             body: `
-                <p>Clicca sul pulsante <b>🎚️</b> (o fai clic destro su <b>🌐 Online</b>) per calibrare la vista radar a 60 FPS:</p>
+                <p>Clicca sul pulsante <b>🎚️</b> (o fai clic destro su <b>🌐 Online</b>) per regolare il radar e tracciare la tua Compagnia Virtuale:</p>
                 <ul>
-                    <li><b>⭕ Raggio Cerchi ATC (0%–250%):</b> Modifica le dimensioni degli anelli radar o imposta <code>0%</code> per mantenere solo i badge senza cerchi.</li>
-                    <li><b>🔆 Opacità Copertura:</b> Regola la trasparenza per non appesantire la mappa scura.</li>
-                    <li><b>✈️ Raggio Aerei Vicini (20–300 NM)</b> e filtri dedicati per attivare o disattivare singolarmente <b>TWR</b>, <b>APP</b> e <b>CTR</b>.</li>
+                    <li><b>🏢 Filtro Compagnia / VA:</b> Inserisci prefissi callsign o parole chiave <code>OPR/</code> (es. <code>ITY, RYR, IVV</code>) con modalità <b>Evidenzia</b> o <b>Solo VA</b>, colore personalizzato e contatore live.</li>
+                    <li><b>🌍 Raggio Globale VA:</b> Visualizza i voli della compagnia su tutta la mappa anche oltre il raggio locale.</li>
+                    <li><b>⭕ Raggio & Opacità ATC:</b> Scala i cerchi (<code>0%–250%</code>), regola la trasparenza e filtra <b>TWR</b>, <b>APP</b> e <b>CTR</b>.</li>
                 </ul>
             `,
             onEnter: () => {
@@ -461,8 +473,20 @@ function getDemoSteps() {
             `
         },
         {
+            target: "#btnOpenGlossary",
+            badge: "PASSO 14 • GLOSSARIO FUNZIONI",
+            title: "📖 Glossario Alfabetico Bilingue (IT / EN)",
+            body: `
+                <p>Clicca su <b>📖 Glossario</b> in alto a destra per aprire nel browser di sistema la guida rapida a tutte le funzioni:</p>
+                <ul>
+                    <li><b>Indice A–Z & Ricerca Istantanea:</b> Filtra al volo qualsiasi strumento disponibile in AeroGlass-Nav.</li>
+                    <li><b>Bilingue IT / EN:</b> Si apre direttamente nella lingua attiva dell'app con cambio lingua immediato.</li>
+                </ul>
+            `
+        },
+        {
             target: "#btnOpenCredits",
-            badge: "PASSO 14 • CREDITI & COMMUNITY",
+            badge: "PASSO 15 • CREDITI & COMMUNITY",
             title: "ℹ️ Finestra Credits Bilingue, Licenza & Link",
             body: `
                 <p>Accedi alle informazioni ufficiali e al supporto del progetto:</p>

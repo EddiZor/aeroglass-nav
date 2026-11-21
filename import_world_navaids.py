@@ -12,15 +12,8 @@ import urllib.request
 NAVAIDS_URL = "https://davidmegginson.github.io/ourairports-data/navaids.csv"
 
 def get_db_path():
-    candidates = [
-        os.path.join("src", "core", "aeroglass.db"),
-        "aeroglass.db",
-        os.path.join(os.path.expanduser("~"), ".aeroglass_nav", "aeroglass.db")
-    ]
-    for c in candidates:
-        if os.path.isfile(c):
-            return os.path.abspath(c)
-    return os.path.abspath(os.path.join("src", "core", "aeroglass.db"))
+    from src.core.database import DB_PATH
+    return os.path.abspath(DB_PATH)
 
 def run_import():
     db_path = get_db_path()

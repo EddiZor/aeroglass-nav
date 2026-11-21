@@ -1311,51 +1311,138 @@ function toggleMapRelief() {
 }
 
 // --- 🔍 RICERCA RAPIDA AEROPORTO & CENTRATURA MAPPA ---
+let _omniSearchSeq = 0;
+
+function centerMapVisuallyOn(lat, lon, targetZoom = 14) {
+    if (typeof map === 'undefined' || !map) return;
+    if (typeof map.stop === 'function') map.stop();
+    if (typeof map.invalidateSize === 'function') map.invalidateSize({ pan: false });
+
+    const mapRect = map.getContainer().getBoundingClientRect();
+    const mapCenterX = (mapRect.left + mapRect.right) / 2;
+    const mapCenterY = (mapRect.top + mapRect.bottom) / 2;
+
+    // Area visibile libera della finestra (escludendo sidebar sinistra, barra alta e cassetto VNAV)
+    let visLeft = 0;
+    const sb = document.getElementById('sidebarPanel');
+    if (sb && !sb.classList.contains('collapsed')) {
+        const sbRect = sb.getBoundingClientRect();
+        if (sbRect.width > 60 && sbRect.right > 0) {
+            visLeft = Math.min(window.innerWidth * 0.5, sbRect.right);
+        }
+    }
+
+    let visTop = 48;
+    const topBar = document.querySelector('.top-pills-group');
+    if (topBar) {
+        const tbRect = topBar.getBoundingClientRect();
+        if (tbRect.bottom > 0 && tbRect.bottom < 160) {
+            visTop = tbRect.bottom;
+        }
+    }
+
+    let visBottom = window.innerHeight;
+    const dr = document.getElementById('elevationDrawer');
+    if (dr) {
+        const drRect = dr.getBoundingClientRect();
+        if (drRect.top > visTop && drRect.top < window.innerHeight) {
+            visBottom = drRect.top;
+        }
+    }
+
+    const targetScreenX = (visLeft + window.innerWidth) / 2;
+    const targetScreenY = (visTop + visBottom) / 2;
+
+    const pt = map.project([lat, lon], targetZoom);
+    const centerPt = L.point(
+        pt.x + (mapCenterX - targetScreenX),
+        pt.y + (mapCenterY - targetScreenY)
+    );
+    const visualCenter = map.unproject(centerPt, targetZoom);
+    map.setView(visualCenter, targetZoom, { animate: false });
+}
+
 async function searchAndCenterAirport(query) {
     const q = (query || '').trim().toUpperCase();
     if (!q) return;
 
+    const mySeq = ++_omniSearchSeq;
+
     const centerOnApt = (icao, lat, lon, name, metar) => {
+        if (mySeq !== _omniSearchSeq) return;
         if (typeof map === 'undefined' || !map) return;
         if (typeof setFollowState === 'function') setFollowState(0);
         lastRenderedGroundKey = null;
-        map.setView([lat, lon], 14, { animate: true });
+        centerMapVisuallyOn(lat, lon, 14);
         if (typeof openQuickMetarPopup === 'function') {
-            openQuickMetarPopup(icao, lat, lon, name, metar || '');
+            openQuickMetarPopup(icao, lat, lon, name, metar || '', false);
         }
         setTimeout(() => {
-            if (typeof evaluateAirportGroundMap === 'function') evaluateAirportGroundMap();
-        }, 350);
+            if (mySeq === _omniSearchSeq && typeof evaluateAirportGroundMap === 'function') {
+                evaluateAirportGroundMap();
+            }
+        }, 120);
     };
 
-    let found = (typeof airportsData !== 'undefined' ? airportsData : []).find(a => a.icao === q || (a.name && a.name.toUpperCase().includes(q)));
-    
-    if (found && found.lat !== undefined && found.lon !== undefined) {
-        centerOnApt(found.icao, found.lat, found.lon, found.name, found.metar || '');
+    const localApts = Array.isArray(airportsData) ? airportsData : [];
+    const localVors = Array.isArray(vorsData) ? vorsData : [];
+
+    // 1. Match esatto ICAO in memoria
+    const exactApt = localApts.find(a => a.icao && a.icao.toUpperCase() === q);
+    if (exactApt && exactApt.lat !== undefined && exactApt.lon !== undefined) {
+        centerOnApt(exactApt.icao, exactApt.lat, exactApt.lon, exactApt.name, exactApt.metar || '');
         return;
     }
 
+    // 2. Match esatto VOR in memoria (es. TES, SME, CHI)
+    if (q.length === 3) {
+        const exactVor = localVors.find(v => v.ident && v.ident.toUpperCase() === q);
+        if (exactVor && exactVor.lat !== undefined && exactVor.lon !== undefined) {
+            if (typeof setFollowState === 'function') setFollowState(0);
+            centerMapVisuallyOn(exactVor.lat, exactVor.lon, 11);
+            return;
+        }
+    }
+
+    // 3. Ricerca istantanea su SQLite world_airports (match esatto ICAO prioritario su nome/città)
     if (window.pywebview && window.pywebview.api) {
         try {
-            if (q.length >= 3 && window.pywebview.api.resolve_icao) {
+            if (window.pywebview.api.search_world_airports) {
+                const searchRes = await window.pywebview.api.search_world_airports(q);
+                if (mySeq !== _omniSearchSeq) return;
+                if (searchRes && searchRes.success && Array.isArray(searchRes.results) && searchRes.results.length > 0) {
+                    const apt = searchRes.results.find(r => r.icao && r.icao.toUpperCase() === q) || searchRes.results[0];
+                    if (apt && apt.lat !== undefined && apt.lon !== undefined) {
+                        centerOnApt(apt.icao, apt.lat, apt.lon, apt.name, '');
+                        return;
+                    }
+                }
+            }
+
+            // 4. Fallback online (aviationweather) solo per codici ICAO a 4 caratteri non presenti in SQLite
+            if (/^[A-Z0-9]{4}$/.test(q) && window.pywebview.api.resolve_icao) {
                 const res = await window.pywebview.api.resolve_icao(q);
+                if (mySeq !== _omniSearchSeq) return;
                 if (res && res.success && res.lat !== undefined && res.lon !== undefined) {
                     centerOnApt(res.icao, res.lat, res.lon, res.name, res.metar || '');
                     return;
                 }
             }
-            if (window.pywebview.api.search_world_airports) {
-                const searchRes = await window.pywebview.api.search_world_airports(q);
-                if (searchRes && searchRes.success && Array.isArray(searchRes.results) && searchRes.results.length > 0) {
-                    const apt = searchRes.results[0];
-                    if (apt.lat !== undefined && apt.lon !== undefined) {
-                        centerOnApt(apt.icao, apt.lat, apt.lon, apt.name, '');
-                    }
-                }
-            }
         } catch (e) {
             console.error("Errore ricerca aeroporto:", e);
         }
+    }
+
+    // 5. Fallback finale su nomi parziali in memoria
+    const partialApt = localApts.find(a => a.name && a.name.toUpperCase().includes(q));
+    if (partialApt && partialApt.lat !== undefined && partialApt.lon !== undefined) {
+        centerOnApt(partialApt.icao, partialApt.lat, partialApt.lon, partialApt.name, partialApt.metar || '');
+        return;
+    }
+    const partialVor = localVors.find(v => (v.ident && v.ident.toUpperCase() === q) || (v.name && v.name.toUpperCase().includes(q)));
+    if (partialVor && partialVor.lat !== undefined && partialVor.lon !== undefined) {
+        if (typeof setFollowState === 'function') setFollowState(0);
+        centerMapVisuallyOn(partialVor.lat, partialVor.lon, 11);
     }
 }
 
@@ -2566,14 +2653,15 @@ function renderWeatherOverlay() {
     }
 }
 
-async function openQuickMetarPopup(icao, lat, lon, fallbackName, cachedMetar) {
+async function openQuickMetarPopup(icao, lat, lon, fallbackName, cachedMetar, allowAutoPan = true) {
     if (typeof map === 'undefined' || !map || typeof L === 'undefined') return;
 
     const popup = L.popup({
         className: 'wx-metar-glass-popup',
         closeButton: true,
         maxWidth: 290,
-        offset: [0, -6]
+        offset: [0, -6],
+        autoPan: allowAutoPan
     })
     .setLatLng([lat, lon])
     .setContent(`<div style="color:#38bdf8;font-weight:700;">⏳ ${icao} - Caricamento METAR live...</div>`)
@@ -2952,7 +3040,11 @@ let atcCoverageSettings = {
     pilotRangeNm: 160,  // Raggio max aerei vicini in NM (20 - 300 NM)
     showTWR: true,
     showAPP: true,
-    showCTR: true
+    showCTR: true,
+    vaPrefixes: '',         // Prefissi callsign o parole chiave OPR/ (es. "ITY, RYR, IVV")
+    vaFilterMode: 'highlight', // 'highlight' (evidenzia) | 'only' (mostra solo VA filtrate)
+    vaGlobalRange: true,    // Mostra aerei VA in tutta la mappa visibile (ignora limite 160 NM)
+    vaColor: '#e879f9'      // Colore evidenziazione VA
 };
 
 try {
@@ -2961,7 +3053,11 @@ try {
 } catch (e) {}
 
 function saveAtcCoverageSettings() {
-    try { localStorage.setItem('aeroglass_atc_cfg', JSON.stringify(atcCoverageSettings)); } catch (e) {}
+    const raw = JSON.stringify(atcCoverageSettings);
+    try { localStorage.setItem('aeroglass_atc_cfg', raw); } catch (e) {}
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.save_setting) {
+        try { window.pywebview.api.save_setting('atc_radar_cfg', raw); } catch (e) {}
+    }
 }
 
 function ensureNetworkOverlayUI() {
@@ -3054,6 +3150,32 @@ function ensureAtcRadarPopoverDOM() {
             <button id="btnFilterAPP" style="flex:1;padding:4px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;border:1px solid #00d2ff;background:rgba(0,210,255,0.18);color:#00d2ff;">📡 APP</button>
             <button id="btnFilterCTR" style="flex:1;padding:4px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;border:1px solid #c084fc;background:rgba(192,132,252,0.18);color:#c084fc;">🕸️ CTR</button>
         </div>
+
+        <div style="display:flex;flex-direction:column;gap:6px;padding-top:8px;border-top:1px solid rgba(148,163,184,0.22);">
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:10.5px;">
+                <span style="font-weight:800;color:#e879f9;">🏢 FILTRO COMPAGNIA / VA</span>
+                <span id="lblVaMatchCount" style="font-size:9.5px;color:#94a3b8;background:rgba(30,41,59,0.85);padding:1px 6px;border-radius:4px;">Nessun filtro</span>
+            </div>
+            <input type="text" id="inpVaPrefixes" value="${atcCoverageSettings.vaPrefixes || ''}"
+                   placeholder="Prefissi o OPR (es. ITY, RYR, IVV)"
+                   style="width:100%;box-sizing:border-box;background:rgba(15,23,42,0.95);border:1px solid rgba(232,121,249,0.45);border-radius:6px;padding:5px 8px;color:#f8fafc;font-family:Consolas,monospace;font-size:11px;text-transform:uppercase;outline:none;">
+            <div style="display:flex;gap:5px;">
+                <button id="btnVaModeHighlight" style="flex:1;padding:4px;border-radius:5px;font-size:9.5px;font-weight:700;cursor:pointer;">✨ Evidenzia</button>
+                <button id="btnVaModeOnly" style="flex:1;padding:4px;border-radius:5px;font-size:9.5px;font-weight:700;cursor:pointer;">🎯 Solo VA</button>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+                <label for="chkVaGlobalRange" style="display:inline-flex;align-items:center;gap:5px;font-size:9.8px;color:#cbd5e1;cursor:pointer;">
+                    <input type="checkbox" id="chkVaGlobalRange" ${atcCoverageSettings.vaGlobalRange ? 'checked' : ''} style="accent-color:#e879f9;cursor:pointer;">
+                    <span>🌍 Raggio Globale VA</span>
+                </label>
+                <div id="vaColorPalette" style="display:inline-flex;gap:5px;align-items:center;">
+                    <span class="va-color-dot" data-color="#e879f9" title="Magenta" style="background:#e879f9;"></span>
+                    <span class="va-color-dot" data-color="#34d399" title="Smeraldo" style="background:#34d399;"></span>
+                    <span class="va-color-dot" data-color="#fb7185" title="Corallo" style="background:#fb7185;"></span>
+                    <span class="va-color-dot" data-color="#facc15" title="Oro" style="background:#facc15;"></span>
+                </div>
+            </div>
+        </div>
     `;
 
     document.body.appendChild(pop);
@@ -3085,7 +3207,36 @@ function ensureAtcRadarPopoverDOM() {
         styleRoleBtn('btnFilterTWR', atcCoverageSettings.showTWR, '#34d399');
         styleRoleBtn('btnFilterAPP', atcCoverageSettings.showAPP, '#00d2ff');
         styleRoleBtn('btnFilterCTR', atcCoverageSettings.showCTR, '#c084fc');
+
+        const inpVa = document.getElementById('inpVaPrefixes');
+        if (inpVa && inpVa !== document.activeElement) {
+            inpVa.value = atcCoverageSettings.vaPrefixes || '';
+        }
+        const chkGlob = document.getElementById('chkVaGlobalRange');
+        if (chkGlob) chkGlob.checked = Boolean(atcCoverageSettings.vaGlobalRange);
+
+        const vaCol = atcCoverageSettings.vaColor || '#e879f9';
+        const isOnly = (atcCoverageSettings.vaFilterMode === 'only');
+        const btnHi = document.getElementById('btnVaModeHighlight');
+        const btnOn = document.getElementById('btnVaModeOnly');
+        if (btnHi) {
+            btnHi.style.border = `1px solid ${!isOnly ? vaCol : 'rgba(148,163,184,0.3)'}`;
+            btnHi.style.background = !isOnly ? `${vaCol}28` : 'rgba(30,41,59,0.5)';
+            btnHi.style.color = !isOnly ? vaCol : '#94a3b8';
+        }
+        if (btnOn) {
+            btnOn.style.border = `1px solid ${isOnly ? vaCol : 'rgba(148,163,184,0.3)'}`;
+            btnOn.style.background = isOnly ? `${vaCol}28` : 'rgba(30,41,59,0.5)';
+            btnOn.style.color = isOnly ? vaCol : '#94a3b8';
+        }
+        pop.querySelectorAll('.va-color-dot').forEach(dot => {
+            const active = dot.dataset.color === vaCol;
+            dot.style.outline = active ? '2px solid #ffffff' : 'none';
+            dot.style.transform = active ? 'scale(1.18)' : 'scale(1)';
+        });
     };
+
+    window._syncAtcPopoverUI = syncUI;
 
     document.getElementById('rngAtcRadius').addEventListener('input', (e) => {
         atcCoverageSettings.radiusScale = parseInt(e.target.value, 10) || 0;
@@ -3127,8 +3278,43 @@ function ensureAtcRadarPopoverDOM() {
         if (typeof redrawCachedNetworkTraffic === 'function') redrawCachedNetworkTraffic();
     };
 
+    document.getElementById('inpVaPrefixes').addEventListener('input', (e) => {
+        atcCoverageSettings.vaPrefixes = (e.target.value || '').toUpperCase();
+        saveAtcCoverageSettings();
+        if (typeof redrawCachedNetworkTraffic === 'function') redrawCachedNetworkTraffic();
+    });
+    document.getElementById('btnVaModeHighlight').onclick = () => {
+        atcCoverageSettings.vaFilterMode = 'highlight';
+        syncUI();
+        saveAtcCoverageSettings();
+        if (typeof redrawCachedNetworkTraffic === 'function') redrawCachedNetworkTraffic();
+    };
+    document.getElementById('btnVaModeOnly').onclick = () => {
+        atcCoverageSettings.vaFilterMode = 'only';
+        syncUI();
+        saveAtcCoverageSettings();
+        if (typeof redrawCachedNetworkTraffic === 'function') redrawCachedNetworkTraffic();
+    };
+    document.getElementById('chkVaGlobalRange').addEventListener('change', (e) => {
+        atcCoverageSettings.vaGlobalRange = Boolean(e.target.checked);
+        saveAtcCoverageSettings();
+        if (typeof redrawCachedNetworkTraffic === 'function') redrawCachedNetworkTraffic();
+    });
+    pop.querySelectorAll('.va-color-dot').forEach(dot => {
+        dot.onclick = () => {
+            atcCoverageSettings.vaColor = dot.dataset.color || '#e879f9';
+            syncUI();
+            saveAtcCoverageSettings();
+            if (typeof redrawCachedNetworkTraffic === 'function') redrawCachedNetworkTraffic();
+        };
+    });
+
     document.getElementById('btnAtcCfgReset').onclick = () => {
-        atcCoverageSettings = { radiusScale: 100, opacityScale: 100, pilotRangeNm: 160, showTWR: true, showAPP: true, showCTR: true };
+        atcCoverageSettings = {
+            radiusScale: 100, opacityScale: 100, pilotRangeNm: 160,
+            showTWR: true, showAPP: true, showCTR: true,
+            vaPrefixes: '', vaFilterMode: 'highlight', vaGlobalRange: true, vaColor: '#e879f9'
+        };
         syncUI();
         saveAtcCoverageSettings();
         if (typeof redrawCachedNetworkTraffic === 'function') redrawCachedNetworkTraffic();
@@ -3332,6 +3518,40 @@ function ensureNetAtcBadgeStyles() {
         #btnThemeMode, #btnToggleTooltips, #btnToggleUIMode {
             min-width: 28px !important;
             padding: 4px 6px !important;
+        }
+        .va-color-dot {
+            width: 13px;
+            height: 13px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: inline-block;
+            transition: transform 0.15s ease;
+        }
+        .net-va-wrap {
+            position: relative;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .net-va-tag {
+            position: absolute;
+            top: 22px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(11, 17, 32, 0.94);
+            border: 1.2px solid #e879f9;
+            border-radius: 4px;
+            padding: 0px 5px;
+            font-family: Consolas, monospace;
+            font-size: 9.5px;
+            font-weight: 800;
+            color: #f8fafc;
+            white-space: nowrap;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.75);
+            pointer-events: none;
+            line-height: 1.35;
         }
     `;
     document.head.appendChild(st);
@@ -3587,41 +3807,136 @@ function redrawCachedNetworkTraffic() {
         renderScratchpadFrequencies();
     }
 
-    // 2. AEREI NELLE IMMEDIATE VICINANZE
+    // 2. AEREI ONLINE (CON FILTRO/EVIDENZIAZIONE VA, SAGOME PER CATEGORIA E OPERATORE)
+    const getAircraftCategorySvg = (cat, color, sizePx) => {
+        if (cat === 'heli') {
+            return `<svg width="${sizePx}" height="${sizePx}" viewBox="0 0 24 24" fill="${color}">
+                <path d="M12 2L13 11H21V13H13.5L13 19L16 21V22H8V21L11 19L10.5 13H3V11H11L12 2ZM4 5L20 19M20 5L4 19" stroke="${color}" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>`;
+        }
+        if (cat === 'ga') {
+            return `<svg width="${sizePx}" height="${sizePx}" viewBox="0 0 24 24" fill="${color}">
+                <path d="M12 2.5C11.2 2.5 10.7 3.2 10.7 4V9.2L3 10.2V12L10.7 11.8V18L8 19.8V21.2L12 20.2L16 21.2V19.8L13.3 18V11.8L21 12V10.2L13.3 9.2V4C13.3 3.2 12.8 2.5 12 2.5Z"/>
+            </svg>`;
+        }
+        if (cat === 'turboprop') {
+            return `<svg width="${sizePx}" height="${sizePx}" viewBox="0 0 24 24" fill="${color}">
+                <path d="M12 2C11.1 2 10.5 2.8 10.5 3.8V9.2L2 10.5V12.5L7 12.2V13.8H8.5V12.1L10.5 12V18.2L7.5 20V21.5L12 20.5L16.5 21.5V20L13.5 18.2V12L15.5 12.1V13.8H17V12.2L22 12.5V10.5L13.5 9.2V3.8C13.5 2.8 12.9 2 12 2Z"/>
+            </svg>`;
+        }
+        if (cat === 'mil') {
+            return `<svg width="${sizePx}" height="${sizePx}" viewBox="0 0 24 24" fill="${color}">
+                <path d="M12 1.5L13.5 8.5L21 15.5V17.5L13.5 14.8L13.2 19L16.2 21V22.5L12 21.2L7.8 22.5V21L10.8 19L10.5 14.8L3 17.5V15.5L10.5 8.5L12 1.5Z"/>
+            </svg>`;
+        }
+        if (cat === 'heavy') {
+            return `<svg width="${sizePx}" height="${sizePx}" viewBox="0 0 24 24" fill="${color}">
+                <path d="M22 16.2V14L13.6 8.6V3.2C13.6 2.2 12.9 1.5 12 1.5S10.4 2.2 10.4 3.2V8.6L2 14V16.2L10.4 13.5V18.8L7.4 20.6V22.2L12 21L16.6 22.2V20.6L13.6 18.8V13.5L22 16.2Z"/>
+            </svg>`;
+        }
+        return `<svg width="${sizePx}" height="${sizePx}" viewBox="0 0 24 24" fill="${color}">
+            <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+        </svg>`;
+    };
+
+    const vaTokens = String(atcCoverageSettings.vaPrefixes || '')
+        .split(/[\s,;]+/)
+        .map(s => s.trim().toUpperCase())
+        .filter(Boolean);
+    const hasVaFilter = vaTokens.length > 0;
+    const vaOnly = hasVaFilter && atcCoverageSettings.vaFilterMode === 'only';
+    const vaGlobal = Boolean(atcCoverageSettings.vaGlobalRange);
+    const vaColor = atcCoverageSettings.vaColor || '#e879f9';
+
+    let vaOnlineTotal = 0;
     const nearbyPilots = [];
+
     (res.pilots || []).forEach(p => {
         if (p.lat === undefined || p.lon === undefined) return;
         const isVatsim = (p.network === 'vatsim');
         if (networkOverlayMode === 'ivao' && isVatsim) return;
         if (networkOverlayMode === 'vatsim' && !isVatsim) return;
 
+        const csUpper = String(p.callsign || '').toUpperCase();
+        const oprUpper = String(p.operator || '').toUpperCase();
+        const isVaMatch = hasVaFilter && vaTokens.some(tok =>
+            csUpper.startsWith(tok) || (oprUpper && oprUpper.includes(tok))
+        );
+
+        if (isVaMatch) vaOnlineTotal++;
+        if (vaOnly && !isVaMatch) return;
+
         const distNm = computeDistanceNm(refPos.lat, refPos.lng, p.lat, p.lon);
-        if (!bounds.contains([p.lat, p.lon]) || distNm > maxPilotNm) return;
-        nearbyPilots.push({ ...p, distNm });
+        const allowGlobal = isVaMatch && vaGlobal;
+        if (!bounds.contains([p.lat, p.lon])) return;
+        if (!allowGlobal && distNm > maxPilotNm) return;
+
+        nearbyPilots.push({ ...p, distNm, isVaMatch });
     });
 
-    nearbyPilots.sort((a, b) => a.distNm - b.distNm);
+    const vaCountEl = document.getElementById('lblVaMatchCount');
+    if (vaCountEl) {
+        vaCountEl.textContent = hasVaFilter ? `${vaOnlineTotal} in volo` : 'Nessun filtro';
+        vaCountEl.style.color = (hasVaFilter && vaOnlineTotal > 0) ? vaColor : '#94a3b8';
+    }
 
-    nearbyPilots.slice(0, 80).forEach(p => {
+    // Priorità assoluta agli aerei della VA filtrata, poi i più vicini
+    nearbyPilots.sort((a, b) => {
+        if (a.isVaMatch !== b.isVaMatch) return a.isVaMatch ? -1 : 1;
+        return a.distNm - b.distNm;
+    });
+
+    nearbyPilots.slice(0, 100).forEach(p => {
         const isVatsim = (p.network === 'vatsim');
-        const planeColor = isVatsim ? '#fbbf24' : '#00d2ff';
+        const planeColor = p.isVaMatch ? vaColor : (isVatsim ? '#fbbf24' : '#00d2ff');
         const netLabel = isVatsim ? 'VATSIM' : 'IVAO';
         const hdg = p.hdg || 0;
+        const csSafe = escapeHtml(String(p.callsign || 'N/A'));
+        const acftTxt = p.aircraft ? escapeHtml(String(p.aircraft)) : '';
+        const oprTxt = p.operator ? escapeHtml(String(p.operator)) : '';
+        const routeTxt = (p.dep || p.arr) ? `${escapeHtml(String(p.dep || '----'))} ➔ ${escapeHtml(String(p.arr || '----'))}` : '';
+
+        const svgSize = p.isVaMatch ? 21 : (p.category === 'heavy' ? 20 : 18);
+        const glowStyle = p.isVaMatch ? `filter: drop-shadow(0 0 6px ${vaColor});` : '';
+        const svgHtml = getAircraftCategorySvg(p.category || 'jet', planeColor, svgSize);
+
+        let markerHtml;
+        if (p.isVaMatch) {
+            const tagLabel = acftTxt ? `${csSafe} · ${acftTxt}` : csSafe;
+            markerHtml = `<div class="net-va-wrap">
+                <div class="net-pilot-marker" style="transform: rotate(${hdg}deg); ${glowStyle}">${svgHtml}</div>
+                <div class="net-va-tag" style="border-color:${vaColor};color:${vaColor};">${tagLabel}</div>
+            </div>`;
+        } else {
+            markerHtml = `<div class="net-pilot-marker" style="transform: rotate(${hdg}deg);">${svgHtml}</div>`;
+        }
 
         const pilotIcon = L.divIcon({
             className: '',
-            html: `<div class="net-pilot-marker" style="transform: rotate(${hdg}deg);">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="${planeColor}">
-                    <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
-                </svg>
-            </div>`,
-            iconSize: [20, 20],
-            iconAnchor: [10, 10]
+            html: markerHtml,
+            iconSize: p.isVaMatch ? [24, 24] : [20, 20],
+            iconAnchor: p.isVaMatch ? [12, 12] : [10, 10]
         });
 
-        const m = L.marker([p.lat, p.lon], { icon: pilotIcon, zIndexOffset: 700 }).addTo(networkLayerGroup);
+        const m = L.marker([p.lat, p.lon], {
+            icon: pilotIcon,
+            zIndexOffset: p.isVaMatch ? 920 : 700
+        }).addTo(networkLayerGroup);
+
+        const vaBadge = p.isVaMatch
+            ? ` <span style="background:${vaColor}30;border:1px solid ${vaColor};color:${vaColor};padding:0 4px;border-radius:3px;font-size:9px;">VA</span>`
+            : '';
+        const infoParts = [];
+        if (acftTxt) infoParts.push(`<b style="color:#38bdf8;">${acftTxt}</b>`);
+        if (oprTxt) infoParts.push(`<span style="color:#e2e8f0;">${oprTxt}</span>`);
+        const line2 = infoParts.length > 0 ? `<br>✈️ ${infoParts.join(' • ')}` : '';
+        const line3 = routeTxt ? `<br>🛫 <span style="color:#34d399;font-weight:700;">${routeTxt}</span>` : '';
+
         m.bindTooltip(
-            `<b>[${netLabel}] ${p.callsign}</b> (${p.distNm.toFixed(1)} NM)<br>Alt: ${p.alt} ft | GS: ${p.gs} kt | HDG: ${hdg}°`,
+            `<b>[${netLabel}] ${csSafe}</b>${vaBadge} <span style="color:#94a3b8;">(${p.distNm.toFixed(1)} NM)</span>` +
+            line2 +
+            line3 +
+            `<br>Alt: ${p.alt} ft | GS: ${p.gs} kt | HDG: ${String(hdg).padStart(3, '0')}°`,
             { direction: 'top', className: 'vnav-route-tooltip' }
         );
     });
@@ -4479,6 +4794,16 @@ async function initAeroGlassApp() {
             omniInp.addEventListener('input', function() {
                 this.value = this.value.toUpperCase();
             });
+            omniInp.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (typeof filterAirports === 'function') {
+                        filterAirports(this.value, true);
+                    } else if (typeof searchAndCenterAirport === 'function') {
+                        searchAndCenterAirport(this.value);
+                    }
+                }
+            });
         }
     }
 
@@ -4528,6 +4853,14 @@ async function initAeroGlassApp() {
             if (netRes && netRes.success && netRes.value !== null && netRes.value !== undefined) {
                 networkOverlayMode = String(netRes.value);
                 updateNetworkOverlayButtonUI();
+            }
+
+            const atcCfgRes = await window.pywebview.api.get_setting('atc_radar_cfg');
+            if (atcCfgRes && atcCfgRes.success && atcCfgRes.value) {
+                try {
+                    atcCoverageSettings = { ...atcCoverageSettings, ...JSON.parse(atcCfgRes.value) };
+                    if (typeof window._syncAtcPopoverUI === 'function') window._syncAtcPopoverUI();
+                } catch (e) {}
             }
 
             const spRes = await window.pywebview.api.get_setting('efb_scratchpad');

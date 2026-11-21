@@ -1,16 +1,30 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
+import sqlite3
 from PyInstaller.utils.hooks import collect_all
+
+# Consolida eventuali file -wal/-shm dentro src/core/aeroglass.db prima della build
+_master_db = os.path.abspath(os.path.join('src', 'core', 'aeroglass.db'))
+if os.path.isfile(_master_db):
+    _c = sqlite3.connect(_master_db)
+    _c.execute('PRAGMA wal_checkpoint(TRUNCATE);')
+    _c.close()
 
 datas = [
     ('src/ui', 'src/ui'),
+    ('src/core/aeroglass.db', 'src/core'),
 ]
 binaries = []
 hiddenimports = [
     'sqlite3',
     'webview',
     'SimConnect',
+    'router',
     'src.core.api',
     'src.core.database',
+    'src.core.msfs_ground_db',
+    'src.core.diagnostics',
+    'src.core.aip_fetcher',
     'src.simconnect.telemetry',
 ]
 

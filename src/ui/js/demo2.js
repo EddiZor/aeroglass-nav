@@ -13,16 +13,18 @@ const DEMO2_TEXTS = {
     it: {
         prologue_title: "AEROGLASS-NAV v1.0.0",
         prologue_sub: "Inizializzazione Tour Funzionalità Completo",
-        phase1_title: "1/5 • AIRWAY AUTO-ROUTING (SQLITE A*)",
+        phase1_title: "1/6 • AIRWAY AUTO-ROUTING (SQLITE A*)",
         phase1_sub: "Calcolo ottimale della rotta su aerovie IFR Low da LIPZ a LIPB",
-        phase2_title: "2/5 • PROCEDURE STRUMENTALI, HOLDING (+50%) & VNAV",
+        phase2_title: "2/6 • PROCEDURE STRUMENTALI, HOLDING (+50%) & VNAV",
         phase2_sub: "Attivazione circuito d'attesa IFR e profilo altimetrico multistrato",
-        phase3_title: "3/5 • CARTOGRAFIA & PROFILI FILTRI MAPPA",
+        phase3_title: "3/6 • CARTOGRAFIA & PROFILI FILTRI MAPPA",
         phase3_sub: "Regolazione real-time di luminosità, contrasto e saturazione",
-        phase4_title: "4/5 • CARTE DI PROCEDURA & OVERLAY GEOREFERENZIATO",
+        phase4_title: "4/6 • CARTE DI PROCEDURA & OVERLAY GEOREFERENZIATO",
         phase4_sub: "Consultazione documenti AIP/ENAV con allineamento geometrico Leaflet",
-        phase5_title: "5/5 • EFB TABLET (QR CODE) & STORICO VOLI SQLITE",
-        phase5_sub: "Sincronizzazione in cabina via Wi-Fi e registro consumi carburante",
+        phase5_title: "5/6 • TRAFFICO ONLINE (IVAO/VATSIM), TIPO AEREO & FILTRO VA",
+        phase5_sub: "Sagome SVG per categoria, operatore da SQLite e filtro compagnie virtuali",
+        phase6_title: "6/6 • EFB TABLET (QR CODE), LOGBOOK & GLOSSARIO BILINGUE",
+        phase6_sub: "Sincronizzazione Wi-Fi, storico voli SQLite e guida alfabetica IT/EN",
         conclusion_title: "AEROGLASS-NAV v1.0.0",
         conclusion_sub: "Tutte le funzioni sono pronte e collegate al simulatore!",
         toast_start: "🎬 Avvio Demo Automatica v1.0.0 (F2: stop • L: lingua)",
@@ -32,16 +34,18 @@ const DEMO2_TEXTS = {
     en: {
         prologue_title: "AEROGLASS-NAV v1.0.0",
         prologue_sub: "Full Feature Tour Initialization",
-        phase1_title: "1/5 • AIRWAY AUTO-ROUTING (SQLITE A*)",
+        phase1_title: "1/6 • AIRWAY AUTO-ROUTING (SQLITE A*)",
         phase1_sub: "Optimal airway route calculation on IFR Low from LIPZ to LIPB",
-        phase2_title: "2/5 • INSTRUMENT PROCEDURES, HOLDING (+50%) & VNAV",
+        phase2_title: "2/6 • INSTRUMENT PROCEDURES, HOLDING (+50%) & VNAV",
         phase2_sub: "IFR holding pattern activation and multilayer elevation profile",
-        phase3_title: "3/5 • CARTOGRAPHY & MAP FILTER PROFILES",
+        phase3_title: "3/6 • CARTOGRAPHY & MAP FILTER PROFILES",
         phase3_sub: "Real-time adjustment of brightness, contrast, and saturation",
-        phase4_title: "4/5 • PROCEDURE CHARTS & GEOREFERENCED OVERLAY",
+        phase4_title: "4/6 • PROCEDURE CHARTS & GEOREFERENCED OVERLAY",
         phase4_sub: "AIP/ENAV document viewing with Leaflet geometric alignment",
-        phase5_title: "5/5 • EFB TABLET (QR CODE) & SQLITE FLIGHT LOGBOOK",
-        phase5_sub: "Cockpit Wi-Fi sync and fuel consumption flight log",
+        phase5_title: "5/6 • ONLINE TRAFFIC (IVAO/VATSIM), AIRCRAFT TYPE & VA FILTER",
+        phase5_sub: "Category SVG silhouettes, SQLite airline lookup, and Virtual Airline filter",
+        phase6_title: "6/6 • EFB TABLET (QR CODE), LOGBOOK & BILINGUAL GLOSSARY",
+        phase6_sub: "Cockpit Wi-Fi sync, SQLite flight log, and alphabetical IT/EN reference",
         conclusion_title: "AEROGLASS-NAV v1.0.0",
         conclusion_sub: "All features are ready and connected to the simulator!",
         toast_start: "🎬 Starting Automatic Demo v1.0.0 (F2: stop • L: language)",
@@ -278,8 +282,23 @@ async function startDemo2() {
         }
         if (demo2AbortController) return;
 
-        // --- FASE 5: EFB TABLET WI-FI & LOGBOOK ---
+        // --- FASE 5: TRAFFICO ONLINE (IVAO/VATSIM), TIPO AEREO & FILTRO VA ---
         showDemoCaption("phase5");
+        if (typeof ensureAtcRadarPopoverDOM === 'function') ensureAtcRadarPopoverDOM();
+        const atcPop = document.getElementById("aeroAtcRadarPopover");
+        const atcBtn = document.getElementById("btnAtcRadarCfg");
+        if (atcPop && atcBtn) {
+            const rect = atcBtn.getBoundingClientRect();
+            atcPop.style.left = Math.max(160, Math.min(window.innerWidth - 170, rect.left + rect.width / 2)) + "px";
+            atcPop.style.top = (rect.bottom + 8) + "px";
+            atcPop.style.display = "flex";
+        }
+        await demoSleep(2800);
+        if (atcPop) atcPop.style.display = "none";
+        if (demo2AbortController) return;
+
+        // --- FASE 6: EFB TABLET WI-FI, LOGBOOK & GLOSSARIO ---
+        showDemoCaption("phase6");
         if (typeof openEfbNetworkModal === 'function') openEfbNetworkModal();
         await demoSleep(2400);
         if (demo2AbortController) return;

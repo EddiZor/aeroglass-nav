@@ -12,7 +12,7 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 import xml.etree.ElementTree as ET
 from datetime import datetime
 import webview
-from src.core.database import init_db, get_connection
+from src.core.database import init_db, get_connection, DB_PATH
 from router import find_airway_route
 
 try:
@@ -833,16 +833,29 @@ class AeroGlassAPI:
         if not icao or not isinstance(layout, dict):
             return {"success": False}
         try:
+            new_source = str(layout.get("source") or "").lower()
+            new_is_real = new_source in ("osm", "msfs") and bool(layout.get("taxiways") or layout.get("stands"))
             layout_json_str = json.dumps(layout)
             with self._db_lock:
                 with get_connection() as conn:
+                    if not new_is_real:
+                        existing = conn.execute(
+                            "SELECT layout_json FROM airport_ground_cache WHERE icao = ?", (icao,)
+                        ).fetchone()
+                        if existing and existing["layout_json"]:
+                            try:
+                                ex_obj = json.loads(existing["layout_json"])
+                                if ex_obj.get("source") in ("osm", "msfs") and (ex_obj.get("taxiways") or ex_obj.get("stands")):
+                                    return {"success": True, "skipped": "existing_real_cache"}
+                            except Exception:
+                                pass
                     conn.execute(
                         "INSERT OR REPLACE INTO airport_ground_cache (icao, layout_json, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
                         (icao, layout_json_str)
                     )
                     conn.commit()
             try:
-                cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ground_cache")
+                cache_dir = os.path.join(os.path.dirname(DB_PATH), "ground_cache")
                 os.makedirs(cache_dir, exist_ok=True)
                 with open(os.path.join(cache_dir, f"{icao}.json"), "w", encoding="utf-8") as jf:
                     jf.write(layout_json_str)
@@ -876,9 +889,9 @@ class AeroGlassAPI:
         except Exception:
             pass
 
-        # 1b. Controlla la cache su file JSON (src/core/ground_cache/{ICAO}.json) solo per dati reali (OSM o MSFS)
+        # 1b. Controlla la cache su file JSON accanto al DB solo per dati reali (OSM o MSFS)
         try:
-            cache_json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ground_cache", f"{icao}.json")
+            cache_json_path = os.path.join(os.path.dirname(DB_PATH), "ground_cache", f"{icao}.json")
             if os.path.isfile(cache_json_path):
                 with open(cache_json_path, "r", encoding="utf-8") as jf:
                     file_layout = json.load(jf)
@@ -1092,6 +1105,97 @@ class AeroGlassAPI:
             "EURM": (50.901, 5.762, "Maastricht UAC"),
         }
 
+        import re
+
+        # Carica una sola volta in RAM compagnie e categorie aeromobili da SQLite
+        if not hasattr(self, "_airlines_cache") or not hasattr(self, "_aircraft_cat_cache"):
+            self._airlines_cache = {}
+            self._aircraft_cat_cache = {}
+            try:
+                with self._db_lock:
+                    with get_connection() as conn:
+                        for row in conn.execute("SELECT icao, name FROM world_airlines").fetchall():
+                            self._airlines_cache[str(row["icao"]).upper()] = row["name"]
+                        for row in conn.execute("SELECT icao, category FROM world_aircraft_types").fetchall():
+                            self._aircraft_cat_cache[str(row["icao"]).upper()] = row["category"]
+            except Exception:
+                pass
+
+        AIRLINE_PREFIX_MAP = self._airlines_cache
+        AIRCRAFT_CAT_MAP = self._aircraft_cat_cache
+
+        GA_PREFIXES = (
+            "C1", "C2", "C3", "C4", "PA", "P2", "P3", "P4", "SR2", "DA2", "DA4", "DA6",
+            "BE3", "BE5", "DR4", "M20", "UL", "RV", "SLG", "VL3", "EV9", "SAVA", "PI4",
+            "P30", "ZLIN", "TB", "AA5", "DV2", "FDCT", "CTLS", "J3", "CUB"
+        )
+        GA_REG_RE = re.compile(r'^(I|F|G|D|N|C|VH|ZK|HB|OE|EC|CS|OO|PH|OY|SE|LN|OH|SP|OK|OM|HA|YU|9A|S5|LX|EI|TC|SX|YR|LZ)-?[A-Z0-9]{3,5}$')
+        OPR_RE = re.compile(r'\bOPR/([A-Z0-9][A-Z0-9\s\.\-&]{1,30}?)(?=\s+[A-Z]{3,4}/|\s*$)')
+
+        def _clean_icao_acft(raw_val):
+            s = str(raw_val or "").strip().upper()
+            if not s:
+                return ""
+            if "/" in s:
+                parts = [pt.strip() for pt in s.split("/") if pt.strip()]
+                for pt in parts:
+                    if len(pt) >= 2 and pt not in ("H", "L", "M", "S", "J", "T"):
+                        s = pt
+                        break
+            return s.split("-")[0].split(" ")[0].strip()[:6]
+
+        def _classify_acft(acft_code):
+            a = str(acft_code or "").upper()
+            if not a:
+                return "jet"
+            if a in AIRCRAFT_CAT_MAP:
+                return AIRCRAFT_CAT_MAP[a]
+            if a.startswith(("B74", "B77", "B78", "A33", "A34", "A35", "A38")):
+                return "heavy"
+            if a.startswith(("EC1", "AW1", "AS3", "B40", "R44", "R66")):
+                return "heli"
+            if a.startswith(("F1", "F2", "F3", "MB3", "M33", "M34")):
+                return "mil"
+            if a.startswith(("AT4", "AT7", "DH8", "TBM", "PC12")):
+                return "turboprop"
+            if a.startswith(GA_PREFIXES):
+                return "ga"
+            return "jet"
+
+        def _extract_pilot_meta(callsign, fp, is_ivao=False):
+            cs = str(callsign or "").strip().upper()
+            fp = fp if isinstance(fp, dict) else {}
+            if is_ivao:
+                acft_obj = fp.get("aircraft") if isinstance(fp.get("aircraft"), dict) else {}
+                acft = _clean_icao_acft(fp.get("aircraftId") or acft_obj.get("icaoCode") or acft_obj.get("model"))
+                dep = str(fp.get("departureId") or "").strip().upper()[:4]
+                arr = str(fp.get("arrivalId") or "").strip().upper()[:4]
+                rmk = str(fp.get("remarks") or "").strip()
+            else:
+                acft = _clean_icao_acft(fp.get("aircraft_short") or fp.get("aircraft_faa") or fp.get("aircraft"))
+                dep = str(fp.get("departure") or "").strip().upper()[:4]
+                arr = str(fp.get("arrival") or "").strip().upper()[:4]
+                rmk = str(fp.get("remarks") or "").strip()
+
+            opr = ""
+            m_opr = OPR_RE.search(rmk.upper())
+            if m_opr:
+                raw_opr = re.sub(r'\s+', ' ', m_opr.group(1)).strip()
+                # Se nei remarks (es. SimBrief) è presente il codice ICAO a 3 lettere (OPR/ITY, OPR/THY), lo risolve da world_airlines
+                opr = AIRLINE_PREFIX_MAP.get(raw_opr, raw_opr)
+            elif len(cs) >= 4 and cs[:3].isalpha() and not cs.startswith(("I-", "D-", "F-", "G-")) and cs[:3] in AIRLINE_PREFIX_MAP:
+                opr = AIRLINE_PREFIX_MAP[cs[:3]]
+            elif "-" in cs or (len(cs) >= 5 and cs[0] == "N" and cs[1].isdigit()) or GA_REG_RE.match(cs):
+                opr = "General Aviation"
+
+            return {
+                "aircraft": acft,
+                "operator": opr,
+                "dep": dep,
+                "arr": arr,
+                "category": _classify_acft(acft)
+            }
+
         pilots, controllers, raw_atcs = [], [], []
 
         def fetch_vatsim():
@@ -1106,13 +1210,20 @@ class AeroGlassAPI:
                 for p in data.get("pilots", []):
                     lat, lon = p.get("latitude"), p.get("longitude")
                     if lat is not None and lon is not None:
+                        cs = p.get("callsign", "N/A")
+                        meta = _extract_pilot_meta(cs, p.get("flight_plan"), is_ivao=False)
                         v_pilots.append({
-                            "callsign": p.get("callsign", "N/A"),
+                            "callsign": cs,
                             "lat": float(lat),
                             "lon": float(lon),
                             "alt": int(p.get("altitude", 0)),
                             "gs": int(p.get("groundspeed", 0)),
                             "hdg": int(p.get("heading", 0)),
+                            "aircraft": meta["aircraft"],
+                            "operator": meta["operator"],
+                            "dep": meta["dep"],
+                            "arr": meta["arr"],
+                            "category": meta["category"],
                             "network": "vatsim"
                         })
                 for c in data.get("controllers", []):
@@ -1165,13 +1276,20 @@ class AeroGlassAPI:
                     tr = p.get("lastTrack") or {}
                     lat, lon = tr.get("latitude"), tr.get("longitude")
                     if lat is not None and lon is not None:
+                        cs = p.get("callsign", "N/A")
+                        meta = _extract_pilot_meta(cs, p.get("flightPlan"), is_ivao=True)
                         i_pilots.append({
-                            "callsign": p.get("callsign", "N/A"),
+                            "callsign": cs,
                             "lat": float(lat),
                             "lon": float(lon),
                             "alt": int(tr.get("altitude", 0)),
                             "gs": int(tr.get("groundSpeed", 0)),
                             "hdg": int(tr.get("heading", 0)),
+                            "aircraft": meta["aircraft"],
+                            "operator": meta["operator"],
+                            "dep": meta["dep"],
+                            "arr": meta["arr"],
+                            "category": meta["category"],
                             "network": "ivao"
                         })
                 for c in clients.get("atcs", []):
@@ -1833,8 +1951,8 @@ class AeroGlassAPI:
             dep_icao = (dep_icao or "").strip().upper()
             dest_icao = (dest_icao or "").strip().upper()
 
-            # Percorso del database SQLite
-            db_path = "src/core/aeroglass.db" if os.path.exists("src/core/aeroglass.db") else "aeroglass.db"
+            # Usa sempre l'unico percorso centralizzato definito in src/core/database.py
+            db_path = DB_PATH
 
             # Se le coordinate non sono state passate dal frontend, usa resolve_icao già presente nella classe
             if dep_lat is None or dep_lon is None:
