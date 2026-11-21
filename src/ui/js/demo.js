@@ -10,23 +10,35 @@ let _demoAutoPlay = true;
 const DEMO_AUTO_INTERVAL_MS = 9500;
 
 function isDemoEnglish() {
-    if (typeof window._demoLang === 'string') return window._demoLang === 'en';
-    if (typeof currentLang !== 'undefined') return currentLang === 'en';
-    if (typeof window.currentLang !== 'undefined') return window.currentLang === 'en';
-    const langBtn = document.getElementById('btnLangSelect');
-    if (langBtn && langBtn.textContent && langBtn.textContent.toUpperCase().includes('EN')) return true;
-    return localStorage.getItem('aeroglass_lang') === 'en';
+    if (typeof currentLang !== 'undefined' && (currentLang === 'it' || currentLang === 'en')) {
+        return currentLang === 'en';
+    }
+    if (typeof window.currentLang !== 'undefined' && (window.currentLang === 'it' || window.currentLang === 'en')) {
+        return window.currentLang === 'en';
+    }
+    if (typeof window._demoLang === 'string' && (window._demoLang === 'it' || window._demoLang === 'en')) {
+        return window._demoLang === 'en';
+    }
+    try {
+        return localStorage.getItem('aeroglass_lang') !== 'it';
+    } catch (e) {
+        return true;
+    }
 }
 
 function toggleDemoLanguage() {
     const nextLang = isDemoEnglish() ? 'it' : 'en';
+    if (typeof setAppLanguage === 'function') {
+        setAppLanguage(nextLang, true);
+        return;
+    }
     window._demoLang = nextLang;
     if (typeof toggleLanguage === 'function') {
         try { toggleLanguage(); } catch (e) {}
     } else {
         if (typeof currentLang !== 'undefined') currentLang = nextLang;
         window.currentLang = nextLang;
-        localStorage.setItem('aeroglass_lang', nextLang);
+        try { localStorage.setItem('aeroglass_lang', nextLang); } catch (e) {}
     }
     renderCurrentDemoStep();
 }

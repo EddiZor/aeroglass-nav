@@ -4720,15 +4720,119 @@ function applyTranslations() {
     }
 }
 
-function toggleLanguage() {
-    currentLang = currentLang === 'it' ? 'en' : 'it';
-    window.currentLang = currentLang;
-    window._demoLang = currentLang;
-    localStorage.setItem('aeroglass_lang', currentLang);
+async function setAppLanguage(lang, persist = true) {
+    const safeLang = (String(lang || '').toLowerCase() === 'it') ? 'it' : 'en';
+    currentLang = safeLang;
+    window.currentLang = safeLang;
+    window._demoLang = safeLang;
+    if (typeof demo2Lang !== 'undefined') {
+        demo2Lang = safeLang;
+    }
+
+    try { localStorage.setItem('aeroglass_lang', safeLang); } catch (e) {}
+
+    const langSelect = document.getElementById('btnLangSelect');
+    if (langSelect && langSelect.tagName === 'SELECT') {
+        langSelect.value = safeLang;
+    }
+
     applyTranslations();
+
+    if (typeof updateDemoCaptionUI === 'function' && document.getElementById('demo2CaptionBanner')) {
+        updateDemoCaptionUI();
+    }
     if (window._demoTourActive && typeof window.renderCurrentDemoStep === 'function') {
         window.renderCurrentDemoStep();
     }
+
+    if (persist && window.pywebview && window.pywebview.api && window.pywebview.api.save_setting) {
+        try { await window.pywebview.api.save_setting('app_language', safeLang); } catch (e) {}
+    }
+}
+
+function toggleLanguage() {
+    const nextLang = (currentLang === 'it') ? 'en' : 'it';
+    setAppLanguage(nextLang, true);
+}
+
+function showFirstLaunchLanguageModal() {
+    if (document.getElementById('firstLaunchLangOverlay')) return;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'firstLaunchLangOverlay';
+    overlay.style.cssText = `
+        position: fixed;
+        inset: 0;
+        z-index: 100000;
+        background: rgba(2, 6, 23, 0.78);
+        backdrop-filter: blur(6px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+    `;
+
+    overlay.innerHTML = `
+        <div role="dialog" aria-modal="true" style="
+            width: 390px;
+            max-width: 92vw;
+            background: linear-gradient(180deg, rgba(15, 23, 42, 0.98) 0%, rgba(9, 13, 22, 0.98) 100%);
+            border: 1.5px solid rgba(56, 189, 248, 0.55);
+            border-radius: 12px;
+            padding: 18px 20px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.85), 0 0 24px rgba(56, 189, 248, 0.2);
+            color: #f8fafc;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        ">
+            <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(148,163,184,0.2);padding-bottom:8px;">
+                <span style="font-family:Consolas,monospace;font-size:12px;font-weight:800;color:#38bdf8;letter-spacing:0.6px;">🌐 LANGUAGE / LINGUA</span>
+                <span style="font-family:Consolas,monospace;font-size:10px;color:#94a3b8;">FIRST LAUNCH</span>
+            </div>
+            <div style="font-size:13px;line-height:1.5;color:#e2e8f0;">
+                <div>Default language is set to <b>English</b>. Would you like to switch to <b>Italian</b>?</div>
+                <div style="color:#94a3b8;font-size:12px;margin-top:6px;">La lingua predefinita è l'<b>inglese</b>. Vuoi passare all'<b>italiano</b>?</div>
+            </div>
+            <div style="display:flex;gap:10px;margin-top:2px;">
+                <button id="btnPickLangEn" type="button" style="
+                    flex:1;
+                    padding:8px 12px;
+                    border-radius:8px;
+                    border:1px solid #38bdf8;
+                    background:rgba(56, 189, 248, 0.22);
+                    color:#38bdf8;
+                    font-family:Consolas,monospace;
+                    font-size:12px;
+                    font-weight:800;
+                    cursor:pointer;
+                ">🇬🇧 English (Keep)</button>
+                <button id="btnPickLangIt" type="button" style="
+                    flex:1;
+                    padding:8px 12px;
+                    border-radius:8px;
+                    border:1px solid rgba(52, 211, 153, 0.7);
+                    background:rgba(52, 211, 153, 0.16);
+                    color:#34d399;
+                    font-family:Consolas,monospace;
+                    font-size:12px;
+                    font-weight:800;
+                    cursor:pointer;
+                ">🇮🇹 Italiano</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const choose = async (lang) => {
+        overlay.remove();
+        await setAppLanguage(lang, true);
+    };
+
+    document.getElementById('btnPickLangEn').onclick = () => choose('en');
+    document.getElementById('btnPickLangIt').onclick = () => choose('it');
 }
 
 function initSidebarResizer() {
@@ -4825,6 +4929,15 @@ async function initAeroGlassApp() {
 
     try {
         if (window.pywebview.api.get_setting) {
+            const langRes = await window.pywebview.api.get_setting('app_language');
+            if (langRes && langRes.success && (langRes.value === 'it' || langRes.value === 'en')) {
+                await setAppLanguage(langRes.value, false);
+            } else {
+                // Primo avvio assoluto: parte in inglese e chiede conferma per eventuale passaggio in italiano
+                await setAppLanguage('en', false);
+                setTimeout(showFirstLaunchLanguageModal, 350);
+            }
+
             const themeRes = await window.pywebview.api.get_setting('theme_mode');
             if (themeRes && themeRes.success && themeRes.value) await applyThemeMode(themeRes.value, false);
 

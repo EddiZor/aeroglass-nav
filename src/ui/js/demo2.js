@@ -137,17 +137,37 @@ function hideDemoCaption() {
     }
 }
 
+function _getActiveAppLang() {
+    if (typeof currentLang !== 'undefined' && (currentLang === 'it' || currentLang === 'en')) {
+        return currentLang;
+    }
+    if (typeof window.currentLang !== 'undefined' && (window.currentLang === 'it' || window.currentLang === 'en')) {
+        return window.currentLang;
+    }
+    try {
+        return localStorage.getItem('aeroglass_lang') === 'it' ? 'it' : 'en';
+    } catch (e) {
+        return 'en';
+    }
+}
+
 function toggleDemo2Language(e) {
     if (e) {
         e.preventDefault();
         e.stopPropagation();
     }
-    demo2Lang = (demo2Lang === 'it') ? 'en' : 'it';
-    updateDemoCaptionUI();
+    const baseLang = _getActiveAppLang();
+    demo2Lang = (baseLang === 'it') ? 'en' : 'it';
 
-    if (typeof currentLang !== 'undefined' && currentLang !== demo2Lang && typeof toggleLanguage === 'function') {
-        toggleLanguage();
+    if (typeof setAppLanguage === 'function') {
+        setAppLanguage(demo2Lang, true);
+    } else {
+        updateDemoCaptionUI();
+        if (typeof currentLang !== 'undefined' && currentLang !== demo2Lang && typeof toggleLanguage === 'function') {
+            toggleLanguage();
+        }
     }
+    updateDemoCaptionUI();
 }
 
 async function startDemo2() {
@@ -155,11 +175,12 @@ async function startDemo2() {
         demo2AbortController = true;
         isDemo2Running = false;
         hideDemoCaption();
-        const texts = DEMO2_TEXTS[demo2Lang] || DEMO2_TEXTS.it;
+        const texts = DEMO2_TEXTS[demo2Lang] || DEMO2_TEXTS.en;
         if (typeof showAeroNavToast === 'function') showAeroNavToast(texts.toast_stop);
         return;
     }
 
+    demo2Lang = _getActiveAppLang();
     isDemo2Running = true;
     demo2AbortController = false;
 
