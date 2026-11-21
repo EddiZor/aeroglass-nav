@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AeroGlass-Nav — Glossario Funzioni / Feature Glossary</title>
+    <style>
+        :root {
+            --bg-main: #0b1120;
+            --bg-card: rgba(15, 23, 42, 0.92);
+            --border: rgba(56, 189, 248, 0.28);
+            --cyan: #38bdf8;
+            --text: #e2e8f0;
+            --muted: #94a3b8;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            background: radial-gradient(circle at top, #132038 0%, var(--bg-main) 65%);
+            color: var(--text);
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            min-height: 100vh;
+            line-height: 1.45;
+        }
+        header {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(11, 17, 32, 0.94);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border);
+            padding: 14px 20px;
+        }
+        .header-inner {
+            max-width: 980px;
+            margin: 0 auto;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .brand {
+            display: flex;
+            flex-direction: column;
+        }
+        .brand h1 {
+            margin: 0;
+            font-size: 18px;
+            color: #f8fafc;
+            letter-spacing: 0.4px;
+        }
+        .brand span {
+            font-size: 12px;
+            color: var(--muted);
+        }
+        .controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        #searchInput {
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            color: #f8fafc;
+            border-radius: 8px;
+            padding: 7px 12px;
+            font-size: 13px;
+            width: 240px;
+            outline: none;
+        }
+        #searchInput:focus {
+            border-color: var(--cyan);
+            box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+        }
+        .lang-group {
+            display: inline-flex;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .lang-btn {
+            background: transparent;
+            border: none;
+            color: var(--muted);
+            padding: 6px 12px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+        .lang-btn.active {
+            background: rgba(56, 189, 248, 0.22);
+            color: var(--cyan);
+        }
+        .alpha-bar {
+            max-width: 980px;
+            margin: 12px auto 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+        .alpha-btn {
+            background: rgba(30, 41, 59, 0.7);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            color: #cbd5e1;
+            border-radius: 5px;
+            padding: 3px 8px;
+            font-size: 11px;
+            font-weight: 700;
+            font-family: Consolas, monospace;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .alpha-btn:hover {
+            border-color: var(--cyan);
+            color: var(--cyan);
+        }
+        main {
+            max-width: 980px;
+            margin: 20px auto 48px;
+            padding: 0 20px;
+        }
+        .letter-group {
+            margin-bottom: 22px;
+        }
+        .letter-heading {
+            font-family: Consolas, monospace;
+            font-size: 14px;
+            font-weight: 800;
+            color: var(--cyan);
+            border-bottom: 1px solid rgba(56, 189, 248, 0.25);
+            padding-bottom: 4px;
+            margin: 0 0 10px;
+            scroll-margin-top: 125px;
+        }
+        .entries-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+            gap: 10px;
+        }
+        .entry-card {
+            background: var(--bg-card);
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            border-radius: 9px;
+            padding: 11px 13px;
+            transition: border-color 0.15s ease;
+        }
+        .entry-card:hover {
+            border-color: rgba(56, 189, 248, 0.55);
+        }
+        .entry-title {
+            font-size: 13.5px;
+            font-weight: 700;
+            color: #f8fafc;
+            margin-bottom: 4px;
+        }
+        .entry-desc {
+            font-size: 12.2px;
+            color: #cbd5e1;
+            margin: 0;
+        }
+        .empty-state {
+            text-align: center;
+            color: var(--muted);
+            padding: 40px 10px;
+            font-size: 14px;
+        }
+        footer {
+            max-width: 980px;
+            margin: 0 auto 30px;
+            padding: 0 20px;
+            font-size: 11.5px;
+            color: #64748b;
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-inner">
+            <div class="brand">
+                <h1 id="pageTitle">📖 AeroGlass-Nav — Glossario Funzioni</h1>
+                <span id="pageSubtitle">Elenco alfabetico essenziale delle funzioni disponibili</span>
+            </div>
+            <div class="controls">
+                <input id="searchInput" type="search" placeholder="Filtra funzione..." oninput="renderGlossary()">
+                <div class="lang-group">
+                    <button id="btnLangIt" class="lang-btn" type="button" onclick="setLang('it')">IT</button>
+                    <button id="btnLangEn" class="lang-btn" type="button" onclick="setLang('en')">EN</button>
+                </div>
+            </div>
+        </div>
+        <nav id="alphaBar" class="alpha-bar"></nav>
+    </header>
+
+    <main id="glossaryContainer"></main>
+
+    <footer>
+        <span>AeroGlass-Nav • MSFS 2024 EFB &amp; Moving Map</span>
+        <span id="countLabel"></span>
+    </footer>
+
+    <script>
+        const UI_TEXT = {
+            it: {
+                title: "📖 AeroGlass-Nav — Glossario Funzioni",
+                subtitle: "Elenco alfabetico essenziale delle funzioni disponibili",
+                search: "Filtra funzione...",
+                empty: "Nessuna funzione corrisponde alla ricerca.",
+                count: (n) => `${n} funzioni`
+            },
+            en: {
+                title: "📖 AeroGlass-Nav — Feature Glossary",
+                subtitle: "Essential alphabetical reference of available features",
+                search: "Filter features...",
+                empty: "No matching features found.",
+                count: (n) => `${n} features`
+            }
+        };
+
+        const GLOSSARY_ENTRIES = [
+            {
+                it: { term: "Alternato (Alternate)", desc: "Mostra sulla mappa l'aeroporto alternato importato da SimBrief con linea tratteggiata." },
+                en: { term: "Alternate Airport", desc: "Displays the SimBrief alternate airport on the map connected by a dashed line." }
+            },
+            {
+                it: { term: "Auto-Routing Aerovie", desc: "Genera automaticamente rotte IFR Low/High o VFR usando le aerovie del database SQLite." },
+                en: { term: "Airway Auto-Routing", desc: "Automatically builds IFR Low/High or VFR routes using airways stored in SQLite." }
+            },
+            {
+                it: { term: "Barra di Scala & Coordinate", desc: "Mostra la scala dinamica in miglia nautiche (NM) e le coordinate Lat/Lon del cursore." },
+                en: { term: "Scale Bar & Coordinates", desc: "Displays the dynamic nautical mile (NM) scale bar and cursor Lat/Lon coordinates." }
+            },
+            {
+                it: { term: "Carte Aeronautiche (Overlay PDF)", desc: "Scarica o importa carte PDF/immagine georeferenziate sulla mappa con opacità regolabile." },
+                en: { term: "Aviation Charts (PDF Overlay)", desc: "Downloads or imports georeferenced PDF/image charts overlaid on the map with adjustable opacity." }
+            },
+            {
+                it: { term: "Cartografia & Stile Mappa", desc: "Cambia sfondo (IFR Dark, VFR Topo, Satellite, OFM VFR ICAO), luce Giorno/Notte e rilievi." },
+                en: { term: "Map Style & Layers", desc: "Switches base map (IFR Dark, VFR Topo, Satellite, OFM VFR ICAO), Day/Night lighting and hillshade relief." }
+            },
+            {
+                it: { term: "Copertura Nuvolosa (Clouds VNAV)", desc: "Stima gli strati nuvolosi dai METAR alla quota aereo (AUTO) o ai livelli FL050–FL300." },
+                en: { term: "Cloud Coverage (VNAV Clouds)", desc: "Estimates cloud layers from METAR reports at aircraft altitude (AUTO) or FL050–FL300." }
+            },
+            {
+                it: { term: "Crea Piano di Volo", desc: "Permette di creare una rotta manuale indicando partenza, waypoint, destinazione e quota crociera." },
+                en: { term: "Create Flight Plan", desc: "Builds a manual route by entering departure, waypoints, destination and cruise altitude." }
+            },
+            {
+                it: { term: "Credits & Info", desc: "Mostra versione, autore, licenza freeware, fonti dati e disclaimer aeronautico." },
+                en: { term: "Credits & Info", desc: "Shows version, author, freeware license, data sources and aviation disclaimer." }
+            },
+            {
+                it: { term: "Demo Tour (F1)", desc: "Avvia il tour interattivo guidato bilingue delle funzioni principali dell'app." },
+                en: { term: "Demo Tour (F1)", desc: "Starts the interactive bilingual guided tour of the main application features." }
+            },
+            {
+                it: { term: "Drag & Drop .pln", desc: "Carica un piano di volo trascinando un file .pln direttamente sulla finestra della mappa." },
+                en: { term: "Drag & Drop .pln", desc: "Loads a flight plan instantly by dropping a .pln file onto the map window." }
+            },
+            {
+                it: { term: "EFB Wi-Fi (Tablet)", desc: "Fornisce QR Code e indirizzo IP locale per usare l'app su tablet o smartphone via browser." },
+                en: { term: "Wi-Fi EFB (Tablet)", desc: "Provides a QR Code and local IP address to run the EFB on a tablet or phone browser." }
+            },
+            {
+                it: { term: "Filtri & Spazi Aerei", desc: "Attiva o nasconde fix di rotta, procedure SID/STAR, cono di avvicinamento e spazi aerei." },
+                en: { term: "Filters & Airspaces", desc: "Toggles route fixes, SID/STAR procedures, approach cone and airspace boundaries." }
+            },
+            {
+                it: { term: "Fuel & Perf", desc: "Calcola Block Fuel, riserve e consumi stimati in base al profilo dell'aeromobile." },
+                en: { term: "Fuel & Perf", desc: "Calculates Block Fuel, reserves and estimated burn based on aircraft performance." }
+            },
+            {
+                it: { term: "Ground Map (Mappa di Terra)", desc: "Mostra piste, taxiway con lettere ICAO, piazzali e stand numerati a zoom ravvicinato (≥ 11)." },
+                en: { term: "Airport Ground Map", desc: "Renders runways, ICAO-labeled taxiways, aprons and numbered stands at close zoom (≥ 11)." }
+            },
+            {
+                it: { term: "Holding (Circuito d'Attesa)", desc: "Disegna un circuito d'attesa su un waypoint con raggio e leg calcolati sulla velocità." },
+                en: { term: "Holding Pattern", desc: "Draws a holding racetrack at a waypoint with turn radius and leg calculated from speed." }
+            },
+            {
+                it: { term: "Importa / Esporta .pln", desc: "Importa file .pln di MSFS dal disco o salva la rotta attiva nella cartella Download." },
+                en: { term: "Import / Export .pln", desc: "Imports MSFS .pln files from disk or exports the active route to Downloads." }
+            },
+            {
+                it: { term: "Invia a MSFS", desc: "Esporta e invia il piano di volo attivo al sistema di navigazione dell'aeromobile in MSFS 2024." },
+                en: { term: "Send to MSFS", desc: "Exports and sends the active flight plan to the current aircraft's avionics in MSFS 2024." }
+            },
+            {
+                it: { term: "Lingua (IT / EN)", desc: "Cambia istantaneamente la lingua dell'interfaccia tra italiano e inglese." },
+                en: { term: "Language (IT / EN)", desc: "Instantly switches the user interface between Italian and English." }
+            },
+            {
+                it: { term: "Logbook", desc: "Archivia e mostra in SQLite lo storico dei voli registrati con distanze e carburante." },
+                en: { term: "Logbook", desc: "Stores and displays flight history, distances and fuel logs in local SQLite." }
+            },
+            {
+                it: { term: "METAR & Dettagli Aeroporto", desc: "Cliccando uno scalo mostra METAR live, categoria volo, piste, frequenze e pista consigliata." },
+                en: { term: "Quick METAR & Airport Details", desc: "Clicking an airport shows live METAR, flight category, runways, frequencies and best runway." }
+            },
+            {
+                it: { term: "Modalità Interfaccia (Estesa / Semplice)", desc: "Alterna tra layout completo con pannelli aperti e vista minimale a mappa libera." },
+                en: { term: "UI Mode (Extended / Simple)", desc: "Toggles between full layout with panels and a minimal uncluttered map view." }
+            },
+            {
+                it: { term: "NavLog", desc: "Tabella di rotta con prue, distanze di tratta, tempi ETE/ETA e consumi." },
+                en: { term: "NavLog", desc: "Detailed route log with headings, leg distances, ETE/ETA and fuel burn." }
+            },
+            {
+                it: { term: "Profilo VNAV & ToD", desc: "Grafico altimetrico verticale con quote modificabili e indicatore Top of Descent (ToD)." },
+                en: { term: "VNAV Profile & ToD", desc: "Vertical altitude profile drawer with editable altitudes and Top of Descent (ToD) marker." }
+            },
+            {
+                it: { term: "Radar Meteo Live", desc: "Mostra precipitazioni e temporali in tempo reale (RainViewer) con barra temporale animata." },
+                en: { term: "Live Weather Radar", desc: "Overlays real-time rain and storm cells (RainViewer) with an animated timeline bar." }
+            },
+            {
+                it: { term: "Ricerca Rapida (ICAO / VOR)", desc: "Cerca e centra la mappa su qualsiasi aeroporto mondiale, città o radioassistenza." },
+                en: { term: "Quick Search (ICAO / VOR)", desc: "Searches and centers the map on any worldwide airport, city or VOR." }
+            },
+            {
+                it: { term: "Righello Tattico", desc: "Misura distanza (NM/km), prua MAG/TRUE ed ETE tra due punti (anche con clic destro)." },
+                en: { term: "Measure Tool", desc: "Measures distance (NM/km), MAG/TRUE bearing and ETE between two points (also via Right-Click)." }
+            },
+            {
+                it: { term: "Ripristina / Undo (Ctrl+Z)", desc: "Annulla le ultime modifiche fatte sulla rotta ripristinando lo stato precedente." },
+                en: { term: "Undo Route Change (Ctrl+Z)", desc: "Reverts recent flight plan modifications step by step." }
+            },
+            {
+                it: { term: "Rosa dei Venti", desc: "Indica il Nord geografico e ripristina l'orientamento North Up (360°) con un clic." },
+                en: { term: "Compass Rose", desc: "Indicates True North and resets map orientation to North Up (360°) on click." }
+            },
+            {
+                it: { term: "Rubber Banding (Modifica Rotta)", desc: "Sposta o inserisce waypoint trascinando la rotta con mouse/touch e aggancio magnetico (Snap)." },
+                en: { term: "Rubber Banding (Route Drag)", desc: "Moves or inserts waypoints by dragging the route with mouse/touch and magnetic Snap." }
+            },
+            {
+                it: { term: "Scratchpad EFB (Note ATC)", desc: "Blocco note mobile per Squawk/QNH/FL, disegno a mano libera e frequenze radio rapide." },
+                en: { term: "EFB Scratchpad (ATC Notes)", desc: "Draggable pad for Squawk/QNH/FL clearances, freehand drawing and quick frequencies." }
+            },
+            {
+                it: { term: "Segui Aereo (Follow)", desc: "Cicla tra Mappa Libera, Segui con Nord in alto (North Up) e prua in alto (Track Up)." },
+                en: { term: "Follow Aircraft", desc: "Cycles through Free Map, North Up and Track Up centering modes." }
+            },
+            {
+                it: { term: "SimBrief (Importa OFP)", desc: "Scarica l'ultimo piano di volo OFP usando il Pilot ID salvato e protetto da blocco a chiave." },
+                en: { term: "SimBrief (OFP Import)", desc: "Fetches the latest SimBrief OFP using a saved Pilot ID protected by a key lock." }
+            },
+            {
+                it: { term: "Taratura Filtri Mappa", desc: "Regola luminosità, contrasto e saturazione con profili salvati per mappa e giorno/notte." },
+                en: { term: "Map Filter Calibrator", desc: "Adjusts brightness, contrast and saturation with separate profiles per map and lighting." }
+            },
+            {
+                it: { term: "Tema Visivo (Dark / Notte / Giorno)", desc: "Cambia la palette dell'interfaccia tra Dark Cockpit, Notte anti-abbagliamento e Giorno." },
+                en: { term: "Visual Theme (Dark / Night / Day)", desc: "Switches UI theme between Dark Cockpit, anti-glare Night and Day mode." }
+            },
+            {
+                it: { term: "Tooltip (Info ON/OFF)", desc: "Attiva o disattiva i suggerimenti sintetici al passaggio del mouse sui pulsanti." },
+                en: { term: "Tooltips (Info ON/OFF)", desc: "Enables or disables concise hover descriptions on toolbar buttons." }
+            },
+            {
+                it: { term: "Traffico Online & ATC (IVAO / VATSIM)", desc: "Mostra piloti vicini e controllori TWR/APP/CTR online con raggio, opacità e filtri regolabili." },
+                en: { term: "Online Traffic & ATC (IVAO / VATSIM)", desc: "Displays nearby pilots and online TWR/APP/CTR sectors with adjustable range and opacity." }
+            },
+            {
+                it: { term: "VOR / NDB / ILS (Radioassistenze)", desc: "Mostra radioassistenze globali SQLite filtrate per zoom con frequenza e invio rapido alle Note." },
+                en: { term: "VOR / NDB / ILS (Navaids)", desc: "Shows worldwide SQLite navaids filtered by zoom with frequency and one-click send to Notes." }
+            },
+            {
+                it: { term: "Waypoints Utente (Custom)", desc: "Salva punti personalizzati in SQLite tramite coordinate, selezione su mappa o clic destro." },
+                en: { term: "User Waypoints (Custom)", desc: "Saves custom waypoints in SQLite via coordinates, map pick or Right-Click." }
+            },
+            {
+                it: { term: "Weather Overlay (WX)", desc: "Mostra vettori vento lungo la rotta (HW/TW/XW) e pillole METAR sugli aeroporti vicini." },
+                en: { term: "Weather Overlay (WX)", desc: "Displays route wind vectors (HW/TW/XW) and quick METAR pills on nearby airports." }
+            }
+        ];
+
+        const params = new URLSearchParams(window.location.search);
+        let activeLang = (params.get('lang') === 'en') ? 'en' : 'it';
+
+        function setLang(lang) {
+            activeLang = (lang === 'en') ? 'en' : 'it';
+            document.documentElement.lang = activeLang;
+            document.getElementById('btnLangIt').classList.toggle('active', activeLang === 'it');
+            document.getElementById('btnLangEn').classList.toggle('active', activeLang === 'en');
+            document.getElementById('pageTitle').textContent = UI_TEXT[activeLang].title;
+            document.getElementById('pageSubtitle').textContent = UI_TEXT[activeLang].subtitle;
+            document.getElementById('searchInput').placeholder = UI_TEXT[activeLang].search;
+            renderGlossary();
+        }
+
+        function renderGlossary() {
+            const q = (document.getElementById('searchInput').value || '').trim().toLowerCase();
+            const container = document.getElementById('glossaryContainer');
+            const alphaBar = document.getElementById('alphaBar');
+
+            const items = GLOSSARY_ENTRIES
+                .map(entry => entry[activeLang])
+                .filter(item => !q || item.term.toLowerCase().includes(q) || item.desc.toLowerCase().includes(q))
+                .sort((a, b) => a.term.localeCompare(b.term, activeLang, { sensitivity: 'base' }));
+
+            document.getElementById('countLabel').textContent = UI_TEXT[activeLang].count(items.length);
+
+            if (items.length === 0) {
+                alphaBar.innerHTML = '';
+                container.innerHTML = `<div class="empty-state">${UI_TEXT[activeLang].empty}</div>`;
+                return;
+            }
+
+            const grouped = new Map();
+            items.forEach(item => {
+                const letter = item.term.charAt(0).toUpperCase();
+                if (!grouped.has(letter)) grouped.set(letter, []);
+                grouped.get(letter).push(item);
+            });
+
+            alphaBar.innerHTML = Array.from(grouped.keys())
+                .map(l => `<a class="alpha-btn" href="#sec-${l}">${l}</a>`)
+                .join('');
+
+            let html = '';
+            grouped.forEach((list, letter) => {
+                html += `<section class="letter-group">
+                    <h2 id="sec-${letter}" class="letter-heading">${letter}</h2>
+                    <div class="entries-grid">
+                        ${list.map(it => `
+                            <article class="entry-card">
+                                <div class="entry-title">${it.term}</div>
+                                <p class="entry-desc">${it.desc}</p>
+                            </article>
+                        `).join('')}
+                    </div>
+                </section>`;
+            });
+            container.innerHTML = html;
+        }
+
+        setLang(activeLang);
+    </script>
+</body>
+</html>

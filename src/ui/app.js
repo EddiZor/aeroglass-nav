@@ -162,6 +162,10 @@ const SYNTHETIC_TOOLTIPS = {
         it: "⚙️ Modifica PilotID",
         en: "⚙️ Edit PilotID"
     },
+    btnOpenGlossary: {
+        it: "📖 Glossario Funzioni: Apre nel browser l'elenco alfabetico IT/EN delle funzioni",
+        en: "📖 Feature Glossary: Opens the alphabetical IT/EN feature reference in your browser"
+    },
     btnOpenCredits: {
         it: "ℹ️ Credits, Licenza, Link Community e Disclaimer",
         en: "ℹ️ Credits, License, Community Links & Disclaimer"
@@ -627,9 +631,8 @@ function injectCreditsStyles() {
             font-size: 11px; font-weight: 700; cursor: pointer;
         }
         .credits-lang-switch:hover { background: rgba(56, 189, 248, 0.18); }
+        #btnOpenGlossary,
         #btnOpenCredits {
-            order: 9999;
-            margin-left: auto;
             display: inline-flex;
             align-items: center;
             gap: 5px;
@@ -645,6 +648,15 @@ function injectCreditsStyles() {
             flex-shrink: 0;
             transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
         }
+        #btnOpenGlossary {
+            order: 9998;
+            margin-left: auto;
+        }
+        #btnOpenCredits {
+            order: 9999;
+            margin-left: 0;
+        }
+        #btnOpenGlossary:hover,
         #btnOpenCredits:hover {
             background: rgba(56, 189, 248, 0.18);
             border-color: rgba(56, 189, 248, 0.65);
@@ -771,8 +783,43 @@ function ensureCreditsModalExists() {
     });
 }
 
+async function openGlossaryInBrowser() {
+    const lang = (typeof currentLang !== 'undefined' && currentLang === 'en') ? 'en' : 'it';
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.open_glossary) {
+        try {
+            await window.pywebview.api.open_glossary(lang);
+            return;
+        } catch (e) {}
+    }
+    window.open(`glossary.html?lang=${lang}`, '_blank');
+}
+
+function updateGlossaryButtonUI() {
+    const btn = document.getElementById('btnOpenGlossary');
+    if (!btn) return;
+    const isEn = (typeof currentLang !== 'undefined' && currentLang === 'en');
+    btn.innerHTML = isEn ? '📖 <span>Glossary</span>' : '📖 <span>Glossario</span>';
+}
+
+function ensureGlossaryTopBarButton() {
+    injectCreditsStyles();
+    if (document.getElementById('btnOpenGlossary')) return;
+    const pillsGroup = document.querySelector('.top-pills-group');
+    if (!pillsGroup) return;
+
+    pillsGroup.style.flex = '1';
+
+    const btn = document.createElement('button');
+    btn.id = 'btnOpenGlossary';
+    btn.type = 'button';
+    btn.onclick = () => openGlossaryInBrowser();
+    pillsGroup.appendChild(btn);
+    updateGlossaryButtonUI();
+}
+
 function ensureCreditsTopBarButton() {
     injectCreditsStyles();
+    ensureGlossaryTopBarButton();
     if (document.getElementById('btnOpenCredits')) return;
     const pillsGroup = document.querySelector('.top-pills-group');
     if (!pillsGroup) return;
@@ -1561,7 +1608,7 @@ async function fetchOsmGroundFromBrowser(icao, lat, lon, aptName, existingRunway
     for (const url of mirrors) {
         try {
             const ctrl = new AbortController();
-            const timer = setTimeout(() => ctrl.abort(), 5000);
+            const timer = setTimeout(() => ctrl.abort(), 9000);
             const resp = await fetch(`${url}?data=${encodeURIComponent(query)}`, {
                 method: 'GET',
                 headers: { 'Accept': 'application/json' },
@@ -1715,13 +1762,25 @@ async function evaluateAirportGroundMap() {
                 }
             }
 
-            // Se SQLite ha già almeno le piste, le disegna subito senza lasciare l'aeroporto vuoto
-            if (ly && Array.isArray(ly.runways) && ly.runways.length > 0) {
-                renderCustomAirportLayout(ly);
+            const isRealGround = (obj) => Boolean(
+                obj &&
+                (obj.source === 'osm' || obj.source === 'msfs') &&
+                ((Array.isArray(obj.taxiways) && obj.taxiways.length > 0) ||
+                 (Array.isArray(obj.stands) && obj.stands.length > 0))
+            );
+
+            // Se il layout non è ancora reale (OSM/MSFS), disegna subito SOLO le piste reali scartando taxiway/stand sintetici
+            if (ly && !isRealGround(ly) && Array.isArray(ly.runways) && ly.runways.length > 0) {
+                renderCustomAirportLayout({
+                    ...ly,
+                    taxiways: [],
+                    aprons: [],
+                    stands: []
+                });
             }
 
-            // Fallback: se SQLite non ha le taxiway salvate, interroga direttamente Overpass OSM
-            if (!ly || !ly.taxiways || ly.taxiways.length === 0) {
+            // Se mancano dati reali (OSM o MSFS), scarica taxiway, piazzali e parcheggi reali da Overpass OSM
+            if (!isRealGround(ly)) {
                 if (badgeName) badgeName.innerText = `⏳ Download dati Ground OSM (${targetIcao})...`;
                 const osmLayout = await fetchOsmGroundFromBrowser(targetIcao, nearApt.lat, nearApt.lon, nearApt.name, ly ? ly.runways : []);
                 if (osmLayout) {
@@ -1729,6 +1788,9 @@ async function evaluateAirportGroundMap() {
                     if (window.pywebview.api.save_airport_ground_layout) {
                         try { window.pywebview.api.save_airport_ground_layout(targetIcao, osmLayout); } catch(e) {}
                     }
+                } else if (ly) {
+                    // Se Overpass non è raggiungibile, mostra solo le piste reali senza parcheggi fasulli
+                    ly = { ...ly, source: 'runways_only', taxiways: [], aprons: [], stands: [] };
                 }
             }
             _groundFetchInFlight = null;
@@ -4335,6 +4397,7 @@ function applyTranslations() {
     }
     updateThemeButtonUI();
     updateTooltipButtonUI();
+    if (typeof updateGlossaryButtonUI === 'function') updateGlossaryButtonUI();
 
     const vnavText = document.getElementById('vnavText');
     if (vnavText && (!window.flightPlan || window.flightPlan.length === 0)) {

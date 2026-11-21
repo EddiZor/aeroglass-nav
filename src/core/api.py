@@ -876,13 +876,13 @@ class AeroGlassAPI:
         except Exception:
             pass
 
-        # 1b. Controlla la cache su file JSON (src/core/ground_cache/{ICAO}.json) e la risincronizza in SQLite
+        # 1b. Controlla la cache su file JSON (src/core/ground_cache/{ICAO}.json) solo per dati reali (OSM o MSFS)
         try:
             cache_json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ground_cache", f"{icao}.json")
             if os.path.isfile(cache_json_path):
                 with open(cache_json_path, "r", encoding="utf-8") as jf:
                     file_layout = json.load(jf)
-                if isinstance(file_layout, dict) and (
+                if isinstance(file_layout, dict) and file_layout.get("source") in ("osm", "msfs") and (
                     file_layout.get("taxiways") or file_layout.get("stands") or file_layout.get("aprons")
                 ):
                     self.save_airport_ground_layout(icao, file_layout)
@@ -2129,5 +2129,28 @@ class AeroGlassAPI:
                 subprocess.run(['clip.exe'], input=str(query).strip().encode('utf-8'), check=False)
             webbrowser.open("https://gemini.google.com")
             return {"success": True}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def open_glossary(self, lang="it"):
+        """Apre il glossario bilingue delle funzioni di AeroGlass-Nav nel browser di sistema."""
+        try:
+            import webbrowser
+            from pathlib import Path
+
+            safe_lang = "en" if str(lang or "").strip().lower() == "en" else "it"
+            ui_dir = self._get_default_ui_dir()
+            glossary_path = os.path.join(ui_dir, "glossary.html")
+
+            if not os.path.isfile(glossary_path):
+                return {"success": False, "error": "File glossary.html non trovato."}
+
+            if self._httpd is not None and self.efb_port:
+                url = f"http://127.0.0.1:{self.efb_port}/glossary.html?lang={safe_lang}"
+            else:
+                url = f"{Path(glossary_path).resolve().as_uri()}?lang={safe_lang}"
+
+            webbrowser.open(url)
+            return {"success": True, "url": url}
         except Exception as e:
             return {"success": False, "error": str(e)}
